@@ -69,6 +69,7 @@ tree. Line counts are rough — they flag which files are worth reading whole.
 | `Services/MCPPrompts.swift` | 115 | Pure: the four ready-made MCP prompts (weekly digest, follow-up email, call prep, PRD from calls) |
 | `Services/ProfileFile.swift` | 250 | Pure: portable `.parrotprofile` JSON (encode a CallProfile, decode with limits, unknown fields kept) |
 | `Services/MCPAccess.swift` | 110 | What AI apps may see (share checkboxes, excluded call types), the gate every MCP tool reads through, activity counters |
+| `Services/MCPBundle.swift` | 150 | One-click connect: Claude Desktop `.mcpb` (manifest, launcher that finds a moved app, icon), Cursor link, Claude Code / Codex commands |
 | `Services/CloudGate.swift` | 60 | On-device-only switch: global or per-call holds; checked by every cloud path |
 | `Services/Redactor.swift` | 200 | Hide emails/phones/cards/IBANs/names from cloud AI and restore them; request/result helpers |
 | `Services/Retention.swift` | 55 | Automatic clean-up rules (audio / whole meetings after N days) |

@@ -74,6 +74,7 @@ enum ProfileTest {
         testMCPServer()
         testProfileFile()
         testMCPAccess()
+        testMCPBundle()
         testCloudGate()
         testRedactor()
         testRetention()
@@ -2985,6 +2986,64 @@ enum ProfileTest {
               == "The user doesn't share transcripts with AI apps.")
         source.access = MCPAccess()
         check("mcp: export bad format", tool("export_meeting", ["id": open.id.uuidString, "format": "pdf"]).hasPrefix("Format is"))
+    }
+
+    static func testMCPBundle() {
+        let fm = FileManager.default
+        let tmp = fm.temporaryDirectory.appendingPathComponent("parrot-bundle-\(UUID().uuidString)")
+        defer { try? fm.removeItem(at: tmp) }
+        let manifest = MCPBundle.manifest(version: "1.2.3")
+        check("mcpb: name and version", manifest["name"] as? String == "parrot" && manifest["version"] as? String == "1.2.3"
+              && manifest["display_name"] as? String == "Parrot" && manifest["icon"] as? String == "icon.png")
+        check("mcpb: every tool listed", (manifest["tools"] as? [[String: Any]])?.compactMap { $0["name"] as? String }
+              == MCPServer.tools.compactMap { $0["name"] as? String })
+        let prompts = manifest["prompts"] as? [[String: Any]] ?? []
+        check("mcpb: the four prompts", prompts.compactMap { $0["name"] as? String } == MCPPrompts.all.map(\.name))
+        check("mcpb: prompt arguments are templated", (prompts.first?["text"] as? String)?.contains("${arguments.when}") == true
+              && prompts.first?["arguments"] as? [String] == ["when"])
+        let server = manifest["server"] as? [String: Any]
+        check("mcpb: runs the launcher through sh", (server?["mcp_config"] as? [String: Any])?["args"] as? [String]
+              == ["${__dirname}/server/launch.sh"] && server?["entry_point"] as? String == "server/launch.sh")
+        check("mcpb: the manifest is valid JSON", (try? JSONSerialization.data(withJSONObject: manifest)) != nil)
+
+        // The launcher finds a (fake) Parrot in a folder with a space and a quote.
+        let app = tmp.appendingPathComponent("My Apps/Parrot's.app")
+        let binary = app.appendingPathComponent("Contents/MacOS/Parrot")
+        try? fm.createDirectory(at: binary.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? "#!/bin/sh\necho started \"$@\"\n".write(to: binary, atomically: true, encoding: .utf8)
+        try? fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: binary.path)
+        let script = tmp.appendingPathComponent("launch.sh")
+        try? MCPBundle.launcher(appPath: app.path).write(to: script, atomically: true, encoding: .utf8)
+        func run(_ tool: String, _ args: [String]) -> String {
+            let p = Process(), pipe = Pipe()
+            p.executableURL = URL(fileURLWithPath: tool)
+            p.arguments = args
+            p.standardOutput = pipe
+            p.standardError = pipe
+            guard (try? p.run()) != nil else { return "" }
+            let out = pipe.fileHandleForReading.readDataToEndOfFile()
+            p.waitUntilExit()
+            return String(decoding: out, as: UTF8.self)
+        }
+        check("mcpb: launcher starts Parrot from a path with spaces and quotes", run("/bin/sh", [script.path]) == "started --mcp\n")
+
+        let built = try? MCPBundle.build(appPath: app.path, version: "1.2.3", icon: NSImage(named: NSImage.applicationIconName))
+        let listing = built.map { run("/usr/bin/unzip", ["-l", $0.path]) } ?? ""
+        check("mcpb: file has the manifest at its root", listing.contains(" manifest.json\n"))
+        check("mcpb: file has the launcher and the icon", listing.contains(" server/launch.sh\n") && listing.contains(" icon.png\n"))
+        if let built { try? fm.removeItem(at: built) }
+
+        let path = "/Users/me/My Apps/Parrot.app/Contents/MacOS/Parrot"
+        check("connect: Claude Code command", MCPBundle.claudeCodeCommand(executable: path)
+              == "claude mcp add --scope user parrot -- '/Users/me/My Apps/Parrot.app/Contents/MacOS/Parrot' --mcp")
+        check("connect: Codex command", MCPBundle.codexCommand(executable: path)
+              == "codex mcp add parrot -- '/Users/me/My Apps/Parrot.app/Contents/MacOS/Parrot' --mcp")
+        let link = MCPBundle.cursorLink(executable: path)
+        let config = link.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "config" }?.value }
+            .flatMap { Data(base64Encoded: $0) }
+            .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+        check("connect: Cursor link carries the command", link?.absoluteString.hasPrefix("cursor://anysphere.cursor-deeplink/mcp/install?name=parrot&config=") == true
+              && config?["command"] as? String == path && config?["args"] as? [String] == ["--mcp"])
     }
 
     static func testMCPAccess() {
