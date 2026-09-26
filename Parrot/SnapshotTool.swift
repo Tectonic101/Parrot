@@ -319,6 +319,10 @@ enum HelpShots {
              AskPageView()
                 .environment(rm).environment(AppSession()).modelContainer(container))
 
+        shot("ai-apps.png", size: .init(width: 900, height: 1500),
+             AIAppsPageView()
+                .environment(rm).environment(AppSession()).modelContainer(container))
+
         shot("settings-profiles.png", size: .init(width: 860, height: 640),
              ProfilesSettingsView()
                 .environment(rm).environment(rm.profileStore).environment(AppSession())

@@ -45,6 +45,10 @@ struct SidebarView: View {
                     page = .ask
                 }
                 .help("Ask anything about your past calls (⌘K)")
+                NavRow(title: "Claude & AI Apps", icon: "app.connected.to.app.below.fill", selected: page == .aiApps) {
+                    page = .aiApps
+                }
+                .help("Use your meetings in Claude, Codex or Cursor")
             }
             .padding(.horizontal, 8)
 

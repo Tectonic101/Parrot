@@ -83,7 +83,7 @@ tree. Line counts are rough — they flag which files are worth reading whole.
 
 | File | L | Purpose |
 |---|---|---|
-| `Views/ContentView.swift` | 190 | Root split view (`MainPage`: dashboard/settings/ask/meeting) + empty state + corner bug button |
+| `Views/ContentView.swift` | 200 | Root split view (`MainPage`: dashboard/settings/ask/aiApps/meeting) + empty state + corner bug button |
 | `Views/SidebarView.swift` | 361 | Meeting list, rows, talk-ratio strip |
 | `Views/DashboardView.swift` | 350 | Landing stats + recent meetings |
 | `Views/CopilotHomeCard.swift` | 110 | Home card: turn on Copilot, finish setup, waiting for the model, just turned on |
@@ -118,7 +118,8 @@ tree. Line counts are rough — they flag which files are worth reading whole.
 | `Views/AutomationSettingsViews.swift` | 250 | Login item row, Call Detection + Calendar cards, detected-call banner |
 | `Views/AskPageView.swift` | ~330 | Ask Parrot page: saved-chat list, conversation, AI menu, Stop |
 | `Views/AskAnswerView.swift` | ~130 | ParrotAvatar + AskAnswerView (answer lines, citation chips, sources) |
-| `Views/ConnectionsPrivacySettings.swift` | 260 | Settings → Connections (folder, email, webhook, MCP) and → Privacy (lock, redaction, consent, clean-up) |
+| `Views/ConnectionsPrivacySettings.swift` | 255 | Settings → Connections (folder, email, webhook, switch + link to Claude & AI Apps) and → Privacy (lock, redaction, consent, clean-up) |
+| `Views/AIAppsPageView.swift` | 440 | Claude & AI Apps page (connect buttons, what apps see, six jobs, activity line), first-connection banner, meeting "Ask Claude" menu, weekly report tip; `AIApps` pure rules |
 
 ## Build & non-source
 

@@ -159,6 +159,8 @@ struct MeetingDetailView: View {
                 .help("Ask about this call, or all of them")
                 .disabled(meeting.status != .done)
 
+                AskClaudeMenu(meeting: meeting)
+
                 Menu {
                     Button("Export as TXT") { MeetingActions.exportTXT(meeting) }
                     Button("Export as Markdown") { MeetingActions.exportMarkdown(meeting) }
@@ -544,6 +546,7 @@ struct MeetingDetailView: View {
                     }
                 } else {
                     VStack(alignment: .leading, spacing: 16) {
+                        AIAppsReportTip(meeting: meeting)
                         ReportContentView(
                             summary: meeting.summary,
                             coaching: meeting.coaching,

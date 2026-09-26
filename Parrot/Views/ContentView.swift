@@ -3,7 +3,7 @@ import SwiftData
 
 /// What the main window's detail area shows. One value instead of flags,
 /// so two pages can never both be "on".
-enum MainPage: Equatable { case dashboard, settings, ask, meeting }
+enum MainPage: Equatable { case dashboard, settings, ask, aiApps, meeting }
 
 struct ContentView: View {
     @Environment(RecordingManager.self) private var recordingManager
@@ -35,6 +35,8 @@ struct ContentView: View {
                 LiveRecordingView()
             } else if page == .settings {
                 settingsPane
+            } else if page == .aiApps {
+                AIAppsPageView()
             } else if page == .dashboard {
                 DashboardView(selectedMeeting: $selectedMeeting, page: $page)
             } else if let meeting = selectedMeeting {
@@ -60,6 +62,7 @@ struct ContentView: View {
         }
         .overlay(alignment: .top) {
             VStack(spacing: 8) {
+                AIAppsConnectedBanner()
                 if let progress = recordingManager.importProgress {
                     ImportingBanner(progress: progress)
                         .transition(.move(edge: .top).combined(with: .opacity))
@@ -118,6 +121,9 @@ struct ContentView: View {
             }
             selectedMeeting = meeting
             page = .meeting
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .parrotOpenAIApps)) { _ in
+            page = .aiApps
         }
         .onReceive(NotificationCenter.default.publisher(for: .parrotReportBug)) { _ in
             presentBugReport()

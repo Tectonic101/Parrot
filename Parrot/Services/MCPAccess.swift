@@ -84,14 +84,18 @@ struct MCPAccess: Equatable {
     static let lastReadKey = "mcpLastReadAt"
     static let readsTodayKey = "mcpReadsToday"
     static let firstReadKey = "mcpFirstReadAt"
+    /// The client's own name for itself ("claude-ai"), for "Claude is connected".
+    static let lastAppKey = "mcpLastApp"
 
     /// One AI-app read of meeting content.
-    static func recordRead(in defaults: UserDefaults = .standard, now: Date = .now, calendar: Calendar = .current) {
+    static func recordRead(in defaults: UserDefaults = .standard, now: Date = .now, calendar: Calendar = .current,
+                           app: String? = nil) {
         let last = defaults.object(forKey: lastReadKey) as? Date
         let today = last.map { calendar.isDate($0, inSameDayAs: now) } == true ? defaults.integer(forKey: readsTodayKey) : 0
         defaults.set(today + 1, forKey: readsTodayKey)
         defaults.set(now, forKey: lastReadKey)
         if defaults.object(forKey: firstReadKey) == nil { defaults.set(now, forKey: firstReadKey) }
+        if let app { defaults.set(String(app.prefix(60)), forKey: lastAppKey) }
     }
 
     /// Today's reads, 0 when the last read was on another day.
