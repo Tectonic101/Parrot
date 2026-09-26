@@ -43,6 +43,9 @@ BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 
 DMG="dist/Parrot-$VERSION.dmg"
 [ -f "$DMG" ] || { echo "!! $DMG missing — run scripts/release.sh $VERSION first" >&2; exit 1; }
+# The Claude Desktop install file rides along when release.sh made one.
+ASSETS=("$DMG")
+[ -f dist/Parrot.mcpb ] && ASSETS+=(dist/Parrot.mcpb)
 
 # A DMG that isn't stapled means notarization was skipped, which would ship
 # users a build Gatekeeper rejects.
@@ -82,10 +85,10 @@ if gh release view "v$VERSION" --repo "$REPO" >/dev/null 2>&1; then
 else
   echo "==> creating GitHub release v$VERSION"
   if [ -n "$NOTES_FILE" ]; then
-    gh release create "v$VERSION" "$DMG" --repo "$REPO" --prerelease --target master \
+    gh release create "v$VERSION" "${ASSETS[@]}" --repo "$REPO" --prerelease --target master \
       --title "$TITLE" --notes-file "$NOTES_FILE"
   else
-    gh release create "v$VERSION" "$DMG" --repo "$REPO" --prerelease --target master \
+    gh release create "v$VERSION" "${ASSETS[@]}" --repo "$REPO" --prerelease --target master \
       --title "Parrot $VERSION" --generate-notes
   fi
 fi
@@ -96,6 +99,7 @@ if git diff --quiet HEAD -- docs/appcast.xml; then
 else
   echo "==> committing the appcast"
   git add docs/appcast.xml
+  [ -f server.json ] && git add server.json
   git commit -q -m "Appcast: publish $VERSION to the update feed"
 fi
 git push -q origin master

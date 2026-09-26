@@ -13,6 +13,10 @@ struct ParrotMain {
             Task { @MainActor in await MCPServer.run() }
             dispatchMain()
         }
+        // Release packaging: the Claude Desktop install file (scripts/release.sh).
+        if let i = args.firstIndex(of: "--mcpb"), i + 2 < args.count {
+            exit(MCPBundle.writeRelease(to: args[i + 1], version: args[i + 2], iconPath: i + 3 < args.count ? args[i + 3] : nil))
+        }
         if let i = args.firstIndex(of: "--snapshot"), i + 1 < args.count {
             MainActor.assumeIsolated { ReportSnapshot.write(to: args[i + 1]) }
             return

@@ -134,6 +134,24 @@ enum MCPBundle {
         return out
     }
 
+    /// `Parrot --mcpb <out> <version> [icon]`, run by scripts/release.sh on
+    /// the plain release binary: the install file for the GitHub release. Its
+    /// launcher has no app path baked in; it finds Parrot where it's installed.
+    static func writeRelease(to path: String, version: String, iconPath: String?) -> Int32 {
+        let icon = iconPath.flatMap(NSImage.init(contentsOfFile:)) ?? bundledIcon
+        do {
+            let built = try build(appPath: nil, version: version, icon: icon)
+            let out = URL(fileURLWithPath: path)
+            try? FileManager.default.removeItem(at: out)
+            try FileManager.default.moveItem(at: built, to: out)
+            print("mcpb: wrote \(out.path)\(icon == nil ? " (no icon)" : "")")
+            return 0
+        } catch {
+            FileHandle.standardError.write(Data("mcpb: \(error.localizedDescription)\n".utf8))
+            return 1
+        }
+    }
+
     /// The icon file inside the app. Not `NSApp.applicationIconImage`: macOS
     /// can hand that back with a badge drawn on it (a "not allowed" sign on a
     /// build run from outside Applications), and Claude shows it as the logo.
