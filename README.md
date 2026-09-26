@@ -66,7 +66,11 @@ An always-on assistant that watches the conversation and puts the right thing on
 
 ### 🔎 Ask Parrot: a memory of every call
 
-Chat with all your calls (⌘K): *"What did I promise Acme?"*, then *"and what did we offer them?"*. Chats are saved, follow-ups work, and every fact in the answer is a chip that opens the meeting at that second. Counts like *"How many meetings did I have last week?"* are worked out exactly on your Mac. Ask Parrot has its own AI choice: search always runs on your Mac, and with Ollama the answer is written there too. It works in English and Turkish, and it's in beta. When a call starts with people you've met before, the Copilot's brief shows the open items from last time. And if you use Claude Desktop or another MCP app, you can let it read your meetings (read-only, off by default).
+Chat with all your calls (⌘K): *"What did I promise Acme?"*, then *"and what did we offer them?"*. Chats are saved, follow-ups work, and every fact in the answer is a chip that opens the meeting at that second. Counts like *"How many meetings did I have last week?"* are worked out exactly on your Mac. Ask Parrot has its own AI choice: search always runs on your Mac, and with Ollama the answer is written there too. It works in English and Turkish, and it's in beta. When a call starts with people you've met before, the Copilot's brief shows the open items from last time.
+
+### 🤝 Use your meetings in Claude
+
+Free, no meeting bot, no 30-day limit, and your meetings stay on your Mac until you ask. Connect Claude Desktop in one click (or Claude Code, Codex for ChatGPT plans, or Cursor) and your own plan does the thinking: *"What did I promise last week?"*, *"Brief me for my call with Acme"*, *"Draft the follow-up for this morning's call"*, *"Coach me across my last 10 calls"*. Claude gets real speaker names, long transcripts in pages, promises with their owners, talk time, and four ready-made actions in its **+** menu (weekly digest, follow-up email, prep for a call, PRD from calls). It's read-only: you choose what it sees (transcripts, reports, notes, Copilot cards, whole call types), on-device-only meetings are never shown, and Parrot tells you how often it was read. Open **Claude & AI Apps** in the sidebar. [How it works](https://openparrot.app/help/claude.html).
 
 ### 🎭 Call profiles: one app, every kind of call
 
@@ -162,7 +166,7 @@ This is a microphone-and-system-audio app, so you shouldn't have to take my word
 | Ask Parrot | The few best-matching excerpts and the chat's recent messages (never on-device-only meetings) | The AI you pick for Ask Parrot (your reports AI by default) | Only with a cloud AI; nothing with Ollama |
 | Follow-up email | The meeting's transcript | Your reports AI | Only when you draft one |
 | Webhook | Summary, next steps, notes (transcript if allowed) | The address you paste | Only if you set one; never for on-device-only meetings |
-| AI apps (MCP) | Whatever the app reads when you ask it | That app (often its cloud) | Only if you turn it on; never on-device-only meetings |
+| Claude and other AI apps (MCP) | What the app reads when you ask it, only the parts you share | That app's company (Anthropic for Claude, under your account) | Only if you turn it on; never on-device-only meetings, audio or keys |
 | Copilot on Ollama | Nothing | Your own Mac | Always local |
 
 - **On-device only, one switch** (or per profile, say for therapy or legal calls): Whisper and Ollama only, and the meeting stays out of every cloud path afterwards. Optional **redaction** hides emails, phone, card and bank numbers (and names, if you like) from cloud AI and restores them in the answer. A **consent** button records how people were told, and **automatic clean-up** deletes old audio or meetings. Each meeting shows exactly *what left this Mac*.

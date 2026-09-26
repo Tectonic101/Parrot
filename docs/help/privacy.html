@@ -72,10 +72,14 @@ and after that everything runs offline.</p>
   every call").</li>
   <li><strong>Webhook:</strong> the finished meeting (summary, next steps, notes, and
   the transcript only if you allow it) goes to the address you pasted.</li>
-  <li><strong>AI apps (MCP):</strong> an app you connect, such as Claude Desktop, can
-  read your meetings when you ask it something, and usually sends that to its
-  own cloud. It's off until you turn it on, and never sees on-device-only
-  meetings.</li>
+  <li><strong>Claude and other AI apps (MCP):</strong> an app you connect, such as
+  Claude Desktop, reads your meetings when you ask it something, and sends that
+  to its own cloud (for Claude, Anthropic under your Claude account). It's off
+  until you turn it on, it's read-only, and you choose what it sees on the
+  <a href="claude.html">Claude &amp; AI Apps</a> page: transcripts, reports and
+  notes (on), Copilot cards (off), and call types to hide. It never sees
+  on-device-only meetings, audio, keys or settings. Parrot only records counts
+  and times of what the app read, never the content.</li>
   <li><strong>Cloud transcription (Groq or Deepgram):</strong> the call audio
   is sent to them for speech-to-text as it happens. This is the one opt-in
   that sends sound. On-device stays the default.</li>
@@ -95,7 +99,7 @@ and after that everything runs offline.</p>
   (Settings &rarr; Profiles), so only your therapy or legal calls run this way.
   Meetings recorded like this stay out of Ask Parrot when a cloud AI would write
   the answer, out of the follow-up email on a cloud AI, out of webhooks, and
-  out of AI apps connected through MCP.</li>
+  out of Claude and other AI apps.</li>
   <li><strong>Hide personal details from cloud AI.</strong> Before anything goes to
   Claude or a custom server, emails, phone numbers, card numbers and IBANs become
   placeholders like <code>[EMAIL_1]</code>, and the real values are put back in

@@ -319,7 +319,9 @@ enum HelpShots {
              AskPageView()
                 .environment(rm).environment(AppSession()).modelContainer(container))
 
-        shot("ai-apps.png", size: .init(width: 900, height: 1500),
+        // Connected-looking: the switch on, so the buttons aren't greyed out.
+        UserDefaults.standard.register(defaults: [MCPServer.enabledKey: true])
+        shot("ai-apps.png", size: .init(width: 900, height: 980),
              AIAppsPageView()
                 .environment(rm).environment(AppSession()).modelContainer(container))
 
