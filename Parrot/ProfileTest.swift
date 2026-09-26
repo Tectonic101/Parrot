@@ -2840,16 +2840,35 @@ enum ProfileTest {
         check("mcp: get_meeting gives the first page and a pointer", firstPage.contains("line 0\n")
               && !firstPage.contains("line 999") && firstPage.contains("call get_transcript"))
         let mine = tool("list_commitments", ["owner": "me"])
-        check("mcp: my commitments", mine.hasPrefix("- I send the proposal | owner: me | at 01:00 | Beta sync")
+        check("mcp: my commitments", mine.hasPrefix("- I send the proposal | owner: me | said at 01:00 by me | Beta sync")
               && !mine.contains("budget"))
         check("mcp: a restated promise counts once", mine.components(separatedBy: "\n").count == 1)
         let priyas = tool("list_commitments", ["owner": "priya"])
-        check("mcp: someone else's commitments", priyas.contains("Priya shares the budget sheet | owner: Priya | at 02:00")
+        check("mcp: someone else's commitments", priyas.contains("Priya shares the budget sheet | owner: Priya | said at 02:00 by Priya")
               && !priyas.contains("proposal"))
         check("mcp: others", tool("list_commitments", ["owner": "others"]) == priyas)
         let all = tool("list_commitments", [:])
         check("mcp: no receipt, owner unclear", all.contains("- Book a demo | owner: unclear | Beta sync"))
         check("mcp: placeholders skipped", !all.contains("None"))
+        // Found on real reports: the receipt often cites the request, not the promise.
+        let wording: [(String, [String], String?)] = [
+            ("You to share shipping volume report before Tuesday", ["Sam"], "Me"),
+            ("You'll send the deck", [], "Me"),
+            ("Vendor to send revised contract with price lock by Friday", [], "Vendor"),
+            ("The prospect will confirm budget", [], "Prospect"),
+            ("Mohamed to send the onboarding link", ["Mohamed Zafathi"], "Mohamed Zafathi"),
+            ("They confirm the budget", [], "Them"),
+            ("Follow-up call scheduled for next Wednesday", [], nil),
+            ("Send the calendar invite after the call", [], nil),
+            ("We to review the contract together", [], nil),
+        ]
+        for (text, people, expected) in wording {
+            check("commitments: owner of \"\(text)\"", MCPCommitments.owner(of: text, people: people) == expected)
+        }
+        let cited = MCPCommitments.items(meetingID: beta, title: "t", date: Date(), people: ["Priya"],
+                                         reports: ["Next steps:\n- You to share the budget sheet [02:00]"],
+                                         index: ReceiptIndex(lines: betaLines))
+        check("commitments: the wording wins over who spoke the cited line", cited.first?.owner == "Me" && cited.first?.saidBy == "Priya")
         check("mcp: commitments honour the date filter", tool("list_commitments", ["since": twentyDaysAgo, "until": "2000-01-01"])
               == "No commitments found.")
         check("mcp: advertises prompts", (initResult?["capabilities"] as? [String: Any])?["prompts"] != nil)

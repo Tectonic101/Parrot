@@ -295,7 +295,7 @@ enum MCPServer {
         [
             "name": "list_commitments",
             "title": "List commitments",
-            "description": "What people promised: the next steps and commitments from meeting reports, newest meeting first, each with its owner, meeting and time. Owner is who said the line the report cites (\"unclear\" when it cites none); check the time in get_transcript when it matters.",
+            "description": "What people promised: the next steps and commitments from meeting reports, newest meeting first, each with its owner, meeting and time. Owner comes from the report's wording (\"You to…\" is the user; \"unclear\" when it names no one). \"said at mm:ss by X\" is the transcript line the report cites; check it in get_transcript when it matters.",
             "inputSchema": [
                 "type": "object",
                 "properties": filterProperties.merging([
@@ -499,7 +499,7 @@ enum MCPServer {
             let limit = min(max((args["limit"] as? Int) ?? 30, 1), 100)
             var found: [MCPCommitments.Item] = []
             for m in meetings where found.count < limit && (m.summary != nil || m.coaching != nil) {
-                found += MCPCommitments.items(meetingID: m.id, title: m.title, date: m.date,
+                found += MCPCommitments.items(meetingID: m.id, title: m.title, date: m.date, people: m.people,
                                               reports: [m.summary, m.coaching], index: source.receipts(m.id))
                     .filter { MCPCommitments.matches($0, owner: owner) }
             }
@@ -507,7 +507,7 @@ enum MCPServer {
             let dayFormat = Date.FormatStyle(date: .abbreviated, time: .omitted)
             return found.prefix(limit).map { c in
                 "- \(c.text) | owner: \(c.owner.map { $0 == "Me" ? "me" : $0 } ?? "unclear")"
-                    + (c.stamp.map { " | at \($0)" } ?? "")
+                    + (c.stamp.map { at in " | said at \(at)" + (c.saidBy.map { " by \($0 == "Me" ? "me" : $0)" } ?? "") } ?? "")
                     + " | \(c.title), \(c.date.formatted(dayFormat)) | id \(c.meetingID.uuidString)"
             }.joined(separator: "\n")
 
