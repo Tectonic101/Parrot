@@ -7,4 +7,4 @@
 - **Off until you turn it on**, and turning it off cuts Claude off on its next request.
 - **Parrot keeps counts, not content**: how many times an AI app read your meetings today and when, so the Claude & AI Apps page can show it.
 
-Full details: [What leaves your Mac](https://openparrot.app/help/privacy.html).
+Privacy policy: [openparrot.app/privacy](https://openparrot.app/privacy). Every detail: [What leaves your Mac](https://openparrot.app/help/privacy.html).

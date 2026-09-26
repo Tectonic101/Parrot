@@ -89,7 +89,7 @@ enum MCPBundle {
             "license": "GPL-3.0",
             "icon": "icon.png",
             "keywords": ["meetings", "transcripts", "calls", "notes", "local", "mac"],
-            "privacy_policies": ["https://openparrot.app/help/privacy.html"],
+            "privacy_policies": ["https://openparrot.app/privacy"],
             "compatibility": ["platforms": ["darwin"]],
             "server": [
                 "type": "binary",
