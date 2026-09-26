@@ -1,0 +1,10 @@
+{
+  "name": "parrot",
+  "version": "0.24.0",
+  "description": "Your recorded meetings from the Parrot Mac app, read-only: search by meaning, promises with owners, transcripts with speaker names, talk time, plus weekly digests, follow-up emails, call prep and PRDs from calls.",
+  "author": { "name": "Uygar Turantekin", "url": "https://openparrot.app" },
+  "homepage": "https://openparrot.app/help/claude.html",
+  "repository": "https://github.com/turantekin/Parrot",
+  "license": "GPL-3.0",
+  "keywords": ["meetings", "transcripts", "calls", "notes", "follow-up", "mac", "local"]
+}

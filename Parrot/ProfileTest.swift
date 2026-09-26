@@ -3125,6 +3125,20 @@ enum ProfileTest {
         check("mcpb: file has the launcher and the icon", listing.contains(" server/launch.sh\n") && listing.contains(" icon.png\n"))
         if let built { try? fm.removeItem(at: built) }
 
+        // The Claude plugin ships its own copies; they must not drift from the app.
+        let plugin = "integrations/claude-plugin"
+        check("plugin: launcher matches the app's", (try? String(contentsOfFile: "\(plugin)/server/launch.sh", encoding: .utf8))
+              == MCPBundle.launcher(appPath: nil))
+        check("plugin: a skill per ready-made prompt", MCPPrompts.all.allSatisfy { p in
+            fm.fileExists(atPath: "\(plugin)/skills/\(p.name.replacingOccurrences(of: "_", with: "-"))/SKILL.md") })
+        let skillText = MCPPrompts.all.map { p in
+            (try? String(contentsOfFile: "\(plugin)/skills/\(p.name.replacingOccurrences(of: "_", with: "-"))/SKILL.md", encoding: .utf8)) ?? "" }
+        let toolNames = Set(MCPServer.tools.compactMap { $0["name"] as? String })
+        let mentioned = skillText.flatMap { text in
+            text.matches(of: try! Regex("`([a-z_]+)`")).compactMap { $0.output[1].substring.map(String.init) }
+                .filter { $0.contains("_") } }
+        check("plugin: skills only name tools that exist", !mentioned.isEmpty && mentioned.allSatisfy(toolNames.contains))
+
         let path = "/Users/me/My Apps/Parrot.app/Contents/MacOS/Parrot"
         check("connect: Claude Code command", MCPBundle.claudeCodeCommand(executable: path)
               == "claude mcp add --scope user parrot -- '/Users/me/My Apps/Parrot.app/Contents/MacOS/Parrot' --mcp")

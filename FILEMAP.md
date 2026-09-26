@@ -129,8 +129,10 @@ tree. Line counts are rough — they flag which files are worth reading whole.
 | `.github/workflows/ci.yml` | macOS CI: build, `--profile-test`, snapshot renders (artifact), ad-hoc `.app` assembly |
 | `project.yml` | xcodegen input; `Parrot.xcodeproj` is generated from it |
 | `Package.swift` | SwiftPM deps (WhisperKit, vendored CSpeexDSP) |
-| `scripts/release.sh` | Release packaging; mirrors the Makefile's bundle step |
+| `scripts/release.sh` | Release packaging; mirrors the Makefile's bundle step; builds `Parrot.mcpb` and `server.json` |
 | `scripts/assemble-help.sh` | Builds the Apple Help Book into the .app from `docs/help/` (both builders call it) |
+| `integrations/claude-plugin/` | Claude plugin for the connector directory: `.mcp.json` + `server/launch.sh` (same launcher as the release `.mcpb`, harness-checked), four skills mirroring the MCP prompts, README, PRIVACY |
+| `server.json` | MCP Registry entry, written by `scripts/release.sh` per release (version, `.mcpb` URL, sha256) |
 | `docs/help/` | User guide: one HTML set serving GitHub Pages AND the in-app Help menu |
 | `Vendor/CSpeexDSP/` | Vendored C echo canceller — do not modify |
 | `docs/IMPROVEMENT-ROADMAP.md` | Roadmap + build notes (incl. the Xcode race) |
