@@ -2813,6 +2813,10 @@ enum ProfileTest {
                                                          formatOptions: [.withFullDate])
         check("mcp: until keeps only older meetings", tool("list_meetings", ["until": twentyDaysAgo]).hasPrefix(old.uuidString))
         check("mcp: since keeps only newer meetings", tool("list_meetings", ["since": twentyDaysAgo]).hasPrefix(a.uuidString))
+        let firstTwo = tool("list_meetings", ["limit": 2])
+        check("mcp: list says the total and how to get more", firstTwo.hasSuffix("\n\n4 meetings in all; showing 1-2. For more, call again with offset = 2."))
+        check("mcp: list next page", tool("list_meetings", ["limit": 2, "offset": 2]).hasSuffix("4 meetings in all; showing 3-4."))
+        check("mcp: list past the end", tool("list_meetings", ["offset": 9]) == "No more meetings.")
         check("mcp: person filter", tool("list_meetings", ["person": "Lee"]).contains("Globex")
               && !tool("list_meetings", ["person": "Lee"]).contains("Acme"))
         var pages: [String] = [], next: String? = "00:00"

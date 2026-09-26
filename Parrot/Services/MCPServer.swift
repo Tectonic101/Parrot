@@ -225,12 +225,13 @@ enum MCPServer {
         [
             "name": "list_meetings",
             "title": "List meetings",
-            "description": "List the user's recorded meetings, newest first: id, date, title, people.",
+            "description": "List the user's recorded meetings, newest first: id, date, title, people, and how many there are in all.",
             "inputSchema": [
                 "type": "object",
                 "properties": filterProperties.merging([
                     "query": ["type": "string", "description": "Only meetings whose title or people contain this text."],
                     "limit": ["type": "integer", "description": "How many (default 20, max 100)."],
+                    "offset": ["type": "integer", "description": "Skip this many (for the next page)."],
                 ]) { a, _ in a },
             ],
         ],
@@ -394,14 +395,23 @@ enum MCPServer {
             guard let meetings = filtered(meetings, args: args) else { return badWhen }
             let query = (args["query"] as? String)?.lowercased().trimmingCharacters(in: .whitespaces) ?? ""
             let limit = min(max((args["limit"] as? Int) ?? 20, 1), 100)
-            let rows = meetings.filter { m in
+            let matching = meetings.filter { m in
                 query.isEmpty || m.title.lowercased().contains(query)
                     || m.people.contains { $0.lowercased().contains(query) }
-            }.prefix(limit).map { m in
+            }
+            let offset = min(max((args["offset"] as? Int) ?? 0, 0), matching.count)
+            let page = matching.dropFirst(offset).prefix(limit)
+            guard !page.isEmpty else { return matching.isEmpty ? "No meetings found." : "No more meetings." }
+            let rows = page.map { m in
                 "\(m.id.uuidString) | \(m.date.formatted(dateFormat)) | \(m.title)"
                     + (m.people.isEmpty ? "" : " | with \(m.people.joined(separator: ", "))")
             }
-            return rows.isEmpty ? "No meetings found." : rows.joined(separator: "\n")
+            // The total, so "how many meetings?" never stops at one page.
+            let end = offset + page.count
+            var footer = "\(matching.count) meeting\(matching.count == 1 ? "" : "s") in all"
+            if offset > 0 || end < matching.count { footer += "; showing \(offset + 1)-\(end)" }
+            if end < matching.count { footer += ". For more, call again with offset = \(end)" }
+            return rows.joined(separator: "\n") + "\n\n" + footer + "."
 
         case "get_meeting":
             guard let raw = args["id"] as? String, let id = UUID(uuidString: raw),
