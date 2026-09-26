@@ -2792,7 +2792,7 @@ enum ProfileTest {
         func text(_ reply: [String: Any]?) -> String {
             (((reply?["result"] as? [String: Any])?["content"] as? [[String: Any]])?.first?["text"] as? String) ?? ""
         }
-        check("mcp: list_meetings", text(call("tools/call", ["name": "list_meetings", "arguments": [:]])).contains("Acme renewal | with Jeremy"))
+        check("mcp: list_meetings", text(call("tools/call", ["name": "list_meetings", "arguments": [:]])).contains("30 min | Acme renewal | with Jeremy"))
         check("mcp: list filter misses", text(call("tools/call", ["name": "list_meetings", "arguments": ["query": "initech"]])) == "No meetings found.")
         let got = text(call("tools/call", ["name": "get_meeting", "arguments": ["id": a.uuidString]]))
         check("mcp: get_meeting has the summary", got.contains("## Summary\nRenewal went well."))
@@ -2878,6 +2878,8 @@ enum ProfileTest {
         check("mcp: longest stretch", stats.contains("Longest stretch by one speaker: Me, 0:06 from 01:00."))
         let thirds = MCPServer.talkStats(["A", "B", "C"].enumerated().map { i, who in
             ReceiptIndex.Line(start: Double(i) * 10, end: Double(i) * 10 + 10, speaker: who, text: "x") })
+        let silent = MCPServer.talkStats([.init(start: 0, end: 5, speaker: "Me", text: "Hi"), .init(start: 5, end: 5, speaker: "Uygar", text: "")])
+        check("mcp: a voice that never spoke isn't in the table", silent.speakers.map(\.name) == ["Me"])
         check("mcp: shares always add up to 100", thirds.speakers.map(\.percent).reduce(0, +) == 100)
         check("mcp: stats without a transcript", tool("meeting_stats", ["id": old.uuidString]).hasPrefix("This meeting has no transcript"))
         check("mcp: no cards unless shared", !tool("get_meeting", ["id": a.uuidString]).contains("Copilot cards"))

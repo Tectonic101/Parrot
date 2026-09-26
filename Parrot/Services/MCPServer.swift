@@ -241,7 +241,7 @@ enum MCPServer {
         [
             "name": "list_meetings",
             "title": "List meetings",
-            "description": "List the user's recorded meetings, newest first: id, date, title, people, and how many there are in all.",
+            "description": "List the user's recorded meetings, newest first: id, date, length, title, people, and how many there are in all.",
             "inputSchema": [
                 "type": "object",
                 "properties": filterProperties.merging([
@@ -419,7 +419,7 @@ enum MCPServer {
             let page = matching.dropFirst(offset).prefix(limit)
             guard !page.isEmpty else { return matching.isEmpty ? "No meetings found." : "No more meetings." }
             let rows = page.map { m in
-                "\(m.id.uuidString) | \(m.date.formatted(dateFormat)) | \(m.title)"
+                "\(m.id.uuidString) | \(m.date.formatted(dateFormat)) | \(m.durationMinutes) min | \(m.title)"
                     + (m.people.isEmpty ? "" : " | with \(m.people.joined(separator: ", "))")
             }
             // The total, so "how many meetings?" never stops at one page.
@@ -531,7 +531,8 @@ enum MCPServer {
             } catch {
                 return "Couldn't save the file: \(error.localizedDescription)"
             }
-            return "Saved to \(url.path)"
+            // The sandbox's Downloads is a link to the real one: name the real place.
+            return "Saved to \(url.resolvingSymlinksInPath().path)"
 
         case "meeting_stats":
             guard let raw = args["id"] as? String, let id = UUID(uuidString: raw),
@@ -618,7 +619,8 @@ enum MCPServer {
             if run > (longest?.seconds ?? 0) { longest = (sorted[i].speaker, run, sorted[i].start) }
             i = j + 1
         }
-        let speakers = seconds.keys.sorted { seconds[$0]! > seconds[$1]! }.map {
+        // A named voice with no spoken time is noise in a talk-time table.
+        let speakers = seconds.keys.filter { seconds[$0]! > 0 || questions[$0]! > 0 }.sorted { seconds[$0]! > seconds[$1]! }.map {
             TalkStats.Speaker(name: $0, seconds: seconds[$0]!, percent: percent[$0]!, questions: questions[$0]!)
         }
         return TalkStats(speakers: speakers, longest: longest)
