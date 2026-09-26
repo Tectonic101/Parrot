@@ -278,7 +278,7 @@ struct AIAppsPageView: View {
     private func connectClaude(at app: URL) {
         do {
             let file = try MCPBundle.build(appPath: Bundle.main.bundlePath, version: AppUpdater.currentVersion,
-                                           icon: NSApp.applicationIconImage)
+                                           icon: MCPBundle.bundledIcon)
             connectProblem = nil
             NSWorkspace.shared.open([file], withApplicationAt: app, configuration: NSWorkspace.OpenConfiguration())
         } catch {

@@ -134,6 +134,13 @@ enum MCPBundle {
         return out
     }
 
+    /// The icon file inside the app. Not `NSApp.applicationIconImage`: macOS
+    /// can hand that back with a badge drawn on it (a "not allowed" sign on a
+    /// build run from outside Applications), and Claude shows it as the logo.
+    static var bundledIcon: NSImage? {
+        Bundle.main.url(forResource: "AppIcon", withExtension: "icns").flatMap(NSImage.init(contentsOf:))
+    }
+
     /// 512 px PNG of the app icon.
     private static func pngData(_ image: NSImage) -> Data? {
         let size = NSSize(width: 512, height: 512)
