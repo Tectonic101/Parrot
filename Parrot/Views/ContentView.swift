@@ -122,6 +122,9 @@ struct ContentView: View {
             selectedMeeting = meeting
             page = .meeting
         }
+        // openparrot:// links arrive through ParrotAppDelegate; keep them in
+        // this window rather than opening a new one.
+        .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
         .onReceive(NotificationCenter.default.publisher(for: .parrotOpenAIApps)) { _ in
             page = .aiApps
         }

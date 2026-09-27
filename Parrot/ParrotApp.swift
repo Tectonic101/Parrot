@@ -99,6 +99,25 @@ struct ParrotMain {
 @MainActor
 final class ParrotAppDelegate: NSObject, NSApplicationDelegate {
     weak var recordingManager: RecordingManager?
+    /// Set once the window is up; links that came before wait in `pendingLink`.
+    weak var appSession: AppSession? { didSet { deliverLink() } }
+    private var pendingLink: AppSession.Jump?
+
+    /// openparrot:// links (ParrotLink), e.g. a time Claude cited: the same
+    /// jump as an Ask Parrot chip. Here, not SwiftUI's onOpenURL, which drops
+    /// the link when it's what launched Parrot.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        guard let link = urls.lazy.compactMap(ParrotLink.parse).first else { return }
+        pendingLink = AppSession.Jump(meetingID: link.id, time: link.time)
+        deliverLink()
+    }
+
+    private func deliverLink() {
+        guard let session = appSession, let jump = pendingLink else { return }
+        pendingLink = nil
+        // Next turn of the run loop, so the window's jump handler is listening.
+        DispatchQueue.main.async { session.pendingJump = jump }
+    }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let manager = recordingManager, manager.isRecording || manager.isStopping else {
@@ -156,11 +175,15 @@ struct ParrotApp: App {
                 .onAppear {
                     applyAppearance()
                     appDelegate.recordingManager = recordingManager
+                    appDelegate.appSession = appSession
                 }
                 .onChange(of: appearance) { applyAppearance() }
         }
         .modelContainer(sharedModelContainer)
         .defaultSize(width: 900, height: 600)
+        // A link that launches Parrot must not open a second window next to
+        // the usual one: the delegate takes links into the window that's there.
+        .handlesExternalEvents(matching: [])
         .commands {
             ParrotCommands(
                 session: appSession,
