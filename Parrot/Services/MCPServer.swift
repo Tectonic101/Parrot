@@ -269,7 +269,7 @@ enum MCPServer {
         [
             "name": "search_meetings",
             "title": "Search meetings",
-            "description": "Find moments across meetings by meaning, not just exact words (\"pricing\" also finds \"too expensive\"). Returns meeting ids, times, speakers and the matching lines.",
+            "description": "Find moments across meetings by meaning, not just exact words (\"pricing\" also finds \"too expensive\"). Returns meeting ids, times, speakers and the matching lines. Times come as links that open that moment in Parrot; keep them as links when you cite them.",
             "inputSchema": [
                 "type": "object",
                 "properties": filterProperties.merging([
@@ -282,7 +282,7 @@ enum MCPServer {
         [
             "name": "get_transcript",
             "title": "Read a transcript",
-            "description": "A meeting's transcript with speaker names, one \"[mm:ss] Name: text\" line each. Long meetings come in pages; call again with from = next_from.",
+            "description": "A meeting's transcript with speaker names, one \"[mm:ss] Name: text\" line each. Long meetings come in pages; call again with from = next_from. To cite a line, link its time as the result shows.",
             "inputSchema": [
                 "type": "object",
                 "properties": [
@@ -297,7 +297,7 @@ enum MCPServer {
         [
             "name": "list_commitments",
             "title": "List commitments",
-            "description": "What people promised: the next steps and commitments from meeting reports, newest meeting first, each with its owner, meeting and time. Owner comes from the report's wording (\"You to…\" is the user; \"unclear\" when it names no one). \"said at mm:ss by X\" is the transcript line the report cites; check it in get_transcript when it matters.",
+            "description": "What people promised: the next steps and commitments from meeting reports, newest meeting first, each with its owner, meeting and time. Owner comes from the report's wording (\"You to…\" is the user; \"unclear\" when it names no one). \"said at mm:ss by X\" is the transcript line the report cites; check it in get_transcript when it matters. Times come as links that open that moment in Parrot; keep them as links when you cite them.",
             "inputSchema": [
                 "type": "object",
                 "properties": filterProperties.merging([
@@ -439,7 +439,7 @@ enum MCPServer {
             var out = "# \(m.title)\n\(m.date.formatted(dateFormat)) · \(m.durationMinutes) min"
             if !m.people.isEmpty { out += " · with \(m.people.joined(separator: ", "))" }
             if let profile = m.profile { out += " · \(profile)" }
-            out += "\nOpen in Parrot: \(ParrotLink.meeting(m.id))"
+            out += "\nOpen in Parrot: [\(m.title)](\(ParrotLink.meeting(m.id)))"
             if let summary = m.summary { out += "\n\n## Summary\n\(summary)" }
             if let coaching = m.coaching { out += "\n\n## Coaching\n\(coaching)" }
             if !m.bookmarks.isEmpty { out += "\n\n## Moments the user marked\n" + m.bookmarks.map { "- \($0)" }.joined(separator: "\n") }
@@ -474,6 +474,8 @@ enum MCPServer {
             guard !page.lines.isEmpty else { return "No more transcript." }
             var out = page.lines.map(lineText).joined(separator: "\n")
             if let next = page.nextFrom { out += "\n\nnext_from: \(Receipts.stamp(next))" }
+            // Lines stay plain (a link each would double the size); this says how to link one.
+            out += "\n\nTo cite a line, link its time: [mm:ss](\(ParrotLink.meeting(id))&t=<seconds>)"
             return out
 
         case "search_meetings":
@@ -491,9 +493,11 @@ enum MCPServer {
             guard !hits.isEmpty else { return "Nothing matches that in the meetings." }
             return hits.map { c -> String in
                 let m = byID[c.meetingID]!
-                let when = c.kind == .transcript ? " at \(Receipts.stamp(c.start))" : " (report)"
-                let link = ParrotLink.meeting(m.id, at: c.kind == .transcript ? c.start : nil)
-                return "\(m.title) — \(m.date.formatted(dateFormat))\(when) — id \(m.id.uuidString) — open: \(link)\n\(c.text)"
+                // Times come as links, so an answer that quotes them is clickable as it stands.
+                let when = c.kind == .transcript
+                    ? " at [\(Receipts.stamp(c.start))](\(ParrotLink.meeting(m.id, at: c.start)))"
+                    : " ([report](\(ParrotLink.meeting(m.id))))"
+                return "\(m.title) — \(m.date.formatted(dateFormat))\(when) — id \(m.id.uuidString)\n\(c.text)"
             }.joined(separator: "\n\n---\n\n")
 
         case "list_commitments":
@@ -511,9 +515,11 @@ enum MCPServer {
             let dayFormat = Date.FormatStyle(date: .abbreviated, time: .omitted)
             return found.prefix(limit).map { c in
                 "- \(c.text) | owner: \(c.owner.map { $0 == "Me" ? "me" : $0 } ?? "unclear")"
-                    + (c.stamp.map { at in " | said at \(at)" + (c.saidBy.map { " by \($0 == "Me" ? "me" : $0)" } ?? "") } ?? "")
-                    + " | \(c.title), \(c.date.formatted(dayFormat)) | id \(c.meetingID.uuidString)"
-                    + " | open: \(ParrotLink.meeting(c.meetingID, at: c.stamp.flatMap(Receipts.parseStamp)))"
+                    + (c.stamp.map { at in
+                        " | said at [\(at)](\(ParrotLink.meeting(c.meetingID, at: Receipts.parseStamp(at))))"
+                            + (c.saidBy.map { " by \($0 == "Me" ? "me" : $0)" } ?? "")
+                    } ?? "")
+                    + " | [\(c.title)](\(ParrotLink.meeting(c.meetingID))), \(c.date.formatted(dayFormat)) | id \(c.meetingID.uuidString)"
             }.joined(separator: "\n")
 
         case "export_meeting":

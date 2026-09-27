@@ -632,7 +632,10 @@ struct MeetingDetailView: View {
         guard let jump = appSession.pendingJump, jump.meetingID == meeting.id else { return }
         appSession.pendingJump = nil
         if let time = jump.time {
-            showInTranscript(time)
+            // Links and Ask chips carry whole seconds, but the line shown as
+            // "09:42" may start at 582.4: land on that line, not the one before.
+            let line = meeting.sortedSegments.first { $0.startTime >= time && $0.startTime < time + 1 }
+            showInTranscript(line?.startTime ?? time)
         } else {
             tab = .report
         }
