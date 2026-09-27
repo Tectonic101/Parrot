@@ -252,8 +252,8 @@ struct AIAppsPageView: View {
             SettingsLabeledRow(title: "Claude Code", detail: "Paste the command in Terminal.") {
                 copyButton(MCPBundle.claudeCodeCommand(executable: executable), label: "Copy Command")
             }
-            SettingsLabeledRow(title: "Codex", detail: "For ChatGPT plans. Paste the command in Terminal.") {
-                copyButton(MCPBundle.codexCommand(executable: executable), label: "Copy Command")
+            SettingsLabeledRow(title: "Codex", detail: "In the ChatGPT app, for ChatGPT plans. Paste the command in Terminal.") {
+                copyButton(MCPBundle.codexCommand(executable: executable, codexCLI: MCPBundle.installedCodexCLI), label: "Copy Command")
             }
             SettingsLabeledRow(title: "Cursor", detail: cursor == nil ? "Not installed." : "Opens Cursor's install prompt.") {
                 Button("Connect") {

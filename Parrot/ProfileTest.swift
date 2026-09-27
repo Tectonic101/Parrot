@@ -3161,6 +3161,9 @@ enum ProfileTest {
               == "claude mcp add --scope user parrot -- '/Users/me/My Apps/Parrot.app/Contents/MacOS/Parrot' --mcp")
         check("connect: Codex command", MCPBundle.codexCommand(executable: path)
               == "codex mcp add parrot -- '/Users/me/My Apps/Parrot.app/Contents/MacOS/Parrot' --mcp")
+        check("connect: Codex command uses the tool inside ChatGPT", MCPBundle.codexCommand(executable: path,
+              codexCLI: "/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex")
+              == "'/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex' mcp add parrot -- '/Users/me/My Apps/Parrot.app/Contents/MacOS/Parrot' --mcp")
         let link = MCPBundle.cursorLink(executable: path)
         let config = link.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "config" }?.value }
             .flatMap { Data(base64Encoded: $0) }

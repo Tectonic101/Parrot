@@ -10,6 +10,9 @@ enum MCPBundle {
     static let bundleID = "com.uygar.parrot"
     static let claudeBundleID = "com.anthropic.claudefordesktop"
     static let cursorBundleID = "com.todesktop.230313mzl4w4u92"
+    /// Codex now ships inside the ChatGPT app, which carries this id.
+    static let codexBundleID = "com.openai.codex"
+    static let codexCLIPath = "Contents/Resources/codex-cli/bin/codex"
     static let claudeDownloadURL = URL(string: "https://claude.ai/download")!
 
     // MARK: Commands and links
@@ -24,8 +27,17 @@ enum MCPBundle {
         "claude mcp add --scope user parrot -- \(shellQuoted(executable)) --mcp"
     }
 
-    static func codexCommand(executable: String) -> String {
-        "codex mcp add parrot -- \(shellQuoted(executable)) --mcp"
+    /// `codexCLI`: the codex tool inside the ChatGPT app, when found. Most
+    /// people never put `codex` on their PATH, so a bare "codex" would fail.
+    static func codexCommand(executable: String, codexCLI: String? = nil) -> String {
+        "\(codexCLI.map(shellQuoted) ?? "codex") mcp add parrot -- \(shellQuoted(executable)) --mcp"
+    }
+
+    /// The codex tool inside the installed ChatGPT app, if it's there.
+    static var installedCodexCLI: String? {
+        guard let app = NSWorkspace.shared.urlForApplication(withBundleIdentifier: codexBundleID) else { return nil }
+        let cli = app.appendingPathComponent(codexCLIPath).path
+        return FileManager.default.isExecutableFile(atPath: cli) ? cli : nil
     }
 
     /// Cursor's install link: base64 of the server's JSON, percent-encoded so
