@@ -111,17 +111,9 @@ struct ContentView: View {
             if appSession.pendingJump?.meetingID == id { appSession.pendingJump = nil }
         }
         // Ask Parrot's citations: open that meeting (the detail view seeks).
-        .onChange(of: appSession.pendingJump) { _, jump in
-            guard let jump else { return }
-            let id = jump.meetingID
-            let found = try? modelContext.fetch(FetchDescriptor<Meeting>(predicate: #Predicate { $0.id == id })).first
-            guard let meeting = found else {
-                appSession.pendingJump = nil
-                return
-            }
-            selectedMeeting = meeting
-            page = .meeting
-        }
+        .onChange(of: appSession.pendingJump) { _, jump in open(jump) }
+        // A window opened by a link finds the jump already waiting.
+        .onAppear { open(appSession.pendingJump) }
         // openparrot:// links arrive through ParrotAppDelegate; keep them in
         // this window rather than opening a new one.
         .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
@@ -150,6 +142,19 @@ struct ContentView: View {
             hasLoadedModel = true
             await recordingManager.prepare(modelContext: modelContext)
         }
+    }
+
+    /// Selects the meeting a jump points at; the detail view seeks.
+    private func open(_ jump: AppSession.Jump?) {
+        guard let jump else { return }
+        let id = jump.meetingID
+        let found = try? modelContext.fetch(FetchDescriptor<Meeting>(predicate: #Predicate { $0.id == id })).first
+        guard let meeting = found else {
+            appSession.pendingJump = nil
+            return
+        }
+        selectedMeeting = meeting
+        page = .meeting
     }
 
     private func presentBugReport() {

@@ -101,6 +101,8 @@ final class ParrotAppDelegate: NSObject, NSApplicationDelegate {
     weak var recordingManager: RecordingManager?
     /// Set once the window is up; links that came before wait in `pendingLink`.
     weak var appSession: AppSession? { didSet { deliverLink() } }
+    /// Reopens the main window when a link arrives after it was closed.
+    var openMainWindow: OpenWindowAction?
     private var pendingLink: AppSession.Jump?
 
     /// openparrot:// links (ParrotLink), e.g. a time Claude cited: the same
@@ -115,6 +117,12 @@ final class ParrotAppDelegate: NSObject, NSApplicationDelegate {
     private func deliverLink() {
         guard let session = appSession, let jump = pendingLink else { return }
         pendingLink = nil
+        // Parrot still runs with its window closed; a link brings it back
+        // (the new window picks the jump up as it appears).
+        if !NSApp.windows.contains(where: { $0.isVisible && $0.canBecomeMain }) {
+            openMainWindow?(id: ParrotApp.mainWindowID)
+        }
+        NSApp.activate()
         // Next turn of the run loop, so the window's jump handler is listening.
         DispatchQueue.main.async { session.pendingJump = jump }
     }
@@ -135,6 +143,7 @@ final class ParrotAppDelegate: NSObject, NSApplicationDelegate {
 }
 
 struct ParrotApp: App {
+    static let mainWindowID = "main"
     @NSApplicationDelegateAdaptor(ParrotAppDelegate.self) private var appDelegate
     @State private var recordingManager = RecordingManager()
     @State private var appSession = AppSession()
@@ -162,7 +171,7 @@ struct ParrotApp: App {
     }()
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: Self.mainWindowID) {
             ContentView()
                 .environment(recordingManager)
                 .environment(recordingManager.profileStore)
@@ -176,6 +185,9 @@ struct ParrotApp: App {
                     applyAppearance()
                     appDelegate.recordingManager = recordingManager
                     appDelegate.appSession = appSession
+                }
+                .background {
+                    WindowOpener { appDelegate.openMainWindow = $0 }
                 }
                 .onChange(of: appearance) { applyAppearance() }
         }
@@ -219,4 +231,12 @@ struct ParrotApp: App {
         case .dark: NSApp.appearance = NSAppearance(named: .darkAqua)
         }
     }
+}
+
+/// Hands SwiftUI's window opener to the app delegate, which can't read the
+/// environment itself.
+private struct WindowOpener: View {
+    let register: (OpenWindowAction) -> Void
+    @Environment(\.openWindow) private var openWindow
+    var body: some View { Color.clear.onAppear { register(openWindow) } }
 }
