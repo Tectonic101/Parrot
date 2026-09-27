@@ -107,6 +107,17 @@ enum AIApps {
         }
     }
 
+    enum CommandApp: String { case claudeCode = "Claude Code", codex = "Codex" }
+
+    /// What to do after Copy Command. People pasted it into the AI app's chat
+    /// (where it fails, or asks for permission) instead of Terminal.
+    static func pasteSteps(_ app: CommandApp) -> [String] {
+        let last = app == .codex ? "Quit and reopen the ChatGPT app. Parrot is now in Codex."
+                                 : "Start a new Claude Code session. Parrot is now in every project."
+        return ["Click Open Terminal (it's the Terminal app, not a chat window).",
+                "Paste with ⌘V and press Return.", last]
+    }
+
     /// Whether this meeting may be offered to an AI app at all.
     static func mayShare(_ m: Meeting) -> Bool {
         m.status == .done && CloudGate.mayLeaveMac(m) && m.profile?.onDeviceOnly != true
@@ -142,6 +153,8 @@ struct AIAppsPageView: View {
     @State private var now = Date()
     @State private var copied: String?
     @State private var connectProblem: String?
+    /// Which app's command was just copied, for the steps under it.
+    @State private var stepsFor: AIApps.CommandApp?
 
     private var executable: String { Bundle.main.executablePath ?? "/Applications/Parrot.app/Contents/MacOS/Parrot" }
 
@@ -249,12 +262,15 @@ struct AIAppsPageView: View {
                     Button("Get Claude") { NSWorkspace.shared.open(MCPBundle.claudeDownloadURL) }
                 }
             }
-            SettingsLabeledRow(title: "Claude Code", detail: "Paste the command in Terminal.") {
-                copyButton(MCPBundle.claudeCodeCommand(executable: executable), label: "Copy Command")
+            SettingsLabeledRow(title: "Claude Code", detail: "Copy a command, then paste it in Terminal.") {
+                copyButton(MCPBundle.claudeCodeCommand(executable: executable), label: "Copy Command", steps: .claudeCode)
             }
-            SettingsLabeledRow(title: "Codex", detail: "In the ChatGPT app, for ChatGPT plans. Paste the command in Terminal.") {
-                copyButton(MCPBundle.codexCommand(executable: executable, codexCLI: MCPBundle.installedCodexCLI), label: "Copy Command")
+            if stepsFor == .claudeCode { pasteSteps(.claudeCode) }
+            SettingsLabeledRow(title: "Codex", detail: "In the ChatGPT app, for ChatGPT plans. Copy a command, then paste it in Terminal.") {
+                copyButton(MCPBundle.codexCommand(executable: executable, codexCLI: MCPBundle.installedCodexCLI),
+                           label: "Copy Command", steps: .codex)
             }
+            if stepsFor == .codex { pasteSteps(.codex) }
             SettingsLabeledRow(title: "Cursor", detail: cursor == nil ? "Not installed." : "Opens Cursor's install prompt.") {
                 Button("Connect") {
                     if let link = MCPBundle.cursorLink(executable: executable) { NSWorkspace.shared.open(link) }
@@ -268,10 +284,39 @@ struct AIAppsPageView: View {
         .disabled(!enabled)
     }
 
-    private func copyButton(_ text: String, label: String) -> some View {
+    private func copyButton(_ text: String, label: String, steps: AIApps.CommandApp? = nil) -> some View {
         Button(copied == text ? "Copied" : label) {
             AIApps.copy(text)
             copied = text
+            stepsFor = steps
+        }
+    }
+
+    /// Numbered next steps and a way into Terminal, under the row just copied.
+    private func pasteSteps(_ app: AIApps.CommandApp) -> some View {
+        SettingsRow {
+            HStack(alignment: .top, spacing: Theme.Metrics.controlGap) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Copied. Now:")
+                        .font(Theme.Typography.cardTitle)
+                        .foregroundStyle(Theme.Colors.ink)
+                    ForEach(Array(AIApps.pasteSteps(app).enumerated()), id: \.offset) { i, step in
+                        Text("\(i + 1). \(step)")
+                            .font(Theme.Typography.secondary)
+                            .foregroundStyle(Theme.Colors.ink2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                Spacer(minLength: 8)
+                Button("Open Terminal") {
+                    if let terminal = AIApps.appURL("com.apple.Terminal") {
+                        NSWorkspace.shared.openApplication(at: terminal, configuration: NSWorkspace.OpenConfiguration())
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            .padding(Theme.Metrics.popoverPad)
+            .background(Theme.Colors.spotlight, in: RoundedRectangle(cornerRadius: Theme.Metrics.radius))
         }
     }
 
