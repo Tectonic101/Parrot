@@ -392,13 +392,6 @@ final class RecordingManager {
             self?.transcriptionEngine.appendAudio(buffer, source: source)
         }
 
-        // A mid-call input-device change (dead AirPods, manual switch) rebuilds
-        // the mic tap; the "Me" stream's clock must skip the dead gap or its
-        // next locally-transcribed segments land minutes early.
-        audioCaptureManager.onMicRestarted = { [weak self] in
-            self?.transcriptionEngine.reanchorLocalClock(source: .me)
-        }
-
         // Wire transcription output to storage and the live copilot
         transcriptionEngine.onSegment = { [weak self] result in
             Task { @MainActor in

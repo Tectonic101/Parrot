@@ -33,6 +33,7 @@ enum ProfileTest {
         testAIUsageCost()
         testPermissionFlow()
         testMicWatchdog()
+        testCaptureClock()
         testModelFolderMatch()
         testBugReport()
         testSegmenter()
@@ -508,6 +509,20 @@ enum ProfileTest {
         _ = w2.observe(meanAbs: 0, at: t0)
         _ = w2.observe(meanAbs: 0.02, at: t0.addingTimeInterval(1))
         check("watchdog nonzero resets the zero run", w2.observe(meanAbs: 0, at: t0.addingTimeInterval(2.5)) == .ok)
+    }
+
+    // Both tracks share one clock: a stream that starts late or goes quiet
+    // owes silence (Sep 28 call: the other side's track began 18.5 s late,
+    // so playback put every answer before its question).
+    static func testCaptureClock() {
+        let owed = { (elapsed: Double, written: Int) in
+            AudioCaptureManager.silenceOwed(elapsed: elapsed, written: written, incoming: 160, sampleRate: 16000)
+        }
+        check("clock late first buffer is padded to its start", owed(18.5, 0) == 296_000 - 160)
+        check("clock on-time first buffer owes nothing", owed(0.01, 0) == 0)
+        check("clock jitter in a flowing stream is ignored", owed(60.3, 960_000) == 0)
+        check("clock mid-call gap is padded", owed(63.0, 960_000) == 1_008_000 - 160 - 960_000)
+        check("clock stream ahead of the clock owes nothing", owed(60.0, 976_000) == 0)
     }
 
     // Local model folder matching (the hub-resolution bypass in loadModel),

@@ -480,6 +480,7 @@ struct MeetingDetailView: View {
     private var audioPlayerBar: some View {
         HStack(spacing: 12) {
             Button {
+                endClip()
                 togglePlayback()
             } label: {
                 Image(systemName: isPlaying ? "pause.fill" : "play.fill")
@@ -636,7 +637,7 @@ struct MeetingDetailView: View {
     }
 
     private func playFrom(_ time: TimeInterval) {
-        clipStopTask?.cancel()
+        endClip()
         seekTo(time)
         if !isPlaying { togglePlayback() }
     }
@@ -1020,13 +1021,24 @@ struct MeetingDetailView: View {
     /// user hear a voice before deciding who it is.
     private func playClip(start: TimeInterval, end: TimeInterval) {
         clipStopTask?.cancel()
+        // Every voice named here is the other side, and they live on the
+        // system track alone. The mic under the clip is only the user (often
+        // the louder track), which made a clip sound like two people at once.
+        micPlayer?.volume = 0
         seekTo(start)
         if !isPlaying { togglePlayback() }
         clipStopTask = Task {
             try? await Task.sleep(for: .seconds(max(1, end - start)))
             guard !Task.isCancelled else { return }
             if isPlaying { togglePlayback() }
+            micPlayer?.volume = 1
         }
+    }
+
+    /// Back to the whole conversation: any other play ends a voice clip.
+    private func endClip() {
+        clipStopTask?.cancel()
+        micPlayer?.volume = 1
     }
 
     // MARK: - Audio Playback

@@ -44,6 +44,14 @@ final class AudioCaptureManager: NSObject {
     /// "System Audio Recording Only" grant — it also feeds the silence rescue.
     @ObservationIgnored private var tapEverHadSignal = false
 
+    /// The recording clock both tracks are placed on (monotonic seconds, set as
+    /// capture goes live), and each stream's frames handed to its file and to
+    /// transcription so far. One counter per stream: each is only touched on
+    /// that stream's capture thread.
+    @ObservationIgnored private var captureOrigin: TimeInterval = 0
+    @ObservationIgnored private var systemFramesOut = 0
+    @ObservationIgnored private var micFramesOut = 0
+
     /// Throttle timestamps for pushing audio levels to the UI — the waveform needs
     /// only ~10 updates/sec, not one per ~20 ms audio buffer per stream.
     @ObservationIgnored private var lastSystemLevelAt = Date.distantPast
@@ -191,9 +199,6 @@ final class AudioCaptureManager: NSObject {
     /// stream they came from (mic = the user, system = everyone else).
     var onAudioBuffer: ((AVAudioPCMBuffer, AudioSource) -> Void)?
 
-    /// Called after the mic engine is rebuilt following an input-device change,
-    /// so the transcription clock for "Me" can be re-anchored past the dead gap.
-    var onMicRestarted: (() -> Void)?
     /// Observer for AVAudioEngineConfigurationChange on the current engine.
     private var micRestartObserver: NSObjectProtocol?
 
@@ -266,6 +271,9 @@ final class AudioCaptureManager: NSObject {
         micEverHadSignal = false
         micPeakLevel = 0
         echoCancellerStarved = false
+        systemFramesOut = 0
+        micFramesOut = 0
+        captureOrigin = ProcessInfo.processInfo.systemUptime
         isCapturing = true
     }
 
@@ -441,9 +449,6 @@ final class AudioCaptureManager: NSObject {
     /// buffer to transcription. Buffers arrive as 16 kHz mono Float32 from
     /// either backend; runs on that backend's own audio queue.
     private func handleSystemAudio(_ pcmBuffer: AVAudioPCMBuffer) {
-        // Persist everyone else's voice ("Them") as PCM.
-        appendAudio(pcmBuffer, to: .system)
-
         // First nonzero sample through the tap is the only readable proof of
         // the System Audio TCC grant — persist it for PermissionFlow.
         if captureBackend == .tap, !tapEverHadSignal,
@@ -475,8 +480,8 @@ final class AudioCaptureManager: NSObject {
         // Update audio level
         updateAudioLevel(buffer: pcmBuffer)
 
-        // Send everyone else's speech to transcription as "Them"
-        onAudioBuffer?(pcmBuffer, .them)
+        // Persist everyone else's voice ("Them") and transcribe it
+        emit(pcmBuffer, to: .system)
     }
 
     // MARK: - Microphone (AVAudioEngine)
@@ -560,14 +565,11 @@ final class AudioCaptureManager: NSObject {
                 guard !cleaned.isEmpty,
                       let cleanedBuffer = Self.makeBuffer(cleaned, format: targetFormat) else { return }
 
-                // Persist the user's voice ("Me") as 16 kHz mono PCM.
-                self.appendAudio(cleanedBuffer, to: .mic)
+                // Persist the user's voice ("Me") as 16 kHz mono PCM and transcribe it
+                self.emit(cleanedBuffer, to: .mic)
 
                 // Update the mic level so the UI can show the user's voice landing.
                 self.updateAudioLevel(buffer: cleanedBuffer, isMic: true)
-
-                // Send the user's speech to transcription as "Me"
-                self.onAudioBuffer?(cleanedBuffer, .me)
             }
         }
 
@@ -599,11 +601,9 @@ final class AudioCaptureManager: NSObject {
             try startMicCapture()
             micActive = true
             inputDeviceName = Self.defaultDeviceName(input: true)
+            // The dead gap is padded by emit() on the first new buffer, so the
+            // file and the "Me" transcript clock both skip it.
             NSLog("Parrot: mic restarted after device change — input: \(inputDeviceName)")
-            // ponytail: the mic .caf keeps writing continuously, so its file
-            // timeline compresses by the dead gap (post-call polish would place
-            // late "Me" words early); pad silence on restart if that matters.
-            onMicRestarted?()
         } catch {
             micActive = false
             guard attempt < 10 else {
@@ -658,6 +658,56 @@ final class AudioCaptureManager: NSObject {
     // MARK: - Audio File Writing
 
     private enum AudioStream { case system, mic }
+
+    /// Frames of silence a stream owes before `incoming` frames that arrive
+    /// `elapsed` s into the recording, `written` frames already out. The files,
+    /// transcript times, diarization and the player all assume both tracks
+    /// start at the same instant, but a stream only counts from its first
+    /// delivered buffer: the process tap has taken ~5 s to start, a dead tap
+    /// rescued by ScreenCaptureKit ~20 s, and a rebuilt mic sends nothing in
+    /// between. The first buffer is placed exactly; after that only gaps over
+    /// a second count, so callback jitter never nudges a flowing stream.
+    static func silenceOwed(elapsed: TimeInterval, written: Int, incoming: Int, sampleRate: Double) -> Int {
+        // ponytail: arrival time, not each buffer's host timestamp, so right to
+        // within the backend's latency (tens of ms). A backend that stalls, then
+        // replays its backlog in a burst, would end up ahead by the stall; pass
+        // host times through from the three callbacks if that ever shows up.
+        let owed = Int(elapsed * sampleRate) - written - incoming
+        let slack = written == 0 ? 0 : Int(sampleRate)
+        return owed > slack ? owed : 0
+    }
+
+    /// Hands a stream's audio to the two sinks that count samples as time (its
+    /// .caf file and transcription), first padding any silence the stream owes
+    /// the recording clock. Never to the echo canceller or level meters: a burst
+    /// of padding would push the AEC reference seconds out of step with the mic.
+    private func emit(_ buffer: AVAudioPCMBuffer, to stream: AudioStream) {
+        let source: AudioSource = stream == .system ? .them : .me
+        let rate = buffer.format.sampleRate
+        var out = stream == .system ? systemFramesOut : micFramesOut
+        var owed = Self.silenceOwed(elapsed: ProcessInfo.processInfo.systemUptime - captureOrigin,
+                                    written: out, incoming: Int(buffer.frameLength), sampleRate: rate)
+        if owed >= Int(rate / 4) {
+            let name = stream == .system ? "system" : "mic"
+            Self.oslog.log("\(name, privacy: .public) audio \(Double(owed) / rate, format: .fixed(precision: 2), privacy: .public) s behind the recording clock — padding silence")
+        }
+        // One-second pieces: a streaming transcriber gets socket-sized frames.
+        while owed > 0, let silence = AVAudioPCMBuffer(pcmFormat: buffer.format,
+                                                       frameCapacity: AVAudioFrameCount(min(owed, Int(rate)))) {
+            silence.frameLength = silence.frameCapacity
+            for channel in UnsafeMutableAudioBufferListPointer(silence.mutableAudioBufferList) {
+                memset(channel.mData, 0, Int(channel.mDataByteSize))
+            }
+            appendAudio(silence, to: stream)
+            onAudioBuffer?(silence, source)
+            owed -= Int(silence.frameLength)
+            out += Int(silence.frameLength)
+        }
+        appendAudio(buffer, to: stream)
+        onAudioBuffer?(buffer, source)
+        out += Int(buffer.frameLength)
+        if stream == .system { systemFramesOut = out } else { micFramesOut = out }
+    }
 
     /// Appends a PCM buffer to a stream's .caf file off the capture/render thread.
     /// The file is created lazily from the first buffer's own format, so writes can
