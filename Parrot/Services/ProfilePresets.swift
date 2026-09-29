@@ -218,7 +218,9 @@ enum ProfilePresets {
             section("mood", "Mood", "prose", "One line: how the customer felt at the start and at the end."),
         ], coaching: coach("support coach", "Clarity, empathy, and whether the issue was really solved.")),
         coachingID: ReportTemplate(sections: [
-            section("topics", "Topics", "bullets", "What you talked about."),
+            // Starts with a paragraph like the others: bullets-only came back
+            // ragged on gemma3:4b ("Wins - …", no colons) in two runs.
+            section("overview", "Overview", "prose", "1-2 sentences: how the person is doing and what you talked about."),
             section("wins", "Wins", "bullets", "Progress or good news the person shared."),
             section("blockers", "Blockers", "bullets", "What is in their way or worrying them."),
             section("commitments", "Commitments", "bullets", "What either of you said you'd do, with any date.", commitments: true),

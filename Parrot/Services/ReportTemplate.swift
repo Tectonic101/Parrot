@@ -84,8 +84,10 @@ struct ReportTemplate: Codable, Equatable {
     /// The summary prompt's structure paragraph for a custom template: one
     /// line per section, title first, so a small local model can follow it.
     var summaryStructure: String {
-        let lines = sections.map { s -> String in
-            var line = "\(s.title): " + (s.type == "prose" ? "one short paragraph, no bullets." : "\"-\" bullets.")
+        // A section still being typed (no title yet) isn't asked for.
+        let named = sections.filter { !$0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        let lines = named.map { s -> String in
+            var line = "\(s.title): " + (s.type == "prose" ? "one short paragraph, no bullets." : "\"-\" bullets, each ending with its [mm:ss].")
             if let guide = s.guide?.trimmingCharacters(in: .whitespacesAndNewlines), !guide.isEmpty {
                 line += " " + guide
             }
@@ -96,7 +98,7 @@ struct ReportTemplate: Codable, Equatable {
         }
         return "Output exactly these sections, in this order, each title on its own line followed by a colon:\n"
             + lines.joined(separator: "\n")
-            + "\nIf a section has nothing, write \"- None surfaced\" under its title. Use plain text with "
+            + "\nWrite only these sections, no others. If a section has nothing, write \"- None surfaced\" under its title. Use plain text with "
             + "simple \"-\" bullets, no markdown headers. Write in the same language as the conversation."
     }
 }

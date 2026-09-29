@@ -351,6 +351,34 @@ struct ReportProse: View {
     /// `template` adds its section titles to the known labels (nil = the
     /// standard labels only, exactly as before templates).
     static func unflattened(_ text: String, template: ReportTemplate?) -> String {
+        let split = inlineSplit(text, template: template)
+        guard let titles = template?.titles, !titles.isEmpty else { return split }
+        return split.components(separatedBy: "\n").map { titleOnOwnLine($0, titles: titles) }.joined(separator: "\n")
+    }
+
+    /// Local models write a template section's content on its title line
+    /// ("Mood: calm by the end.", "Topics: -" with the bullets below, or no
+    /// colon at all: "Wins - a – b"; all seen on gemma3:4b). Puts the title
+    /// on a line of its own. Template titles only, so a report without a
+    /// template never changes.
+    private static func titleOnOwnLine(_ line: String, titles: [String]) -> String {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        let lower = trimmed.lowercased()
+        for marker in [":", " -", " –"] {
+            guard let title = titles.first(where: { lower.hasPrefix($0.lowercased() + marker) }) else { continue }
+            let head = String(trimmed.prefix(title.count)) + ":"
+            let rest = trimmed.dropFirst(title.count + marker.count).trimmingCharacters(in: .whitespaces)
+            if rest.isEmpty || ["-", "–", "•"].contains(rest) { return head }
+            guard marker != ":" else { return head + "\n" + rest }
+            // "Title - a – b": the dash opened a list.
+            let listed = inlineBullet.stringByReplacingMatches(
+                in: rest, range: NSRange(location: 0, length: (rest as NSString).length), withTemplate: "\n- ")
+            return head + "\n- " + listed
+        }
+        return line
+    }
+
+    private static func inlineSplit(_ text: String, template: ReportTemplate?) -> String {
         let ns = text as NSString
         let extra = (template?.titles ?? []).filter { t in !sectionLabels.contains { $0.caseInsensitiveCompare(t) == .orderedSame } }
         let pattern = extra.isEmpty ? inlineSection : inlineSectionPattern(sectionLabels + extra)

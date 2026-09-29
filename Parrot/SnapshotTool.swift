@@ -778,6 +778,13 @@ enum AnalyzeTest {
             ])
         }
 
+        // ANALYZE_REPORT=all (or a profile name): write each built-in's report
+        // instead of a live pass, to check a model can follow the templates.
+        if let which = ProcessInfo.processInfo.environment["ANALYZE_REPORT"] {
+            if let provider { UserDefaults.standard.register(defaults: ["reportsProvider": provider]) }
+            exit(ReportEval.run(which))
+        }
+
         let profile = ProfilePresets.all().first { $0.name == "Sales discovery" }
         // ANALYZE_TRANSCRIPT=<file> swaps in your own call (e.g. named speakers).
         let transcript = ProcessInfo.processInfo.environment["ANALYZE_TRANSCRIPT"]
@@ -837,6 +844,155 @@ enum AnalyzeTest {
         }
         sem.wait()
         exit(exitCode)
+    }
+}
+
+/// `ANALYZE_REPORT=all Parrot --analyze-test ollama gemma3:4b`: every
+/// built-in writes its report (and coaching, when on) for a short made-up
+/// call. Prints each report, then whether every section title came back,
+/// the promises found, and how many bullets carry a real receipt.
+/// Exits non-zero when a template's sections don't all come back.
+enum ReportEval {
+    static let calls: [String: String] = [
+        "Sales discovery": """
+        [00:05] Me: Thanks for making time. What made you look at new tools this quarter?
+        [00:14] Them: Our reps spend hours logging calls by hand, and half the notes never reach the CRM.
+        [00:32] Me: How much time are we talking about per rep?
+        [00:40] Them: Maybe five hours a week each, and we have twelve reps.
+        [01:02] Me: Is there budget set aside for this?
+        [01:10] Them: We have about twenty thousand for the year, but finance wants to see a payback case first.
+        [01:35] Me: Who else weighs in on the decision?
+        [01:42] Them: Our VP of Sales, Dana, signs off, and IT has to approve anything that touches customer data.
+        [02:05] Them: Honestly your price looks high next to the tool we use now.
+        [02:20] Me: Fair. Most teams earn it back in two months from saved rep time. I can show you the numbers.
+        [02:40] Them: We'd want something live before the new quarter starts in January.
+        [03:01] Me: I'll send you a payback sheet by Friday and set up a call with Dana next week.
+        [03:12] Them: Great, and I'll ask IT for their security checklist.
+        """,
+        "Interview": """
+        [00:02] Me: Today I want to cover your pipeline work, teamwork, streaming, and on-call.
+        [00:08] Me: Thanks for coming in, Jordan. Tell me about a data pipeline you built.
+        [00:15] Them: At Acme I rebuilt our nightly import so it ran in twenty minutes instead of three hours.
+        [00:40] Me: What did you change?
+        [00:46] Them: We moved from one big job to small batches and added retries, and I wrote the monitoring myself.
+        [01:20] Me: How do you handle a disagreement with a teammate on design?
+        [01:28] Them: I write down both options with the tradeoffs and we pick together. Sometimes I'm too quick to defend my own idea, though.
+        [02:05] Me: Have you worked with streaming systems?
+        [02:12] Them: Not in production, only side projects.
+        [02:40] Me: We'll get back to you by Wednesday with next steps.
+        [02:48] Them: Thanks. I'll send over the code sample you asked for tonight.
+        """,
+        "Customer support": """
+        [00:03] Me: Hi, thanks for calling Acme support. What's going on?
+        [00:08] Them: Our invoices stopped syncing to the accounting system since Monday.
+        [00:20] Me: Sorry about that. Did anything change on your side on Monday?
+        [00:27] Them: We rotated our API keys. Could that be it?
+        [00:35] Me: That's likely. The sync still uses the old key. Yes, it's failing with an auth error.
+        [01:02] Me: I've updated the connection with your new key. Can you check the last invoice?
+        [01:15] Them: It's there now. But the invoices from Monday and Tuesday are still missing.
+        [01:30] Me: I'll run a backfill for those two days tonight and email you when it's done.
+        [01:42] Them: Okay. I was pretty annoyed this morning, but this helps a lot. Thanks.
+        """,
+        "1:1 coaching": """
+        [00:05] Me: How has the week been?
+        [00:09] Them: Good overall. I shipped the onboarding redesign and the numbers look better already.
+        [00:25] Me: That's great. What's been harder?
+        [00:30] Them: The Northwind integration is stuck. I'm waiting on their team for API access and it's been two weeks.
+        [00:55] Them: I'm also a bit worried about the reorg and what it means for my team.
+        [01:20] Me: I'll ask Alex about the reorg timeline and tell you what I learn by Thursday.
+        [01:35] Them: Thanks. I'll email Northwind's lead directly today to push for access.
+        [01:50] Me: And let's talk about your conference talk next time.
+        """,
+        "Vendor call": """
+        [00:04] Them: Thanks for considering Acme Payments. Our standard rate is 1.4 percent plus 20 cents per card payment.
+        [00:18] Me: Are there monthly fees on top?
+        [00:23] Them: There's a 25 dollar monthly platform fee, waived for the first three months.
+        [00:40] Me: How fast do payouts reach our bank?
+        [00:45] Them: Two business days, but new accounts have a 7 day rolling reserve for the first 90 days.
+        [01:05] Me: What happens if we want to leave?
+        [01:10] Them: The contract is 12 months, and there's an early exit fee. I'd have to check the exact amount.
+        [01:30] Me: Do you support refunds in euros?
+        [01:36] Them: Good question, let me come back to you on that.
+        [01:50] Them: I'll send the contract draft and our security documents by Monday.
+        [02:00] Me: Great, I'll review it with our finance lead, Mara, next week.
+        """,
+        "Investor pitch": """
+        [00:05] Me: We help small clinics cut no-shows with automatic reminders. We're at 40 thousand in monthly revenue, growing 12 percent a month.
+        [00:25] Them: I like that growth. What does churn look like?
+        [00:32] Me: About 2 percent monthly, mostly very small clinics.
+        [00:45] Them: My worry is the market. Isn't this a feature the big practice software will just add?
+        [01:05] Me: They've had years to do it. Our edge is the integrations with 30 booking systems.
+        [01:25] Them: What are you raising?
+        [01:30] Me: Two million, and we have a lead for half of it.
+        [01:40] Them: We usually write checks of 500 thousand at seed, so that could fit.
+        [01:55] Them: Can you send me your cohort data and an intro to two customers?
+        [02:10] Me: Yes, I'll send both by Wednesday.
+        [02:18] Them: Then I'll bring it to our partner meeting on Monday.
+        """,
+    ]
+
+    /// The receipts index for a fixture: each line runs until the next.
+    static func index(_ transcript: String) -> ReceiptIndex {
+        let rows = transcript.components(separatedBy: "\n").compactMap { line -> (TimeInterval, String, String)? in
+            guard line.hasPrefix("["), let close = line.firstIndex(of: "]"),
+                  let t = Receipts.parseStamp(String(line[line.index(after: line.startIndex)..<close])) else { return nil }
+            let rest = line[line.index(after: close)...].trimmingCharacters(in: .whitespaces)
+            let parts = rest.split(separator: ":", maxSplits: 1).map(String.init)
+            return (t, parts.first ?? "", parts.count > 1 ? parts[1].trimmingCharacters(in: .whitespaces) : "")
+        }
+        return ReceiptIndex(lines: rows.enumerated().map { i, r in
+            .init(start: r.0, end: i + 1 < rows.count ? rows[i + 1].0 : r.0 + 5, speaker: r.1, text: r.2)
+        })
+    }
+
+    static func run(_ which: String) -> Int32 {
+        let profiles = ProfilePresets.all().filter { which == "all" || $0.name == which }
+        guard !profiles.isEmpty else { print("report-eval: no built-in named \(which)"); return 1 }
+        var failed = 0
+        var done = false
+        // Parsing is main-actor work, so spin the main run loop, don't block it.
+        Task { @MainActor in
+            let provider = SwitchingAnalysisProvider()
+            for p in profiles {
+                let template = p.reportTemplate
+                let transcript = calls[p.name] ?? calls["Sales discovery"]!
+                let idx = index(transcript)
+                print("\n=== \(p.name) · \(CopilotProviderKind.modelName(for: SwitchingAnalysisProvider.reportsKind))")
+                let start = Date()
+                do {
+                    let summary = try await provider.summarize(transcript: transcript, insightTitles: [], bookmarks: [],
+                                                               instructions: p.tone, counterpart: p.counterpart, template: template)
+                    var coaching: String?
+                    if template.coachingEnabled {
+                        coaching = try await provider.coachingReport(transcript: transcript, talkPercentMe: 45, instructions: p.tone,
+                                                                     counterpart: p.counterpart, template: template)
+                    }
+                    print(summary)
+                    if let coaching { print("--- coaching\n\(coaching)") }
+                    let got = ReportProse.sections(from: summary, template: template).compactMap(\.title)
+                    let want = template.isStandard ? ["Pain points", "Key points"] : template.titles
+                    let missing = want.filter { w in !got.contains { $0.caseInsensitiveCompare(w) == .orderedSame } }
+                    let bullets = ReportProse.sections(from: summary, template: template).flatMap(\.blocks).compactMap { b -> String? in
+                        if case .bullet(let t, _) = b { return t } else { return nil }
+                    }.filter { !Receipts.isPlaceholder(Receipts.extract($0).text) }
+                    let cited = bullets.filter { !idx.verified(Receipts.extract($0).times).isEmpty }.count
+                    let promises = LastCallBrief.openItems(summary: summary, coaching: coaching, template: template, limit: 20)
+                    let coachOK = coaching.map { $0.lowercased().contains("what went well") } ?? true
+                    let secs = String(format: "%.0f", Date().timeIntervalSince(start))
+                    print("--- \(missing.isEmpty && coachOK ? "OK" : "MISS") \(p.name): sections \(want.count - missing.count)/\(want.count)"
+                          + (missing.isEmpty ? "" : " missing \(missing)") + ", receipts \(cited)/\(bullets.count)"
+                          + ", promises \(promises.count), coaching \(template.coachingEnabled ? (coachOK ? "ok" : "BAD") : "off"), \(secs)s")
+                    if !missing.isEmpty || !coachOK { failed += 1 }
+                } catch {
+                    print("--- FAILED \(p.name): \(error.localizedDescription)")
+                    failed += 1
+                }
+            }
+            done = true
+        }
+        while !done { RunLoop.main.run(until: Date().addingTimeInterval(0.2)) }
+        print("\nreport-eval: \(profiles.count - failed)/\(profiles.count) templates followed")
+        return failed == 0 ? 0 : 1
     }
 }
 

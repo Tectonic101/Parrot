@@ -156,6 +156,16 @@ final class CallProfile {
         }
     }
 
+    /// The one-time screen's switch and the editor's offer: follow the
+    /// built-in's own report, or keep the classic one. Either answer settles
+    /// the offer. Does nothing for a profile with no report of its own.
+    func useBuiltInReport(_ on: Bool) {
+        guard presetReportTemplate?.isStandard == false else { return }
+        reportChoice = on ? .preset : .classic
+        reportData = nil
+        reportOfferPending = false
+    }
+
     static let maxVersions = 5
 
     var versions: [ProfileVersion] {
