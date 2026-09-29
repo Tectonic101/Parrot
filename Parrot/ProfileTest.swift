@@ -3937,6 +3937,26 @@ enum ProfileTest {
         let file = try? ProfileFile.decode(ProfileFile.encode(mine))
         check("profile file: a custom report travels in the file", file?.profile.report == custom)
 
+        // The Report card's edits.
+        let presets = ProfilePresets.all()
+        if let sales = presets.first(where: { $0.name == "Sales discovery" }) {
+            let original = sales.reportTemplate
+            sales.editReport { $0.sections[2].title = "Money" }
+            check("edit: changing a built-in's report makes it your own",
+                  sales.reportChoice == .custom && sales.reportTemplate.sections[2].title == "Money")
+            sales.editReport { $0.sections[2].title = "Budget" }
+            check("edit: changing it back follows the built-in again", sales.reportChoice == .preset && sales.reportTemplate == original)
+            check("edit: report edits never count as Copilot tuning", !sales.isUserModified)
+        }
+        let blank = CallProfile(name: "Acme calls", iconSystemName: "star", summary: "", isBuiltIn: false, sortOrder: 9,
+                                persona: "", tone: "", allowGeneralKnowledge: true, kinds: [], gauges: [])
+        blank.editReport { $0.coaching = .init(enabled: true, role: "pitch coach", focus: nil) }
+        check("edit: a coach role makes it your own", blank.reportChoice == .custom && blank.reportTemplate.coachRole == "pitch coach")
+        blank.editReport { $0.coaching?.role = "" }
+        check("edit: clearing it again is classic, not a copy", blank.reportChoice == .classic && blank.reportData == nil)
+        blank.editReport { $0.coaching = ($0.coaching ?? .init(enabled: true, role: nil, focus: nil)); $0.coaching?.enabled = false }
+        check("edit: coaching off is kept", blank.reportChoice == .custom && !blank.reportTemplate.coachingEnabled)
+
         // Built-ins: every shipped template is within the limits and says where promises go.
         let all = ProfilePresets.all()
         for p in all {

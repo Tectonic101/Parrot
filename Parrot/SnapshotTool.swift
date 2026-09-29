@@ -382,6 +382,35 @@ enum HelpShots {
         shot("home-copilot-card.png", size: .init(width: 600, height: 260),
              CopilotHomeCard().environment(rm).padding(Theme.Metrics.pad))
 
+        // Profiles 2.0: the Report card, the offer, and the one-time screen.
+        // Last, because they change the profiles for everything after them.
+        let profiles = (try? context.fetch(FetchDescriptor<CallProfile>())) ?? []
+        func editor(_ id: UUID?) -> some View {
+            ProfilesSettingsView(initialSelection: id)
+                .environment(rm).environment(rm.profileStore).environment(AppSession())
+                .modelContainer(container)
+        }
+        shot("profiles-report.png", size: .init(width: 860, height: 1900), editor(salesProfile?.id))
+        // As an update leaves them: restore points, a tuned 1:1 coaching with
+        // its offer, and a profile the user made.
+        for p in profiles where p.name != "Investor pitch" { p.saveVersion(label: ProfileStore.restorePointLabel) }
+        if let coaching = profiles.first(where: { $0.name == "1:1 coaching" }) {
+            coaching.isUserModified = true
+            coaching.reportChoice = .classic
+            coaching.reportOfferPending = true
+        }
+        let mine = CallProfile(name: "Northwind accounts", iconSystemName: "briefcase.fill", summary: "Account reviews",
+                               isBuiltIn: false, sortOrder: 20, persona: "", tone: "", allowGeneralKnowledge: true,
+                               kinds: [], gauges: [])
+        mine.saveVersion(label: ProfileStore.restorePointLabel)
+        context.insert(mine)
+        try? context.save()
+        shot("profiles-report-offer.png", size: .init(width: 860, height: 1500),
+             editor(profiles.first { $0.name == "1:1 coaching" }?.id))
+        shot("profiles2-screen.png", size: .init(width: 560, height: 760),
+             ProfileMigrationView().environment(rm.profileStore).modelContainer(container))
+        rm.profileStore.defaults.removeObject(forKey: ProfileStore.screenShownKey)
+
         print("help-shots: wrote \(made.count) → \(dir.path)")
         exit(made.count >= 12 ? 0 : 1)
     }

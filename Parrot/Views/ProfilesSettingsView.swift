@@ -7,6 +7,8 @@ struct ProfilesSettingsView: View {
     /// Snapshot-harness only: opens the Advanced disclosure so the help
     /// screenshots can show the kind/gauge editors. Never set in the app.
     var advancedInitiallyOpen = false
+    /// Snapshot-harness only: the profile to open first. Never set in the app.
+    var initialSelection: UUID? = nil
 
     @Environment(ProfileStore.self) private var profileStore
     @Environment(RecordingManager.self) private var recordingManager
@@ -98,7 +100,7 @@ struct ProfilesSettingsView: View {
         }
         .onAppear {
             if selectedID == nil {
-                selectedID = profiles.first?.id
+                selectedID = initialSelection ?? profiles.first?.id
             }
         }
     }
@@ -238,6 +240,8 @@ private struct ProfileDetailView: View {
                     isOn: $profile.onDeviceOnly
                 )
             }
+
+            ProfileReportCard(profile: profile)
 
             // MARK: Knowledge Documents section
             SettingsCard(title: "Knowledge Documents", blurb: "Documents this profile may quote. The Knowledge page shows the same tags.") {

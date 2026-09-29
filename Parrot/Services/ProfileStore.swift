@@ -28,6 +28,9 @@ final class ProfileStore {
         defaults.bool(forKey: Self.migrationDoneKey) && !defaults.bool(forKey: Self.screenShownKey)
     }
 
+    /// Observed by ContentView, which shows the screen once.
+    var showProfiles2Screen = false
+
     func markProfiles2ScreenShown() { defaults.set(true, forKey: Self.screenShownKey) }
 
     func seedAndMigrateIfNeeded(context: ModelContext, knowledgeBase: KnowledgeBaseService) {
@@ -38,6 +41,7 @@ final class ProfileStore {
             migrateToProfiles2IfNeeded(existing, context: context)
             refreshBuiltInsIfStale(existing, context: context, knowledgeBase: knowledgeBase)
             setActiveFromLastUsed(existing)
+            showProfiles2Screen = profiles2ScreenDue
             return
         }
         // A fresh install starts on Profiles 2.0: nothing to move, no screen.

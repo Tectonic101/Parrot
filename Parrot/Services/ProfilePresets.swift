@@ -242,6 +242,10 @@ enum ProfilePresets {
         ], coaching: coach("pitch coach", "Clarity of the story, handling tough questions, the ask.")),
     ]
 
+    /// The built-in reports a profile can start from, by profile name.
+    static let reportStarters: [(name: String, template: ReportTemplate)] =
+        all().filter { !$0.reportTemplate.isStandard }.map { ($0.name, $0.reportTemplate) }
+
     /// A built-in's shipped report, nil for anything that isn't a built-in.
     static func reportTemplate(for id: UUID) -> ReportTemplate? { reportTemplates[id] }
 

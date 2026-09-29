@@ -8,6 +8,9 @@ enum MainPage: Equatable { case dashboard, settings, ask, aiApps, meeting }
 struct ContentView: View {
     @Environment(RecordingManager.self) private var recordingManager
     @Environment(AppSession.self) private var appSession
+    @Environment(ProfileStore.self) private var profileStore
+    /// The welcome tour's sheet; the Profiles 2.0 screen waits for it.
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     @Environment(\.modelContext) private var modelContext
     @State private var selectedMeeting: Meeting?
     @State private var page: MainPage = .dashboard
@@ -92,6 +95,13 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showBugReport) {
             BugReportSheet(screenshot: reportScreenshot)
+        }
+        // Once, after the Profiles 2.0 migration (never on a fresh install).
+        .sheet(isPresented: Binding(
+            get: { profileStore.showProfiles2Screen && hasCompletedOnboarding && !recordingManager.isRecording },
+            set: { profileStore.showProfiles2Screen = $0 })) {
+            ProfileMigrationView()
+                .environment(profileStore)
         }
         // ⌘K, the menu and "Ask about this meeting" open the Ask page.
         .onChange(of: appSession.askRequest) { _, request in

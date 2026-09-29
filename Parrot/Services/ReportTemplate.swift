@@ -59,6 +59,18 @@ struct ReportTemplate: Codable, Equatable {
         coaching?.focus?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     }
 
+    /// Coaching that is on with no role or focus is the standard coaching,
+    /// so an editor that touched and cleared a field doesn't make a copy.
+    var normalized: ReportTemplate {
+        var t = self
+        if let c = t.coaching, c.enabled,
+           (c.role ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           (c.focus ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            t.coaching = nil
+        }
+        return t
+    }
+
     /// Section titles, for the report parser to recognise as headings.
     var titles: [String] { sections.map(\.title).filter { !$0.isEmpty } }
 

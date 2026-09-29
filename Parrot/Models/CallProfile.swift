@@ -76,7 +76,8 @@ final class CallProfile {
     /// Which report this profile writes (see `ReportChoice`). Tracked apart
     /// from `isUserModified`: picking a report never blocks Copilot preset
     /// refreshes, and Copilot tuning never blocks a report offer.
-    var reportChoiceRaw: String = ReportChoice.classic.rawValue
+    // A literal, like every other migrated default here.
+    var reportChoiceRaw: String = "classic"
     /// The user's own template (JSON ReportTemplate), used when `.custom`.
     var reportData: Data? = nil
     /// A tuned built-in whose new report hasn't been offered yet.
@@ -153,6 +154,21 @@ final class CallProfile {
         } else {
             reportChoice = .custom
             reportData = try? JSONEncoder().encode(template)
+        }
+    }
+
+    /// Every edit from the Report card. Landing back on the built-in's own
+    /// report follows it again; the standard report is classic; anything
+    /// else is the user's own.
+    func editReport(_ change: (inout ReportTemplate) -> Void) {
+        var t = reportTemplate
+        change(&t)
+        t = t.normalized
+        if let own = presetReportTemplate, !own.isStandard, t == own {
+            reportChoice = .preset
+            reportData = nil
+        } else {
+            setCustomReport(t)
         }
     }
 

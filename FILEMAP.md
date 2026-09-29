@@ -85,7 +85,7 @@ tree. Line counts are rough — they flag which files are worth reading whole.
 
 | File | L | Purpose |
 |---|---|---|
-| `Views/ContentView.swift` | 200 | Root split view (`MainPage`: dashboard/settings/ask/aiApps/meeting) + empty state + corner bug button |
+| `Views/ContentView.swift` | 210 | Root split view (`MainPage`: dashboard/settings/ask/aiApps/meeting) + empty state + corner bug button; shows the Profiles 2.0 screen once |
 | `Views/SidebarView.swift` | 361 | Meeting list, rows, talk-ratio strip |
 | `Views/DashboardView.swift` | 350 | Landing stats + recent meetings |
 | `Views/CopilotHomeCard.swift` | 110 | Home card: turn on Copilot, finish setup, waiting for the model, just turned on |
@@ -98,7 +98,9 @@ tree. Line counts are rough — they flag which files are worth reading whole.
 | `Views/ReportContentView.swift` | 490 | Report section cards, talk-ratio bar, prose parser (incl. one-line local reports; knows the meeting's template titles), receipt chips + popover |
 | `Views/SentimentStripView.swift` | 60 | Sentiment gauge strip |
 | `Views/SettingsView.swift` | 970 | All settings sections, provider keys, KB docs |
-| `Views/ProfilesSettingsView.swift` | 720 | Call-profile editor: kinds, gauges, icon picker |
+| `Views/ProfilesSettingsView.swift` | 725 | Call-profile editor: kinds, gauges, icon picker; hosts the Report card |
+| `Views/ProfileReportCard.swift` | 290 | Profile editor → Report: report choice menu, sections (title, what goes here, paragraph/bullets, promises), coaching on/off + role + focus, the built-in report offer |
+| `Views/ProfileMigrationView.swift` | 130 | One-time "Reports can now match each call type" screen after the Profiles 2.0 update: a switch per built-in, backup link |
 | `Views/OnboardingView.swift` | 182 | Setup sheet shell: step routing, footer, 600×680; PermissionRow, ModelOption |
 | `Views/Onboarding/OnboardingModel.swift` | 81 | Sheet state (mode, path, step, switch, key results); move/decide later/finish |
 | `Views/Onboarding/OnboardingParts.swift` | 140 | Shared rows and cards: StepHeader, CopilotHeroCard, DownloadRow, PendingRow, SpeechDownloadRow |
