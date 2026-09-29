@@ -401,7 +401,8 @@ final class RecordingManager {
                 self?.callAnalysisEngine.ingest(
                     text: result.text,
                     at: result.endTime,
-                    source: result.source
+                    source: result.source,
+                    duration: result.endTime - result.startTime
                 )
             }
         }

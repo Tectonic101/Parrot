@@ -271,7 +271,7 @@ enum HelpShots {
             ],
             sentiment: ["score": 72, "buying_temperature": 65],
             read: "engaged", coach: "Going well — answer the pricing question, then ask who signs off.",
-            meCharacters: 620, themCharacters: 780,
+            meSeconds: 41, themSeconds: 52,
             brief: "Renewal call with Acme. Legal wants to know where the data is stored.")
 
         // Two documents so the Knowledge page shows rows, notes, and profile tags.
@@ -630,7 +630,7 @@ enum CopilotSnapshot {
             sentiment: ["buying_temperature": 62, "my_dominance": 55, "score": 68],
             read: "warming",
             coach: "Going well — stop listing features and ask who signs off on budget.",
-            meCharacters: 1300, themCharacters: 900,
+            meSeconds: 87, themSeconds: 60,
             brief: "Renewal call with Northwind. Legal wants to know where the data is stored."
         )
 
@@ -697,7 +697,7 @@ enum CopilotSnapshot {
         // The "Briefed" card open: what the panel shows before the first insight lands.
         rm.callAnalysisEngine.seedForSnapshot(
             profile: profile, insights: [], sentiment: [:], read: nil, coach: nil,
-            meCharacters: 0, themCharacters: 0,
+            meSeconds: 0, themSeconds: 0,
             brief: "Renewal call with Northwind. Legal wants to know where the data is stored.")
         let briefed = render(
             CopilotPanelView(transcriptJumpTarget: .constant(nil)).environment(rm).frame(width: 420, height: 460),

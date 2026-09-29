@@ -133,8 +133,10 @@ final class CallAnalysisEngine {
     /// This call is on-device only (see CloudGate): Ollama, no TypeSafe.
     private(set) var forceLocal = false
     private var segments: [(time: TimeInterval, text: String, source: AudioSource)] = []
-    private var meCharacters = 0
-    private var themCharacters = 0
+    /// Seconds each side has spoken: the live talk balance. Seconds, not
+    /// characters, so a Turkish call isn't under-counted.
+    private var meSeconds: TimeInterval = 0
+    private var themSeconds: TimeInterval = 0
     private var lastAnalyzedCount = 0
     private var debounceTask: Task<Void, Never>?
     private var analysisTask: Task<Void, Never>?
@@ -184,8 +186,8 @@ final class CallAnalysisEngine {
         fastPathLastError = nil
         fastPathStats = (0, 0, 0)
         isPaused = false
-        meCharacters = 0
-        themCharacters = 0
+        meSeconds = 0
+        themSeconds = 0
         sentiment = [:]; sentimentRead = nil; coachLine = nil
         activeProfile = profile
         callBrief = brief.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -237,13 +239,15 @@ final class CallAnalysisEngine {
 
     /// Share of the conversation spoken by the user, once there's enough signal.
     var userTalkPercent: Int? {
-        let total = meCharacters + themCharacters
-        guard total >= 400 else { return nil }
-        return Int((Double(meCharacters) / Double(total) * 100).rounded())
+        let total = meSeconds + themSeconds
+        guard total >= 30 else { return nil }  // about the old 400 characters
+        return Int((meSeconds / total * 100).rounded())
     }
 
     /// Feed every finalized transcript segment here. The engine decides when to analyze.
-    func ingest(text: String, at time: TimeInterval, source: AudioSource) {
+    /// `duration`: how long the line took to say; without it (replays), about
+    /// 15 characters a second.
+    func ingest(text: String, at time: TimeInterval, source: AudioSource, duration: TimeInterval? = nil) {
         guard isActive, isEnabled else { return }
         guard provider.isConfigured else {
             status = .needsAPIKey
@@ -252,8 +256,8 @@ final class CallAnalysisEngine {
 
         segments.append((time, text, source))
         switch source {
-        case .me: meCharacters += text.count
-        case .them: themCharacters += text.count
+        case .me: meSeconds += duration ?? Double(text.count) / 15
+        case .them: themSeconds += duration ?? Double(text.count) / 15
         }
 
         // Paused: collect context, schedule nothing. setPaused(false) picks
@@ -546,15 +550,15 @@ final class CallAnalysisEngine {
     /// can be rendered offscreen (`--copilot-snapshot`) without a live call.
     func seedForSnapshot(profile: CallProfile?, insights: [Insight],
                          sentiment: [String: Int], read: String?, coach: String? = nil,
-                         meCharacters: Int, themCharacters: Int, brief: String = "") {
+                         meSeconds: TimeInterval, themSeconds: TimeInterval, brief: String = "") {
         activeProfile = profile
         callBrief = brief
         self.insights = insights
         self.sentiment = sentiment
         sentimentRead = read
         coachLine = coach
-        self.meCharacters = meCharacters
-        self.themCharacters = themCharacters
+        self.meSeconds = meSeconds
+        self.themSeconds = themSeconds
         isActive = true
         status = .listening
     }
