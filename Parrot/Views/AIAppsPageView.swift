@@ -38,6 +38,9 @@ enum AIApps {
             examples: ["Coach me across my last 10 calls: where do I talk too much?", "Redo my last sales call's report with MEDDIC."]),
         Job(title: "Prepare",
             examples: ["Brief me for my call with Acme in 10 minutes.", "What's still open with Sarah?"]),
+        Job(title: "Tune my Copilot",
+            examples: ["Improve my Sales discovery profile from my last 10 calls.",
+                       "Make my interview report match our hiring scorecard."]),
     ]
 
     /// Once, on the first launch with this page: the switch already on means

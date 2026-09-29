@@ -331,7 +331,7 @@ enum HelpShots {
                 .modelContainer(container))
         // Tall on purpose: the Advanced kinds/gauges editors live far down the
         // form, and the window's viewport is what gets captured.
-        shot("profiles-advanced.png", size: .init(width: 860, height: 2450),
+        shot("profiles-advanced.png", size: .init(width: 860, height: 3500),
              ProfilesSettingsView(advancedInitiallyOpen: true)
                 .environment(rm).environment(rm.profileStore).environment(AppSession())
                 .modelContainer(container))
