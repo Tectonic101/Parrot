@@ -98,6 +98,11 @@ final class ProfileStore {
             counterpart: profile.counterpart,
             allowGeneralKnowledge: profile.allowGeneralKnowledge,
             kinds: profile.kinds, gauges: profile.gauges)
+        // A copy can't follow a built-in's report, so it keeps its own copy.
+        copy.setCustomReport(profile.reportTemplate)
+        copy.sharedID = UUID()
+        copy.sharedVersion = 1
+        copy.sharedSource = "user"
         context.insert(copy)
         try? context.save()
         return copy

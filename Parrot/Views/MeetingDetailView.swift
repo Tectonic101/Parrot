@@ -553,7 +553,8 @@ struct MeetingDetailView: View {
                             coaching: meeting.coaching,
                             talkPercentMe: talkPercentMe,
                             receipts: receiptIndex,
-                            receiptActions: receiptActions
+                            receiptActions: receiptActions,
+                            template: meeting.reportTemplate
                         )
                         // Playback redraws this view ten times a second; the
                         // report only needs to when its text or lines change.
@@ -565,7 +566,8 @@ struct MeetingDetailView: View {
                             followUpCard(draft)
                         }
                         // Summary is in; the coaching pass is still running.
-                        if meeting.status == .processing, meeting.coaching == nil {
+                        if meeting.status == .processing, meeting.coaching == nil,
+                           meeting.reportTemplate?.coachingEnabled != false {
                             reportGeneratingRow("Analyzing your coaching report…")
                         }
                     }

@@ -8,7 +8,7 @@ tree. Line counts are rough — they flag which files are worth reading whole.
 | File | L | Purpose |
 |---|---|---|
 | `Parrot/ParrotApp.swift` | 178 | `@main`; parses CLI harness flags before the SwiftUI `App` starts |
-| `Parrot/ProfileTest.swift` | 1750 | `--profile-test`: headless logic harness, ~540 checks |
+| `Parrot/ProfileTest.swift` | 3930 | `--profile-test`: headless logic harness, ~1260 checks |
 | `Parrot/SnapshotTool.swift` | 954 | Offscreen PNG renderers + transcribe/analyze/capture harnesses; `--ask-chat-test, --ask-real` runs a real multi-turn Ask Parrot chat against Claude or Ollama |
 | `Parrot/CopilotHarness.swift` | 326 | `--kb-add`, `--doc-answer-eval` (Jev precision/recall), `--copilot-replay` (question-to-card latency) |
 
@@ -16,10 +16,10 @@ tree. Line counts are rough — they flag which files are worth reading whole.
 
 | File | L | Purpose |
 |---|---|---|
-| `Models/Meeting.swift` | 166 | `Meeting` record + `MeetingStatus` lifecycle + per-speaker names/embeddings |
+| `Models/Meeting.swift` | 350 | `Meeting` record + `MeetingStatus` lifecycle + per-speaker names/embeddings; report template snapshot |
 | `Models/TranscriptSegment.swift` | 34 | One diarized, timestamped utterance |
 | `Models/Insight.swift` | 65 | `CallInsight` (stored) and `Insight` (live value) |
-| `Models/CallProfile.swift` | 92 | Per-call-type prompt config: kinds, sentiment gauges |
+| `Models/CallProfile.swift` | 180 | Per-call-type prompt config: kinds, sentiment gauges; report choice (classic / preset / custom), sharing ids, last 5 saved versions |
 | `Models/KindStyle.swift` | 86 | Maps insight kinds to icon/color; `Color` helpers |
 | `Models/KnowledgeBase.swift` | 54 | KB document/chunk/reference value types |
 | `Models/AIUsage.swift` | 144 | Token accounting and per-model price table |
@@ -45,13 +45,13 @@ tree. Line counts are rough — they flag which files are worth reading whole.
 | `Services/JevDocMatcher.swift` | 175 | TypeSafe "Jev" client: one probability per KB chunk that it answers the question; same-issue verdicts for card dedup |
 | `Services/KnowledgeBaseService.swift` | 532 | Ingests/chunks KB docs (heading-aware), on-device multilingual embeddings (re-embeds stale vectors), hybrid BM25 + embedding retrieval |
 | `Services/ProfileStore.swift` | 111 | Persists and mutates `CallProfile`s |
-| `Services/ProfilePresets.swift` | 170 | Built-in starter profiles (seven, incl. the buyer-side "Vendor call") |
+| `Services/ProfilePresets.swift` | 275 | Built-in starter profiles (eight, incl. the buyer-side "Vendor call" and "Investor pitch") and their report templates |
 | `Services/ExportService.swift` | 265 | Export: TXT, SRT, Markdown (front matter, next-step checklist instead of repeated sections); `Parts` limits what an AI app gets |
 | `Services/PermissionFlow.swift` | 150 | System Audio (15+) / Screen Recording (14) + microphone grant flows |
 | `Services/AppUpdater.swift` | 56 | Sparkle updater: daily signed appcast check, installs on quit |
 | `Services/BugReport.swift` | 120 | Pre-filled GitHub issue: diagnostics, own-window screenshot, URL builder |
 | `Services/SpeakerProfileStore.swift` | 85 | Voiceprint matching (cosine ≥ 0.65), narrowed to calendar invitees; remember/forget |
-| `Services/Receipts.swift` | 175 | Report receipts: parse `[mm:ss]` stamps, verify against the transcript, commitment/placeholder rules |
+| `Services/Receipts.swift` | 180 | Report receipts: parse `[mm:ss]` stamps, verify against the transcript, commitment/placeholder rules (the meeting's template flags its own commitment sections) |
 | `Services/GlobalHotKey.swift` | 105 | Carbon system-wide shortcut (⌃⌥M mark), registered only while recording |
 | `Services/CallDetector.swift` | 281 | Mic-in-use reading (Core Audio process list) + pure call start/end state machine, app names; ignores Siri, Parrot's own capture, dictation apps |
 | `Services/CallWatcher.swift` | 356 | Polls the detector; Ask/Auto modes; notification actions + delegate; calendar reminders; `NotificationAccess` |
@@ -67,7 +67,8 @@ tree. Line counts are rough — they flag which files are worth reading whole.
 | `Services/MCPServer.swift` | 330 | `--mcp`: read-only stdio MCP server (async loop; list/get/search meetings with meaning search and date/person filters, transcript pages, commitments, prompts, read-only annotations, export to Downloads/Parrot Exports, talk-time stats, read profiles; share settings via MCPAccess), opt-in, private meetings hidden |
 | `Services/MCPCommitments.swift` | 55 | Pure: commitment bullets from a report, owner = speaker of the cited receipt line |
 | `Services/MCPPrompts.swift` | 115 | Pure: the four ready-made MCP prompts (weekly digest, follow-up email, call prep, PRD from calls) |
-| `Services/ProfileFile.swift` | 250 | Pure: portable `.parrotprofile` JSON (encode a CallProfile, decode with limits, unknown fields kept) |
+| `Services/ProfileFile.swift` | 230 | Pure: portable `.parrotprofile` JSON (encode a CallProfile incl. its report, decode with limits, unknown fields kept) |
+| `Services/ReportTemplate.swift` | 100 | Pure: a profile's report sections + coaching lens; `.standard` = the classic report; builds a custom template's prompt structure |
 | `Services/MCPAccess.swift` | 110 | What AI apps may see (share checkboxes, excluded call types), the gate every MCP tool reads through, activity counters |
 | `Services/MCPBundle.swift` | 150 | One-click connect: Claude Desktop `.mcpb` (manifest, launcher that finds a moved app, icon), Cursor link, Claude Code / Codex commands |
 | `Services/ParrotLink.swift` | 45 | Open-in-Parrot links: AI apps get `openparrot.app/open#m=<id>&t=` (the site hands on to `openparrot://`), ParrotAppDelegate opens them, reopening the window if closed |
@@ -94,7 +95,7 @@ tree. Line counts are rough — they flag which files are worth reading whole.
 | `Views/SettingsCards.swift` | 187 | Settings building blocks: page, titled card, row, tag chip (the landing-page window look) |
 | `Views/MeetingDetailView.swift` | 1250 | Post-call tabs: transcript, insights, report; receipts actions, bookmarks card/rows; speaker naming popover (+ invitee suggestions) |
 | `Views/BugReportSheet.swift` | 150 | Bug/idea report form + the corner ladybug button |
-| `Views/ReportContentView.swift` | 473 | Report section cards, talk-ratio bar, prose parser (incl. one-line local reports), receipt chips + popover |
+| `Views/ReportContentView.swift` | 490 | Report section cards, talk-ratio bar, prose parser (incl. one-line local reports; knows the meeting's template titles), receipt chips + popover |
 | `Views/SentimentStripView.swift` | 60 | Sentiment gauge strip |
 | `Views/SettingsView.swift` | 970 | All settings sections, provider keys, KB docs |
 | `Views/ProfilesSettingsView.swift` | 720 | Call-profile editor: kinds, gauges, icon picker |

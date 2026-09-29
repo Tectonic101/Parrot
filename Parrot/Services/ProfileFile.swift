@@ -57,29 +57,8 @@ struct ProfileFile: Codable {
         var key, label, low, high, color: String
     }
 
-    struct Report: Codable, Equatable {
-        var sections: [Section]
-        var coaching: Coaching?
-    }
-
-    struct Section: Codable, Equatable {
-        var key, title, type: String
-        var guide: String?
-        /// Bullets must be things someone said; they feed list_commitments.
-        var commitments: Bool?
-        var criteria: [Criterion]?
-    }
-
-    struct Criterion: Codable, Equatable {
-        var key, label: String
-        var guide: String?
-    }
-
-    struct Coaching: Codable, Equatable {
-        var enabled: Bool
-        var role: String?
-        var focus: String?
-    }
+    /// The report block is a ReportTemplate, as stored on the profile.
+    typealias Report = ReportTemplate
 
     struct Privacy: Codable, Equatable {
         var recommendOnDeviceOnly: Bool
@@ -128,7 +107,7 @@ struct ProfileFile: Codable {
                 gauges: p.gauges.map {
                     Gauge(key: $0.key, label: $0.label, low: $0.lowLabel, high: $0.highLabel, color: $0.colorHex)
                 },
-                report: nil),
+                report: p.reportTemplate.isStandard ? nil : p.reportTemplate),
             privacy: Privacy(recommendOnDeviceOnly: p.onDeviceOnly),
             meta: Meta(source: source ?? (pristine ? "builtin" : "user"),
                        basedOn: p.isBuiltIn && !pristine ? BasedOn(sharedID: p.id, version: p.presetVersion) : nil,
@@ -213,7 +192,7 @@ struct ProfileFile: Codable {
                                   (g.high, "A gauge label"), (g.color, "A gauge color")] { try text(value, what) }
         }
         if let report = p.report {
-            guard report.sections.count <= 8 else { throw Refused(reason: "A report can have at most 8 sections.") }
+            guard report.sections.count <= ReportTemplate.maxSections else { throw Refused(reason: "A report can have at most 8 sections.") }
             for s in report.sections {
                 guard ["prose", "bullets", "scorecard"].contains(s.type) else {
                     throw Refused(reason: "Section \"\(s.title)\" has an unknown type.")

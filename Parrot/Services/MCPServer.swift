@@ -32,6 +32,8 @@ enum MCPServer {
         var bookmarks: [String]
         /// For excluded call types.
         var profileID: UUID? = nil
+        /// The report's template (nil = standard), for its commitment sections.
+        var reportTemplate: ReportTemplate? = nil
     }
 
     /// Where the tools read from. Closures so a request only pays for what
@@ -163,7 +165,7 @@ enum MCPServer {
             people: people, profile: m.profile?.name, summary: m.summary, coaching: m.coaching,
             notes: m.notes,
             bookmarks: m.bookmarks.map { "\(Receipts.stamp($0.time)) \($0.label.isEmpty ? "Marked moment" : $0.label)" },
-            profileID: m.profile?.id)
+            profileID: m.profile?.id, reportTemplate: m.reportTemplate)
     }
 
     // MARK: JSON-RPC
@@ -508,7 +510,8 @@ enum MCPServer {
             var found: [MCPCommitments.Item] = []
             for m in meetings where found.count < limit && (m.summary != nil || m.coaching != nil) {
                 found += MCPCommitments.items(meetingID: m.id, title: m.title, date: m.date, people: m.people,
-                                              reports: [m.summary, m.coaching], index: source.receipts(m.id))
+                                              reports: [m.summary, m.coaching], template: m.reportTemplate,
+                                              index: source.receipts(m.id))
                     .filter { MCPCommitments.matches($0, owner: owner) }
             }
             guard !found.isEmpty else { return "No commitments found." }

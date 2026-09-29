@@ -1106,7 +1106,7 @@ enum ReportSnapshot {
             Divider().overlay(Theme.Colors.line).padding(.vertical, 16)
 
             ReportContentView(summary: sampleSummary, coaching: sampleCoaching, talkPercentMe: 29,
-                              receipts: sampleReceipts)
+                              receipts: sampleReceipts, template: nil)
         }
         .frame(width: 600, alignment: .leading)
         .padding(Theme.Metrics.pad)
