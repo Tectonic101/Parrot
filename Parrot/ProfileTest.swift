@@ -102,6 +102,7 @@ enum ProfileTest {
         testOnboardingModel()
         testReportTemplateGolden()
         testReportTemplates()
+        testProfiles2Migration()
         print(failures == 0 ? "ALL PASS" : "FAILURES: \(failures)")
         exit(failures == 0 ? 0 : 1)
     }
@@ -3918,5 +3919,160 @@ enum ProfileTest {
         check("preset: interview concerns stay job-related",
               byName["Interview"]?.reportTemplate.sections.first { $0.key == "concerns" }?.guide?.contains("never age") == true)
         check("preset: every built-in id has a template", all.allSatisfy { ProfilePresets.reportTemplate(for: $0.id) != nil })
+    }
+
+    /// Task M from a v4 store: what an install made before Profiles 2.0 holds.
+    @MainActor
+    static func testProfiles2Migration() {
+        let schema = Schema([Meeting.self, TranscriptSegment.self, CallInsight.self, CallProfile.self, SpeakerProfile.self])
+        func container() -> ModelContext? {
+            (try? ModelContainer(for: schema, configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]))
+                .map { ModelContext($0) }
+        }
+        let suite = "parrot.test.profiles2"
+        guard let ctx = container(), let d = UserDefaults(suiteName: suite) else {
+            check("migration: fixture builds", false); return
+        }
+        d.removePersistentDomain(forName: suite)
+        let backups = FileManager.default.temporaryDirectory.appendingPathComponent("parrot-profiles2-\(UUID().uuidString)")
+        defer {
+            d.removePersistentDomain(forName: suite)
+            try? FileManager.default.removeItem(at: backups)
+        }
+
+        // The v4 store: every built-in but Investor pitch, as 0.24 left them.
+        for p in ProfilePresets.all() where p.name != "Investor pitch" {
+            p.presetVersion = 4
+            p.reportChoice = .classic
+            p.sharedID = nil
+            p.sharedVersion = 0
+            p.sharedSource = nil
+            ctx.insert(p)
+        }
+        let all = (try? ctx.fetch(FetchDescriptor<CallProfile>())) ?? []
+        func named(_ n: String) -> CallProfile? { all.first { $0.name == n } }
+        guard let sales = named("Sales discovery"), let interview = named("Interview"), let def = named("Default") else {
+            check("migration: fixture has built-ins", false); return
+        }
+        sales.persona = "My own Acme sales persona"
+        sales.tone = "Always ask about Northwind's budget."
+        sales.kinds = Array(sales.kinds.prefix(3))
+        sales.onDeviceOnly = true
+        sales.isUserModified = true
+        def.persona = "Tuned default"
+        def.isUserModified = true
+        let mine = CallProfile(name: "Northwind accounts", iconSystemName: "star", summary: "Mine", isBuiltIn: false,
+                               sortOrder: 20, persona: "Account reviews", tone: "Be brief", counterpart: "the client",
+                               allowGeneralKnowledge: false, kinds: sales.kinds, gauges: sales.gauges)
+        let copy = CallProfile(name: "Sales discovery copy", iconSystemName: "dollarsign.circle", summary: "", isBuiltIn: false,
+                               sortOrder: 21, persona: sales.persona, tone: "", allowGeneralKnowledge: true,
+                               kinds: sales.kinds, gauges: sales.gauges)
+        ctx.insert(mine)
+        ctx.insert(copy)
+        // A meeting from before, with a classic report.
+        let old = Meeting(title: "Acme renewal")
+        old.summary = "Quick call. Pain points: - Price [00:30]. Key points: - Budget approved. Next steps: - You send the contract [15:02]."
+        ctx.insert(old)
+        try? ctx.save()
+        let oldSections = ReportProse.sections(from: old.summary ?? "", template: nil).map(\.title)
+
+        struct Copilot: Equatable { let persona, tone, counterpart: String; let kinds, gauges: Data; let onDevice, general: Bool }
+        func copilot(_ p: CallProfile) -> Copilot {
+            Copilot(persona: p.persona, tone: p.tone, counterpart: p.counterpart, kinds: p.kindsData, gauges: p.gaugesData,
+                    onDevice: p.onDeviceOnly, general: p.allowGeneralKnowledge)
+        }
+        let before = Dictionary(uniqueKeysWithValues: [sales, def, mine, copy].map { ($0.id, copilot($0)) })
+        let beforeCount = ((try? ctx.fetch(FetchDescriptor<CallProfile>())) ?? []).count
+
+        let store = ProfileStore()
+        store.defaults = d
+        store.backupFolder = backups
+        let kb = KnowledgeBaseService(persistent: false)
+        store.seedAndMigrateIfNeeded(context: ctx, knowledgeBase: kb)
+
+        check("migration: untouched built-in follows its new report",
+              interview.reportChoice == .preset && interview.reportTemplate == ProfilePresets.reportTemplate(for: interview.id))
+        check("migration: tuned built-in keeps classic, with an offer",
+              sales.reportChoice == .classic && sales.reportTemplate.isStandard && sales.reportOfferPending)
+        check("migration: tuned Default has nothing to offer", def.reportChoice == .classic && !def.reportOfferPending)
+        check("migration: user-made profiles keep classic, no offer",
+              [mine, copy].allSatisfy { $0.reportChoice == .classic && !$0.reportOfferPending })
+        check("migration: Copilot fields byte-identical (tuned, made, duplicate)",
+              [sales, def, mine, copy].allSatisfy { before[$0.id] == copilot($0) })
+        check("migration: tuned built-in's persona survives the refresh too", sales.persona == "My own Acme sales persona")
+        check("migration: built-ins' sharing ids are their preset ids",
+              all.filter(\.isBuiltIn).allSatisfy { $0.sharedID == $0.id && $0.sharedVersion == 1 && $0.sharedSource == "builtin" })
+        check("migration: user-made profiles get their own sharing id",
+              [mine, copy].allSatisfy { $0.sharedID != nil && $0.sharedID != $0.id && $0.sharedVersion == 1 && $0.sharedSource == "user" }
+              && mine.sharedID != copy.sharedID)
+        let everyone = (try? ctx.fetch(FetchDescriptor<CallProfile>())) ?? []
+        let migrated = everyone.filter { $0.name != "Investor pitch" }
+        check("migration: one restore point per profile", migrated.allSatisfy {
+            $0.versions.count == 1 && $0.versions.first?.label == ProfileStore.restorePointLabel && $0.versions.first?.reportChoice == "classic" })
+        check("migration: restore points decode", migrated.allSatisfy { v in
+            (v.versions.first.flatMap { try? ProfileFile.decode($0.file) })?.profile.persona == v.persona })
+        let files = (try? FileManager.default.contentsOfDirectory(at: backups, includingPropertiesForKeys: nil)) ?? []
+        check("migration: a backup file per profile", files.count == beforeCount && files.allSatisfy { $0.pathExtension == "parrotprofile" })
+        let decoded = files.compactMap { try? ProfileFile.decode(Data(contentsOf: $0)) }
+        check("migration: every backup decodes", decoded.count == files.count)
+        check("migration: backups hold the old settings",
+              decoded.contains { $0.profile.name == "Sales discovery" && $0.profile.persona == "My own Acme sales persona"
+                  && $0.privacy?.recommendOnDeviceOnly == true && $0.profile.report == nil })
+        check("migration: the new built-in arrives on its new report",
+              everyone.first { $0.name == "Investor pitch" }.map { $0.reportChoice == .preset && $0.isBuiltIn } == true)
+        check("migration: done, and the screen is due once", d.bool(forKey: ProfileStore.migrationDoneKey) && store.profiles2ScreenDue)
+        store.markProfiles2ScreenShown()
+        check("migration: screen shown never comes back", !store.profiles2ScreenDue)
+        check("migration: old meeting has no template", old.reportTemplate == nil)
+        check("migration: old meeting's report parses as before",
+              ReportProse.sections(from: old.summary ?? "", template: old.reportTemplate).map(\.title) == oldSections
+              && oldSections.compactMap { $0 } == ["Pain points", "Key points", "Next steps"])
+
+        // Twice changes nothing (flag cleared to force the steps to run again).
+        let firstBackup = files.first.flatMap { try? Data(contentsOf: $0) }
+        let ids = migrated.map { "\($0.name)|\($0.sharedID?.uuidString ?? "-")|\($0.reportChoiceRaw)|\($0.reportOfferPending)|\($0.versions.count)" }.sorted()
+        sales.persona = "Edited after the migration"
+        d.set(false, forKey: ProfileStore.migrationDoneKey)
+        store.migrateToProfiles2IfNeeded(migrated, context: ctx)
+        let again = migrated.map { "\($0.name)|\($0.sharedID?.uuidString ?? "-")|\($0.reportChoiceRaw)|\($0.reportOfferPending)|\($0.versions.count)" }.sorted()
+        check("migration: running it twice changes nothing", again == ids)
+        let salesBackup = backups.appendingPathComponent(ProfileStore.backupFileName(for: sales))
+        check("migration: a re-run never overwrites a backup",
+              files.first.flatMap { try? Data(contentsOf: $0) } == firstBackup
+              && (try? ProfileFile.decode(Data(contentsOf: salesBackup)))?.profile.persona == "My own Acme sales persona"
+              && ((try? FileManager.default.contentsOfDirectory(at: backups, includingPropertiesForKeys: nil))?.count ?? 0) == files.count)
+
+        // No backup, no migration: it waits for the next launch.
+        if let ctx2 = container() {
+            let d2 = UserDefaults(suiteName: suite + ".nobackup")
+            d2?.removePersistentDomain(forName: suite + ".nobackup")
+            let p = ProfilePresets.all()[3]
+            p.reportChoice = .classic
+            ctx2.insert(p)
+            try? ctx2.save()
+            let blocked = ProfileStore()
+            if let d2 { blocked.defaults = d2 }
+            let notAFolder = backups.appendingPathComponent("file")
+            try? Data("x".utf8).write(to: notAFolder)
+            blocked.backupFolder = notAFolder.appendingPathComponent("inside")
+            blocked.migrateToProfiles2IfNeeded([p], context: ctx2)
+            check("migration: no backup, nothing changes", p.reportChoice == .classic && p.versions.isEmpty
+                  && d2?.bool(forKey: ProfileStore.migrationDoneKey) == false)
+            d2?.removePersistentDomain(forName: suite + ".nobackup")
+        }
+
+        // A fresh install: nothing to move, no screen, built-ins on their reports.
+        if let ctx3 = container() {
+            d.removePersistentDomain(forName: suite)
+            let fresh = ProfileStore()
+            fresh.defaults = d
+            fresh.backupFolder = backups.appendingPathComponent("fresh")
+            fresh.seedAndMigrateIfNeeded(context: ctx3, knowledgeBase: kb)
+            let seeded = (try? ctx3.fetch(FetchDescriptor<CallProfile>())) ?? []
+            check("fresh install: no migration screen", !fresh.profiles2ScreenDue && d.bool(forKey: ProfileStore.migrationDoneKey))
+            check("fresh install: no backups written", !FileManager.default.fileExists(atPath: backups.appendingPathComponent("fresh").path))
+            check("fresh install: built-ins follow their reports", seeded.count == ProfilePresets.all().count
+                  && seeded.allSatisfy { $0.reportChoice == .preset && $0.versions.isEmpty })
+        }
     }
 }
