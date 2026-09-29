@@ -115,11 +115,9 @@ struct ContentView: View {
             BugReportSheet(screenshot: reportScreenshot)
         }
         // Files the user opened, dropped or imported go straight to review.
-        .onChange(of: appSession.profileReviews) { _, items in
-            if reviewing == nil, let file = items.first(where: { if case .file = $0.origin { true } else { false } }) {
-                reviewing = file
-            }
-        }
+        .onChange(of: appSession.profileReviews) { _, _ in reviewNextFile() }
+        // A file that launched Parrot was queued before this view listened.
+        .onAppear { reviewNextFile() }
         .sheet(item: $reviewing) { item in
             ProfileReviewView(item: item) {
                 appSession.profileReviews.removeAll { $0.id == item.id }
@@ -186,6 +184,11 @@ struct ContentView: View {
             appSession.profileInbox.start { [appSession] in appSession.profileReviews += $0 }
             await recordingManager.prepare(modelContext: modelContext)
         }
+    }
+
+    private func reviewNextFile() {
+        guard reviewing == nil else { return }
+        reviewing = appSession.profileReviews.first { if case .file = $0.origin { true } else { false } }
     }
 
     /// Selects the meeting a jump points at; the detail view seeks.
