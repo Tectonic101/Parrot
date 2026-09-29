@@ -540,6 +540,8 @@ struct MeetingDetailView: View {
                         } else {
                             emptyTabState("No report was generated for this meeting.")
                         }
+                        // Timing and marks don't need a report either.
+                        toneCard
                         // Marks don't need a report to be useful.
                         if !meeting.bookmarks.isEmpty {
                             bookmarksCard
@@ -548,6 +550,7 @@ struct MeetingDetailView: View {
                 } else {
                     VStack(alignment: .leading, spacing: 16) {
                         AIAppsReportTip(meeting: meeting)
+                        toneCard
                         ReportContentView(
                             summary: meeting.summary,
                             coaching: meeting.coaching,
@@ -599,6 +602,20 @@ struct MeetingDetailView: View {
 
     /// Me's share of the speaking time, for the talk-balance bar.
     private var talkPercentMe: Int? { meeting.talkPercentMe }
+
+    /// The tone timeline, nil for imported audio (no "Me" track).
+    private var toneModel: ToneTimeline.Model? {
+        ToneTimeline.model(duration: meeting.duration, spans: ToneTimeline.spans(meeting.sortedSegments),
+                           nudges: meeting.nudges, timeline: meeting.moodTimeline, marks: meeting.bookmarks)
+    }
+
+    @ViewBuilder
+    private var toneCard: some View {
+        if let model = toneModel {
+            ToneTimelineCard(model: model, play: (audioPlayer != nil || micPlayer != nil) ? playFrom : nil)
+                .equatable()
+        }
+    }
 
     // MARK: - Receipts + bookmarks
 

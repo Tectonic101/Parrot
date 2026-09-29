@@ -72,6 +72,14 @@ struct ParrotMain {
             MainActor.assumeIsolated { CopilotReplay.run(transcriptPath: args[i + 1], args: rest) }
             return
         }
+        if let i = args.firstIndex(of: "--nudge-replay") {
+            MainActor.assumeIsolated { NudgeReplay.run(args: Array(args[(i + 1)...])) }
+            return
+        }
+        if let i = args.firstIndex(of: "--tone-snapshot"), i + 1 < args.count {
+            MainActor.assumeIsolated { ToneSnapshot.write(to: args[i + 1]) }
+            return
+        }
         if args.contains("--profile-test") {
             MainActor.assumeIsolated { ProfileTest.run() }
             return

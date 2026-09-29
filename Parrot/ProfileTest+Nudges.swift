@@ -287,4 +287,12 @@ extension ProfileTest {
         let offSaved = off.stop()
         check("session: switched off still keeps the mood line", offSaved.nudges.isEmpty && offSaved.timeline?.snapshots.count == 1)
     }
+
+    @MainActor
+    static func testNudgeReplay() {
+        let lines = backAndForth() + [said(.me, 125, 130, "the price goes up in January")]
+        let nudges = NudgeReplay.replay(lines: lines, timeline: nil, duration: 200)
+        check("replay: finds the silence after your line", nudges.contains { $0.kind == .goneQuiet && $0.time == 125 })
+        check("replay: nothing else in a normal call", nudges.count == 1)
+    }
 }

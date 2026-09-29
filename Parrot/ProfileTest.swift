@@ -117,6 +117,7 @@ enum ProfileTest {
         testNudgeLimiter()
         testCopilotFlags()
         testNudgeSession()
+        testNudgeReplay()
         print(failures == 0 ? "ALL PASS" : "FAILURES: \(failures)")
         exit(failures == 0 ? 0 : 1)
     }
@@ -1310,7 +1311,9 @@ enum ProfileTest {
         let rm = RecordingManager(memory: MeetingMemory(directory: nil), chats: AskChatStore(directory: nil), provider: recorder)
         rm.attachForHarness(modelContext: context)
         func add(_ title: String, _ text: String, onDeviceOnly: Bool) {
-            let m = Meeting(title: title, date: .now.addingTimeInterval(-3600))
+            // An hour ago, but never before midnight: "today" must include it
+            // (this failed every night between 00:00 and 01:00).
+            let m = Meeting(title: title, date: max(Calendar.current.startOfDay(for: .now), .now.addingTimeInterval(-3600)))
             m.status = .done
             m.onDeviceOnly = onDeviceOnly
             context.insert(m)
