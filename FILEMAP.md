@@ -109,6 +109,7 @@ tree. Line counts are rough — they flag which files are worth reading whole.
 | `Views/Onboarding/CopilotSetupStep.swift` | 164 | Copilot path setup: Ollama install/pull, Claude/Deepgram key fields |
 | `Views/Onboarding/KeyCheckField.swift` | 83 | One provider key field + Check key button and result |
 | `Views/Onboarding/AutomaticStep.swift` | 104 | In-progress step while a path finishes on its own |
+| `Views/Onboarding/AIAppsStep.swift` | 110 | Claude/Cursor/Codex step before Ready (not on the Private path): honest "not private" note, Connect Claude |
 | `Views/Onboarding/ReadyStep.swift` | 70 | Final "Ready" screen |
 | `Views/ModelDownloadProgressView.swift` | 34 | Whisper model download progress bar |
 | `Views/OllamaModelStatusView.swift` | 65 | Settings → Copilot model status, a thin view over OllamaService |

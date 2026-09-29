@@ -3,7 +3,7 @@ import Foundation
 /// One screen of the setup sheet. Raw values are what `onboardingStepName`
 /// stores, so renaming a case strands saved progress.
 enum OnboardingStep: String, CaseIterable {
-    case welcome, permissions, meetCopilot, copilotPath, speechModel, copilotSetup, automatic, ready
+    case welcome, permissions, meetCopilot, copilotPath, speechModel, copilotSetup, automatic, aiApps, ready
 }
 
 /// How Copilot runs, picked on "How should Copilot work?".
@@ -36,7 +36,10 @@ enum OnboardingFlow {
             case .cloud?: middle = [.copilotSetup]
             case .later?, nil: middle = [.speechModel]
             }
-            return [.welcome, .permissions, .meetCopilot, .copilotPath] + middle + [.automatic, .ready]
+            // Claude, Cursor and Codex send what they read to their company, so
+            // someone who asked for nothing to leave the Mac isn't pitched it.
+            let aiApps: [OnboardingStep] = path == .private ? [] : [.aiApps]
+            return [.welcome, .permissions, .meetCopilot, .copilotPath] + middle + [.automatic] + aiApps + [.ready]
         }
     }
 

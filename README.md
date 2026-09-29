@@ -201,8 +201,9 @@ Found something that contradicts any of this? That's a security issue, see [SECU
    | Large V3 Turbo Compressed | 626 MB | Near-best, low memory |
    | Large V3 Turbo | 1.6 GB | Best accuracy, and best for non-English calls. Picked on 12 GB and up |
 
-5. **Hit record** on your next call.
-6. **Feed it your knowledge** (optional) in **Settings > Knowledge**, and pick or build a profile in **Settings > Profiles**.
+5. **Use your meetings in Claude** (optional). The tour's last step connects Claude Desktop in one click; Cursor, Codex and Claude Code connect from **Claude & AI Apps** in the sidebar. It's the one part of Parrot that isn't private like the rest: what the app reads goes to its company under your account. The tour leaves it out if you picked Private.
+6. **Hit record** on your next call.
+7. **Feed it your knowledge** (optional) in **Settings > Knowledge**, and pick or build a profile in **Settings > Profiles**.
 
 Want the tour again? **Help > Show Welcome Tour**.
 
