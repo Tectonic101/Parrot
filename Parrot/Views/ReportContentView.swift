@@ -144,6 +144,57 @@ struct UnverifiedTag: View {
     }
 }
 
+/// One scorecard criterion: name, a five-step bar, the score, the moment
+/// that backs it. No score means "not enough evidence", never a guess.
+struct ScoreRow: View {
+    let row: Scorecard.Row
+    let actions: ReceiptActions?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 8) {
+                Text(row.label)
+                    .font(Theme.Typography.cardTitle)
+                    .foregroundStyle(Theme.Colors.ink)
+                Spacer(minLength: 8)
+                if let score = row.score {
+                    HStack(spacing: 2) {
+                        ForEach(1...5, id: \.self) { step in
+                            Capsule()
+                                .fill(step <= score ? Theme.Colors.accent : Theme.Colors.chip)
+                                .frame(width: Theme.Metrics.scoreStep.width, height: Theme.Metrics.scoreStep.height)
+                        }
+                    }
+                    .accessibilityHidden(true)
+                    Text("\(score)/5")
+                        .font(Theme.Typography.mono(12, .semibold))
+                        .foregroundStyle(Theme.Colors.ink)
+                } else {
+                    Text(row.uncited ? "no moment cited" : "not enough evidence")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Colors.ink3)
+                        .help(row.uncited ? "The report gave a score without pointing to a moment in the call, so Parrot doesn't show it." : "")
+                }
+            }
+            if row.score != nil {
+                HStack(alignment: .top, spacing: 8) {
+                    Text(row.evidence)
+                        .font(Theme.Typography.secondary)
+                        .foregroundStyle(Theme.Colors.ink2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    ForEach(Array(row.lines.enumerated()), id: \.offset) { _, line in
+                        ReceiptChip(line: line, actions: actions)
+                    }
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(row.score.map { "\(row.label): \($0) out of 5. \(row.evidence)" }
+                            ?? "\(row.label): \(row.uncited ? "no moment cited" : "not enough evidence")")
+    }
+}
+
 // MARK: - Section chrome shared by cards + talk bar
 
 /// One report section as a card: tinted icon chip + title header, content below.
@@ -217,6 +268,12 @@ struct ReportProse: View {
     enum Block {
         case bullet(String, level: Int)
         case paragraph(String, lede: Bool)
+
+        var raw: String {
+            switch self {
+            case .bullet(let t, _), .paragraph(let t, _): return t
+            }
+        }
     }
 
     struct Section {
@@ -231,7 +288,23 @@ struct ReportProse: View {
         let flagging = receipts.reportHasReceipts(text)
         VStack(alignment: .leading, spacing: 12) {
             ForEach(Array(sections.enumerated()), id: \.offset) { _, section in
-                if let title = section.title {
+                if let title = section.title, let card = template?.section(titled: title),
+                   card.type == "scorecard", let criteria = card.criteria, !criteria.isEmpty {
+                    let read = Scorecard.rows(from: section.blocks.map(\.raw), criteria: criteria, receipts: receipts)
+                    ReportSectionCard(title: title, icon: "gauge.with.dots.needle.50percent", tint: Theme.Colors.accent) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            ForEach(Array(read.rows.enumerated()), id: \.offset) { _, r in
+                                ScoreRow(row: r, actions: actions)
+                            }
+                            // Lines that weren't scores still show, as plain bullets.
+                            ForEach(Array(read.rest.enumerated()), id: \.offset) { _, line in
+                                let block = Block.bullet(line, level: 0)
+                                row(block, check: Self.checked(block, section: title, template: template,
+                                                               receipts: receipts, flagging: flagging))
+                            }
+                        }
+                    }
+                } else if let title = section.title {
                     ReportSectionCard(title: title,
                                       icon: Self.icon(for: title),
                                       tint: Self.tint(for: title)) {

@@ -103,6 +103,7 @@ enum ProfileTest {
         testReportTemplateGolden()
         testReportTemplates()
         testProfiles2Migration()
+        testScorecards()
         print(failures == 0 ? "ALL PASS" : "FAILURES: \(failures)")
         exit(failures == 0 ? 0 : 1)
     }
@@ -3964,7 +3965,8 @@ enum ProfileTest {
             check("preset \(p.name): follows its shipped report", p.reportChoice == .preset && p.sharedID == p.id && p.sharedVersion == 1)
             check("preset \(p.name): template within limits", t.sections.count <= ReportTemplate.maxSections
                   && Set(t.sections.map(\.key)).count == t.sections.count
-                  && t.sections.allSatisfy { ["prose", "bullets"].contains($0.type) && ($0.guide ?? "").count <= 300 })
+                  && t.sections.allSatisfy { ["prose", "bullets", "scorecard"].contains($0.type) && ($0.guide ?? "").count <= 300
+                      && ($0.type != "scorecard" || (1...ReportTemplate.maxCriteria).contains($0.criteria?.count ?? 0)) })
             check("preset \(p.name): has a commitments section", t.sections.contains { $0.commitments == true })
             check("preset \(p.name): passes the file's own checks", (try? ProfileFile.decode(ProfileFile.encode(p))) != nil)
         }
@@ -4148,5 +4150,74 @@ enum ProfileTest {
             check("fresh install: built-ins follow their reports", seeded.count == ProfilePresets.all().count
                   && seeded.allSatisfy { $0.reportChoice == .preset && $0.versions.isEmpty })
         }
+    }
+
+    @MainActor
+    static func testScorecards() {
+        typealias C = ReportTemplate.Criterion
+        let criteria = [C(key: "stage", label: "Stage fit", guide: "Do they invest at our stage?"),
+                        C(key: "check", label: "Check size", guide: nil),
+                        C(key: "team", label: "Team", guide: nil),
+                        C(key: "market", label: "Market", guide: nil)]
+        let fit = ReportTemplate(sections: [
+            .init(key: "overview", title: "Overview", type: "prose", guide: "What happened."),
+            .init(key: "fit", title: "Fit", type: "scorecard", guide: nil, criteria: criteria)])
+        let prompt = ClaudeAnalysisProvider.summarySystemPrompt(counterpart: "the investor", template: fit)
+        check("scorecard: prompt asks for N/5 with a receipt, or not enough evidence",
+              prompt.contains("\"- Stage fit: 4/5 - reason [mm:ss]\"") && prompt.contains("\"- Stage fit: not enough evidence\"")
+              && prompt.contains("Never a score without its [mm:ss]"))
+        check("scorecard: prompt lists the criteria with their guides",
+              prompt.contains("these criteria: Stage fit (Do they invest at our stage?); Check size; Team; Market.")
+              && !prompt.contains("is about"))
+        check("scorecard: fairness guard in every scorecard prompt",
+              prompt.contains("Never judge age, gender, accent, looks") && prompt.contains("no hire or"))
+        check("scorecard: no fairness text without a scorecard",
+              !ClaudeAnalysisProvider.summarySystemPrompt(counterpart: "x", template: ProfilePresets.reportTemplates.values
+                .first { !$0.isStandard && !$0.hasScorecard }!).contains("Never judge"))
+
+        let idx = sampleReceiptIndex()
+        let lines = [
+            "Stage fit: 4/5 - They invest at seed [00:30]",
+            "**Check size**: 6/5 - Huge checks [12:34]",
+            "- Team: 3/5 - Liked the founders",
+            "Market: 5/5 - Big market [41:07]",
+            "Traction: 5/5 - Growing fast [00:30]",
+            "The investor seemed keen overall.",
+        ]
+        let read = Scorecard.rows(from: lines, criteria: criteria, receipts: idx)
+        check("scorecard: a row per criterion, in order", read.rows.map(\.label) == ["Stage fit", "Check size", "Team", "Market"])
+        check("scorecard: 4/5 with a real receipt counts",
+              read.rows[0].score == 4 && read.rows[0].evidence == "They invest at seed" && read.rows[0].lines.first?.speaker == "Sam")
+        check("scorecard: out of range is dropped", read.rows[1].score == nil)
+        check("scorecard: a score with no receipt is dropped, and says so", read.rows[2].score == nil && read.rows[2].uncited)
+        check("scorecard: not enough evidence is not 'uncited'", !read.rows[1].uncited)
+        check("scorecard: a receipt that points at nothing is dropped", read.rows[3].score == nil)
+        check("scorecard: lines that aren't criteria stay as bullets",
+              read.rest == ["Traction: 5/5 - Growing fast [00:30]", "The investor seemed keen overall."])
+        let words = Scorecard.rows(from: ["- Stage fit: not enough evidence", "Stage fit: 2/5 - Later-stage fund [12:34]",
+                                          "Check size: 0/5 - none [00:30]", "Check size: 3/5 [00:30]"],
+                                   criteria: criteria, receipts: idx)
+        check("scorecard: not enough evidence, then a backed score still counts", words.rows[0].score == 2)
+        check("scorecard: zero is out of range, a later backed score counts", words.rows[1].score == 3)
+        let gemma = Scorecard.rows(from: ["- Stage fit (Do they invest at our stage?): 4 [00:30]", "- Check size: 12 [00:30]",
+                                          "- Team: 3 - strong founders [15:02]"], criteria: criteria, receipts: idx)
+        check("scorecard: 'Name (meaning): 4 [mm:ss]' reads as 4/5", gemma.rows[0].score == 4 && gemma.rest.isEmpty)
+        check("scorecard: a bare 12 is not a score", gemma.rows[1].score == nil)
+        check("scorecard: a bare score with a dash and receipt counts", gemma.rows[2].score == 3 && gemma.rows[2].evidence == "strong founders")
+        let after = Scorecard.rows(from: ["- Stage fit: 3/5 [00:30] – They back seed rounds."], criteria: criteria, receipts: idx)
+        check("scorecard: a reason after the receipt loses its dash", after.rows[0].evidence == "They back seed rounds.")
+        let copied = Scorecard.rows(from: ["- Stage fit: 4/5 - reason: they back seed rounds [00:30]"], criteria: criteria, receipts: idx)
+        check("scorecard: a copied 'reason:' is tidied", copied.rows[0].evidence == "they back seed rounds")
+
+        let report = "Overview:\nGood call.\n\nFit:\n- Stage fit: 4/5 - Seed fund [00:30]\n- Check size: not enough evidence"
+        let section = ReportProse.sections(from: report, template: fit).first { $0.title == "Fit" }
+        let parsed = section.map { Scorecard.rows(from: $0.blocks.map(\.raw), criteria: criteria, receipts: idx) }
+        check("scorecard: read straight from a report's section", parsed?.rows.first?.score == 4 && parsed?.rows[1].score == nil)
+
+        let interview = ProfilePresets.reportTemplates.values.first { $0.sections.contains { $0.key == "scorecard" } }
+        check("scorecard: Interview scores four job criteria, fairness included",
+              interview?.section(titled: "Scorecard")?.criteria?.count == 4
+              && interview.map { ClaudeAnalysisProvider.summarySystemPrompt(counterpart: "the candidate", template: $0) }?
+                .contains("Never judge age") == true)
     }
 }

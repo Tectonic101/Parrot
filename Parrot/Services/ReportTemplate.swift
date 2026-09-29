@@ -78,9 +78,24 @@ struct ReportTemplate: Codable, Equatable {
     /// flag, or nil when the title isn't one of its sections (coaching
     /// sections, reports written before the template).
     func commitmentFlag(forTitle title: String) -> Bool? {
-        let t = Self.normalized(title)
-        return sections.first { Self.normalized($0.title) == t }.map { $0.commitments == true }
+        section(titled: title).map { $0.commitments == true }
     }
+
+    /// The section a report heading belongs to (case, bold and colons ignored).
+    func section(titled title: String) -> Section? {
+        let t = Self.normalized(title)
+        return sections.first { Self.normalized($0.title) == t }
+    }
+
+    static let maxCriteria = 8
+    var hasScorecard: Bool { sections.contains { $0.type == "scorecard" } }
+
+    /// In every prompt with a scorecard: criteria only, from what was said.
+    static let fairnessRule = """
+        Scorecards: score only the listed criteria, and only from what was said on the call. \
+        Never judge age, gender, accent, looks or any other personal trait. Give no hire or \
+        no-hire verdict unless a section asks for a recommendation.
+        """
 
     private static func normalized(_ s: String) -> String {
         s.trimmingCharacters(in: .whitespacesAndNewlines.union(CharacterSet(charactersIn: ":*#"))).lowercased()
@@ -99,7 +114,27 @@ struct ReportTemplate: Codable, Equatable {
         // A section still being typed (no title yet) isn't asked for.
         let named = sections.filter { !$0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         let lines = named.map { s -> String in
-            var line = "\(s.title): " + (s.type == "prose" ? "one short paragraph, no bullets." : "\"-\" bullets, each ending with its [mm:ss].")
+            var line = "\(s.title): "
+            switch s.type {
+            case "prose": line += "one short paragraph, no bullets."
+            case "scorecard":
+                // Written so small models copy the right shape. Seen on the
+                // default local models: gemma3:4b pasted "(meaning)" into the
+                // name (the reader copes) and dropped "/5"; llama3.2:3b copied
+                // example words ("evidence", "why, in a few words") and any
+                // "X is about: …" sentence as if they were answers.
+                let criteria = s.criteria ?? []
+                let first = criteria.first?.label ?? "Criterion"
+                let listed = criteria.map { c -> String in
+                    let guide = c.guide?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                    return guide.isEmpty ? c.label : "\(c.label) (\(guide))"
+                }
+                line += "a scorecard with one bullet for each of these criteria: " + listed.joined(separator: "; ")
+                    + ". Write each like \"- \(first): 4/5 - reason [mm:ss]\": the name, a score from 1 to 5 "
+                    + "written as N/5, a short reason, and the timestamp of the line that shows it. If the call doesn't show it, "
+                    + "write \"- \(first): not enough evidence\". Never a score without its [mm:ss]."
+            default: line += "\"-\" bullets, each ending with its [mm:ss]."
+            }
             if let guide = s.guide?.trimmingCharacters(in: .whitespacesAndNewlines), !guide.isEmpty {
                 line += " " + guide
             }
@@ -112,5 +147,75 @@ struct ReportTemplate: Codable, Equatable {
             + lines.joined(separator: "\n")
             + "\nWrite only these sections, no others. If a section has nothing, write \"- None surfaced\" under its title. Use plain text with "
             + "simple \"-\" bullets, no markdown headers. Write in the same language as the conversation."
+            + (hasScorecard ? "\n\n" + Self.fairnessRule : "")
+    }
+}
+
+/// A scorecard section read back: one row per criterion, in the template's
+/// order. A score counts only with a receipt that points at a real line and
+/// only from 1 to 5; anything else leaves the criterion at "not enough
+/// evidence". Lines that aren't scores come back as plain bullets.
+enum Scorecard {
+    struct Row: Equatable {
+        let label: String
+        /// nil = no score to show (see `uncited`).
+        let score: Int?
+        let evidence: String
+        let lines: [ReceiptIndex.Line]
+        /// The report gave a score but no moment that backs it, so it isn't
+        /// shown; different from the call not showing enough.
+        var uncited = false
+    }
+
+    // "Stage fit: 4/5 - They invest at seed [01:40]", bold or bulleted too.
+    // A bare "4" counts when a dash, a receipt or nothing follows it.
+    private static let scorePattern = try! NSRegularExpression(   // swiftlint:disable:this force_try
+        pattern: #"^\s*(\d+)(?:\s*/\s*5\b|(?=\s*(?:[-–—\[(]|$)))\s*[-–—:,.]?\s*(.*)$"#)
+
+    static func rows(from lines: [String], criteria: [ReportTemplate.Criterion],
+                     receipts: ReceiptIndex) -> (rows: [Row], rest: [String]) {
+        var found: [String: Row] = [:]
+        var rest: [String] = []
+        let bullets = CharacterSet(charactersIn: "-–•* ")
+        for raw in lines {
+            let line = raw.trimmingCharacters(in: bullets).replacingOccurrences(of: "**", with: "")
+            // "Name (what it means): 4" counts as "Name: 4".
+            guard let colon = line.firstIndex(of: ":") else { rest.append(raw); continue }
+            let name = String(line[..<colon]).replacingOccurrences(of: #"\s*\(.*\)\s*$"#, with: "", options: .regularExpression)
+                .trimmingCharacters(in: .whitespaces)
+            guard let criterion = criteria.first(where: {
+                $0.label.trimmingCharacters(in: .whitespaces).caseInsensitiveCompare(name) == .orderedSame })
+            else { rest.append(raw); continue }
+            let key = criterion.label.lowercased()
+            let body = String(line[line.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
+            if body.lowercased().hasPrefix("not enough evidence") {
+                if found[key] == nil { found[key] = Row(label: criterion.label, score: nil, evidence: "", lines: []) }
+                continue
+            }
+            let ns = body as NSString
+            guard let m = scorePattern.firstMatch(in: body, range: NSRange(location: 0, length: ns.length)) else {
+                rest.append(raw); continue
+            }
+            let score = Int(ns.substring(with: m.range(at: 1))) ?? 0
+            let cited = Receipts.extract(ns.substring(with: m.range(at: 2)))
+            let backed = receipts.lines.isEmpty ? [] : receipts.verified(cited.times)
+            let hasReceipt = receipts.lines.isEmpty ? !cited.times.isEmpty : !backed.isEmpty
+            // Out of range or unbacked: dropped, the criterion stays unscored.
+            guard (1...5).contains(score) else { continue }
+            guard hasReceipt else {
+                if found[key] == nil { found[key] = Row(label: criterion.label, score: nil, evidence: "", lines: [], uncited: true) }
+                continue
+            }
+            if found[key]?.score == nil {
+                // Tidy a leading dash, and "reason:" copied from the prompt's example.
+                let evidence = cited.text.trimmingCharacters(in: CharacterSet(charactersIn: "-–—:, "))
+                    .replacingOccurrences(of: #"^reason\s*[:\-–—]\s*"#, with: "", options: [.regularExpression, .caseInsensitive])
+                found[key] = Row(label: criterion.label, score: score, evidence: evidence, lines: backed)
+            }
+        }
+        let rows = criteria.map { c in
+            found[c.label.lowercased()] ?? Row(label: c.label, score: nil, evidence: "", lines: [])
+        }
+        return (rows, rest)
     }
 }

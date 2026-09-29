@@ -139,6 +139,8 @@ enum Theme {
         static let chatMaxWidth: CGFloat = 760
         /// Ask Parrot's "thinking" dots.
         static let thinkingDot: CGFloat = 5
+        /// Report scorecards: one step of the five-step score bar.
+        static let scoreStep = CGSize(width: 14, height: 6)
     }
 }
 

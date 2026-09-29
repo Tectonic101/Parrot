@@ -184,6 +184,12 @@ enum ProfilePresets {
                                commitments: commitments ? true : nil)
     }
 
+    private static func scorecard(_ key: String, _ title: String, _ guide: String,
+                                  _ criteria: [(String, String, String)]) -> ReportTemplate.Section {
+        ReportTemplate.Section(key: key, title: title, type: "scorecard", guide: guide,
+                               criteria: criteria.map { .init(key: $0.0, label: $0.1, guide: $0.2) })
+    }
+
     private static func coach(_ role: String, _ focus: String) -> ReportTemplate.Coaching {
         ReportTemplate.Coaching(enabled: true, role: role, focus: focus)
     }
@@ -205,6 +211,12 @@ enum ProfilePresets {
         ], coaching: coach("sales coach", "Discovery: pain, budget, decision-maker and timeline. How objections were handled.")),
         interviewID: ReportTemplate(sections: [
             section("overview", "Overview", "prose", "2-3 sentences: the role, how the conversation went, and anything decided."),
+            scorecard("scorecard", "Scorecard", "Only what the candidate said on this call.", [
+                ("experience", "Relevant experience", "Has done similar work, with real examples"),
+                ("problems", "Problem solving", "How they work through a problem"),
+                ("communication", "Communication", "Explains clearly and answers the question asked"),
+                ("teamwork", "Teamwork", "How they work with others and handle disagreement"),
+            ]),
             section("strengths", "Strengths", "bullets", "Things the candidate showed they can do, with the moment it came up."),
             section("concerns", "Concerns", "bullets", "Gaps or doubts from what the candidate said. Only job-related points, never age, looks, accent or other personal traits."),
             section("uncovered", "Still to cover", "bullets", "Planned topics or questions that didn't come up."),
@@ -237,7 +249,10 @@ enum ProfilePresets {
             section("liked", "What they liked", "bullets", "Parts of the pitch the investor responded well to."),
             section("concerns", "Their concerns", "bullets", "Doubts about market, team, traction or terms."),
             section("asks", "What they asked for", "bullets", "Data, metrics or intros they requested."),
-            section("fit", "Fit", "bullets", "Do they invest at our stage, and does their usual check size match the round?"),
+            scorecard("fit", "Fit", "How well this investor fits the round.", [
+                ("stage", "Stage fit", "Do they invest at our stage?"),
+                ("check", "Check size", "Does their usual check match the round?"),
+            ]),
             section("next", "Next steps", "bullets", "What someone said they'd do, with any date.", commitments: true),
         ], coaching: coach("pitch coach", "Clarity of the story, handling tough questions, the ask.")),
     ]

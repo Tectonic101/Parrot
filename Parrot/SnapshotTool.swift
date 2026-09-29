@@ -1006,11 +1006,17 @@ enum ReportEval {
                     }.filter { !Receipts.isPlaceholder(Receipts.extract($0).text) }
                     let cited = bullets.filter { !idx.verified(Receipts.extract($0).times).isEmpty }.count
                     let promises = LastCallBrief.openItems(summary: summary, coaching: coaching, template: template, limit: 20)
+                    let parsed = ReportProse.sections(from: summary, template: template)
+                    let scores = template.sections.filter { $0.type == "scorecard" }.map { card -> String in
+                        let blocks = parsed.first { $0.title.map { template.section(titled: $0)?.key == card.key } == true }?.blocks ?? []
+                        let rows = Scorecard.rows(from: blocks.map(\.raw), criteria: card.criteria ?? [], receipts: idx).rows
+                        return ", scores \(rows.filter { $0.score != nil }.count)/\(rows.count)"
+                    }.joined()
                     let coachOK = coaching.map { $0.lowercased().contains("what went well") } ?? true
                     let secs = String(format: "%.0f", Date().timeIntervalSince(start))
                     print("--- \(missing.isEmpty && coachOK ? "OK" : "MISS") \(p.name): sections \(want.count - missing.count)/\(want.count)"
                           + (missing.isEmpty ? "" : " missing \(missing)") + ", receipts \(cited)/\(bullets.count)"
-                          + ", promises \(promises.count), coaching \(template.coachingEnabled ? (coachOK ? "ok" : "BAD") : "off"), \(secs)s")
+                          + ", promises \(promises.count)\(scores), coaching \(template.coachingEnabled ? (coachOK ? "ok" : "BAD") : "off"), \(secs)s")
                     if !missing.isEmpty || !coachOK { failed += 1 }
                 } catch {
                     print("--- FAILED \(p.name): \(error.localizedDescription)")
