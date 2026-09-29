@@ -232,4 +232,59 @@ extension ProfileTest {
         check("limiter: wrap-up skips the gap", d.tick(now: 281, lastHeard: [:])?.kind == .wrapUp)
         check("limiter: held ones are kept for the report", d.all.map(\.shown) == [true, false, true, true])
     }
+
+    // MARK: - Copilot flags and the live session
+
+    static func testCopilotFlags() {
+        let schema = ClaudeAnalysisProvider.schema(kinds: [], gauges: [])
+        let sentiment = (schema["properties"] as? [String: Any])?["sentiment"] as? [String: Any]
+        let props = sentiment?["properties"] as? [String: Any]
+        let required = sentiment?["required"] as? [String] ?? []
+        check("flags: schema asks wrapping_up", (props?["wrapping_up"] as? [String: Any])?["type"] as? String == "boolean")
+        check("flags: schema asks next_step_agreed", (props?["next_step_agreed"] as? [String: Any])?["type"] as? String == "boolean")
+        check("flags: both required", required.contains("wrapping_up") && required.contains("next_step_agreed"))
+        let prompt = ClaudeAnalysisProvider.systemPrompt(persona: "P", kinds: [], gauges: [])
+        check("flags: prompt explains them", prompt.contains("\"wrapping_up\"") && prompt.contains("\"next_step_agreed\""))
+        let parsed = try? ClaudeAnalysisProvider.parseAnalysisPayload(
+            #"{"insights":[],"sentiment":{"coach":"c","score":50,"read":"r","wrapping_up":true,"next_step_agreed":false,"f":40},"resolved":[]}"#)
+        check("flags: parsed as 1/0", parsed?.sentiment["wrapping_up"] == 1 && parsed?.sentiment["next_step_agreed"] == 0
+              && parsed?.sentiment["f"] == 40)
+        let insights = [
+            Insight(kindKey: "question", title: "Contract length?", detail: "", callTime: 90, source: nil),
+            Insight(kindKey: "blocker", title: "Price too high", detail: "", callTime: 80, source: nil),
+            Insight(kindKey: "question", title: "Done one", detail: "", callTime: 70, source: nil, isHandled: true),
+        ]
+        let pass = CallAnalysisEngine.nudgePass(time: 100, sentiment: ["f": 40, "score": 60, "wrapping_up": 1],
+                                                insights: insights, gauges: [upset], pinnedKinds: ["blocker"])
+        check("flags: pass keeps profile gauges only", pass.values == ["f": 40])
+        check("flags: open questions, not handled ones", pass.openQuestions == [.init(title: "Contract length?", since: 90)])
+        check("flags: pinned open items", pass.openItems == ["Price too high"])
+        check("flags: wrap-up read, next step not", pass.wrappingUp && !pass.nextStepAgreed)
+    }
+
+    @MainActor
+    static func testNudgeSession() {
+        let session = LiveNudgeSession()
+        var shown: [Nudge] = []
+        session.onShow = { shown.append($0) }
+        session.start(gauges: [upset], nudging: true)
+        backAndForth().forEach { session.add(line: $0) }
+        session.add(line: said(.me, 125, 130, "the price goes up in January"))
+        session.tick(now: 140, lastHeard: [.me: 130, .them: 119], paused: true)
+        check("session: paused Copilot → no nudges", session.current == nil && shown.isEmpty)
+        session.tick(now: 141, lastHeard: [.me: 130, .them: 119], paused: false)
+        check("session: shows and tells the pill", session.current?.kind == .goneQuiet && shown.count == 1)
+        session.dismiss()
+        check("session: dismiss clears the banner", session.current == nil)
+        session.add(pass: NudgeDetector.Pass(time: 150, values: ["f": 30]))
+        let saved = session.stop()
+        check("session: stop returns nudges and mood", saved.nudges.count == 1 && saved.timeline?.snapshots.count == 1)
+        let off = LiveNudgeSession()
+        off.start(gauges: [upset], nudging: false)
+        off.add(line: said(.me, 125, 130))
+        off.add(pass: NudgeDetector.Pass(time: 150, values: ["f": 30]))
+        off.tick(now: 200, lastHeard: [:], paused: false)
+        let offSaved = off.stop()
+        check("session: switched off still keeps the mood line", offSaved.nudges.isEmpty && offSaved.timeline?.snapshots.count == 1)
+    }
 }

@@ -22,6 +22,8 @@ final class RecordingManager {
     private(set) var liveSpeakerSuggestions: [String: String] = [:]
     // Routes to Claude / Ollama / a custom server per Settings → Copilot.
     let callAnalysisEngine: CallAnalysisEngine
+    /// This call's live nudges (the pill, the Copilot banner, the report timeline).
+    let nudges = LiveNudgeSession()
     let knowledgeBase = KnowledgeBaseService()
     /// TypeSafe client for the copilot's "From your docs" excerpts; inert
     /// without a key (see CallAnalysisEngine.fastPathAvailable).
@@ -397,6 +399,8 @@ final class RecordingManager {
             Task { @MainActor in
                 self?.lastVoiceAt = .now
                 self?.addSegment(result)
+                self?.nudges.add(line: NudgeDetector.Line(source: result.source, start: result.startTime,
+                                                          end: result.endTime, text: result.text))
                 self?.callAnalysisEngine.ingest(
                     text: result.text,
                     at: result.endTime,
@@ -428,6 +432,17 @@ final class RecordingManager {
         transcriptionEngine.startTranscribing(meetingStartTime: .now)
         callAnalysisEngine.provider.resetUsage()  // this call's token meter starts at zero
         docMatcher.resetUsage()
+        nudges.start(gauges: profile?.gauges ?? [])
+        nudges.onShow = { [weak self] nudge in
+            guard let self else { return }
+            // The Copilot banner covers it when Parrot is in front and Copilot is showing.
+            if !(NSApp.isActive && self.callAnalysisEngine.isActive) { NudgePillController.shared.show(nudge) }
+        }
+        NudgePillController.shared.onOpen = {
+            NSApp.activate(ignoringOtherApps: true)
+            NSApp.windows.first { $0.canBecomeMain && $0.isVisible }?.makeKeyAndOrderFront(nil)
+        }
+        callAnalysisEngine.onPassCompleted = { [weak self] pass in self?.nudges.add(pass: pass) }
         callAnalysisEngine.start(profile: profile, brief: nextCallBrief, calendarContext: calendarContext,
                                  previousCall: lastCall, previousCallIsPrivate: previousIsPrivate,
                                  forceLocal: meeting.onDeviceOnly)
@@ -463,6 +478,8 @@ final class RecordingManager {
             Task { @MainActor in
                 guard let self, let start = self.recordingStartTime else { return }
                 self.elapsedTime = Date.now.timeIntervalSince(start)
+                let clock = self.transcriptionEngine.speechClock()
+                self.nudges.tick(now: clock.now, lastHeard: clock.lastHeard, paused: self.callAnalysisEngine.isPaused)
                 if let voice = self.lastVoiceAt,
                    Self.idleReminderDue(now: .now, lastVoice: voice,
                                         lastReminder: self.lastIdleReminderAt, after: Self.idleReminderAfter) {
@@ -482,6 +499,7 @@ final class RecordingManager {
 
         timer?.invalidate()
         timer = nil
+        NudgePillController.shared.hide()
         markHotKey.unregister()
         // A "Still recording?" left in Notification Center is stale once stopped.
         UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [Self.idleReminderID])
@@ -506,6 +524,9 @@ final class RecordingManager {
         if let meeting = currentMeeting {
             meeting.duration = elapsedTime
             meeting.status = .processing
+            let tone = nudges.stop()
+            meeting.nudges = tone.nudges
+            meeting.moodTimeline = tone.timeline
 
             // Persist the copilot's insights so they survive into the meeting report.
             // Same SwiftData rule as addSegment: insert before setting the relationship.

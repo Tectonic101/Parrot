@@ -221,6 +221,10 @@ final class ClaudeAnalysisProvider: AnalysisProvider {
         - "score": integer 0–100 — overall, how well is this call going for the user right \
         now (0 = disaster, 50 = neutral, 100 = excellent).
         - "read": one word for the room.
+        - "wrapping_up": true only when the conversation is clearly heading to its end \
+        (thanks and goodbyes, "let's wrap up", booking the next talk). Otherwise false.
+        - "next_step_agreed": true once both sides have agreed a concrete next step \
+        (a follow-up meeting, a date, who sends what). Otherwise false.
         """
         if !gauges.isEmpty {
             let list = gauges.map { "- \($0.key): 0 = \($0.lowLabel), 100 = \($0.highLabel) (\($0.label))" }.joined(separator: "\n")
@@ -258,6 +262,8 @@ final class ClaudeAnalysisProvider: AnalysisProvider {
             "coach": ["type": "string", "description": "One short live-coaching sentence: how it's going + what to do next."],
             "score": ["type": "integer", "description": "0-100 how well the call is going for the user right now."],
             "read": ["type": "string"],
+            "wrapping_up": ["type": "boolean", "description": "The conversation is clearly heading to its end."],
+            "next_step_agreed": ["type": "boolean", "description": "Both sides agreed a concrete next step."],
         ]
         // Claude structured outputs reject numeric constraints (minimum/maximum) on
         // integer types — sending them 400s the whole request. The 0–100 range is
@@ -265,7 +271,7 @@ final class ClaudeAnalysisProvider: AnalysisProvider {
         for g in gauges { sentProps[g.key] = ["type": "integer"] }
         properties["sentiment"] = [
             "type": "object", "properties": sentProps,
-            "required": ["coach", "score", "read"], "additionalProperties": false,
+            "required": ["coach", "score", "read", "wrapping_up", "next_step_agreed"], "additionalProperties": false,
         ]
         // Titles from the shown list that the conversation has since addressed —
         // lets the engine auto-mark stale pinned alerts as handled.

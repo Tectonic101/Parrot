@@ -115,6 +115,8 @@ enum ProfileTest {
         testTalkSeconds()
         testNudgeCopilotRules()
         testNudgeLimiter()
+        testCopilotFlags()
+        testNudgeSession()
         print(failures == 0 ? "ALL PASS" : "FAILURES: \(failures)")
         exit(failures == 0 ? 0 : 1)
     }
