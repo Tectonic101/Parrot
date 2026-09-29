@@ -17,6 +17,7 @@ struct OnboardingView: View {
                 case .speechModel: SpeechModelStep()
                 case .copilotSetup: CopilotSetupStep()
                 case .automatic: AutomaticStep()
+                case .aiApps: AIAppsStep()
                 case .ready: ReadyStep()
                 }
             }

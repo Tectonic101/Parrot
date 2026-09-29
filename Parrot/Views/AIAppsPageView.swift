@@ -132,6 +132,14 @@ enum AIApps {
         NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)
     }
 
+    /// Makes the install file and hands it to Claude Desktop, which shows its
+    /// Install screen. The Claude & AI Apps page and onboarding both use it.
+    static func connectClaude(at app: URL) throws {
+        let file = try MCPBundle.build(appPath: Bundle.main.bundlePath, version: AppUpdater.currentVersion,
+                                       icon: MCPBundle.bundledIcon)
+        NSWorkspace.shared.open([file], withApplicationAt: app, configuration: NSWorkspace.OpenConfiguration())
+    }
+
     /// Brings Claude Desktop forward, if it's installed.
     static func openClaude() {
         guard let url = appURL(MCPBundle.claudeBundleID) else { return }
@@ -322,10 +330,8 @@ struct AIAppsPageView: View {
 
     private func connectClaude(at app: URL) {
         do {
-            let file = try MCPBundle.build(appPath: Bundle.main.bundlePath, version: AppUpdater.currentVersion,
-                                           icon: MCPBundle.bundledIcon)
+            try AIApps.connectClaude(at: app)
             connectProblem = nil
-            NSWorkspace.shared.open([file], withApplicationAt: app, configuration: NSWorkspace.OpenConfiguration())
         } catch {
             connectProblem = "Couldn't make the install file. Use Another app → Copy Setup instead."
         }

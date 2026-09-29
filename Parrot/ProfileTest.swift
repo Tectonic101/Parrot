@@ -3436,13 +3436,16 @@ enum ProfileTest {
     static func testOnboardingFlow() {
         let full = OnboardingFlow.steps(mode: .full, path: nil)
         check("onboarding: full tour, no path yet",
-              full == [.welcome, .permissions, .meetCopilot, .copilotPath, .speechModel, .automatic, .ready])
+              full == [.welcome, .permissions, .meetCopilot, .copilotPath, .speechModel, .automatic, .aiApps, .ready])
         let privatePath = OnboardingFlow.steps(mode: .full, path: .private)
-        check("onboarding: private adds setup after speech",
+        check("onboarding: private adds setup after speech, and never pitches AI apps",
               privatePath == [.welcome, .permissions, .meetCopilot, .copilotPath, .speechModel, .copilotSetup, .automatic, .ready])
-        check("onboarding: balanced matches private", OnboardingFlow.steps(mode: .full, path: .balanced) == privatePath)
+        check("onboarding: balanced shows AI apps before ready",
+              OnboardingFlow.steps(mode: .full, path: .balanced) == [.welcome, .permissions, .meetCopilot, .copilotPath, .speechModel, .copilotSetup, .automatic, .aiApps, .ready])
         check("onboarding: cloud skips the speech step",
-              OnboardingFlow.steps(mode: .full, path: .cloud) == [.welcome, .permissions, .meetCopilot, .copilotPath, .copilotSetup, .automatic, .ready])
+              OnboardingFlow.steps(mode: .full, path: .cloud) == [.welcome, .permissions, .meetCopilot, .copilotPath, .copilotSetup, .automatic, .aiApps, .ready])
+        check("onboarding: switching to private drops a saved AI apps step",
+              OnboardingFlow.resolve(.aiApps, in: privatePath) == .copilotPath)
         check("onboarding: later has no setup step", OnboardingFlow.steps(mode: .full, path: .later) == full)
         check("onboarding: short tour",
               OnboardingFlow.steps(mode: .copilot, path: .balanced) == [.meetCopilot, .copilotPath, .copilotSetup, .ready])

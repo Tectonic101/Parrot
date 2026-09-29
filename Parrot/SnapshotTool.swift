@@ -368,6 +368,7 @@ enum HelpShots {
         onboarding("onboarding-setup-balanced.png", .copilotSetup, path: .balanced)
         onboarding("onboarding-setup-cloud.png", .copilotSetup, path: .cloud)
         onboarding("onboarding-automatic.png", .automatic)
+        onboarding("onboarding-ai-apps.png", .aiApps, path: .balanced)
         onboarding("onboarding-ready.png", .ready, path: .balanced)
 
         // Reuses the dashboard shot just written as the attached screenshot, so
