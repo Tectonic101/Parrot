@@ -16,7 +16,7 @@ tree. Line counts are rough — they flag which files are worth reading whole.
 
 | File | L | Purpose |
 |---|---|---|
-| `Models/Meeting.swift` | 350 | `Meeting` record + `MeetingStatus` lifecycle + per-speaker names/embeddings; report template snapshot |
+| `Models/Meeting.swift` | 375 | `Meeting` record + `MeetingStatus` lifecycle + per-speaker names/embeddings; report template snapshot; the report a rewrite replaced (undo) |
 | `Models/TranscriptSegment.swift` | 34 | One diarized, timestamped utterance |
 | `Models/Insight.swift` | 65 | `CallInsight` (stored) and `Insight` (live value) |
 | `Models/CallProfile.swift` | 180 | Per-call-type prompt config: kinds, sentiment gauges; report choice (classic / preset / custom), sharing ids, last 5 saved versions |
@@ -64,6 +64,7 @@ tree. Line counts are rough — they flag which files are worth reading whole.
 | `Services/FollowUpEmail.swift` | 90 | Follow-up email prompt, subject/body split, open in Mail |
 | `Services/Integrations.swift` | 230 | Apple Reminders, export folder (security-scoped bookmark), webhook (payload, HMAC, send) |
 | `Services/RecordingManager+Integrations.swift` | 90 | After-call actions, follow-up drafting, next steps → Reminders |
+| `Services/RecordingManager+Rewrite.swift` | 90 | Rewrite a meeting's report with another profile (all or nothing, privacy only tightens) and its one-step undo |
 | `Services/MCPServer.swift` | 330 | `--mcp`: read-only stdio MCP server (async loop; list/get/search meetings with meaning search and date/person filters, transcript pages, commitments, prompts, read-only annotations, export to Downloads/Parrot Exports, talk-time stats, read profiles; share settings via MCPAccess), opt-in, private meetings hidden |
 | `Services/MCPCommitments.swift` | 55 | Pure: commitment bullets from a report, owner = speaker of the cited receipt line |
 | `Services/MCPPrompts.swift` | 115 | Pure: the four ready-made MCP prompts (weekly digest, follow-up email, call prep, PRD from calls) |

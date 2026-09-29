@@ -811,11 +811,7 @@ final class RecordingManager {
         guard includeCoaching, template.coachingEnabled else { return }
 
         // Coaching + follow-ups report, with the user's real talk balance.
-        let meWords = segments
-            .filter { $0.speakerLabel == "Me" }
-            .reduce(0) { $0 + $1.text.split(separator: " ").count }
-        let totalWords = segments.reduce(0) { $0 + $1.text.split(separator: " ").count }
-        let talkPercentMe = totalWords > 0 ? Int(Double(meWords) / Double(totalWords) * 100) : 0
+        let talkPercentMe = meeting.talkPercentMe ?? 0
         do {
             let coaching = try await callAnalysisEngine.provider.coachingReport(
                 transcript: transcript,

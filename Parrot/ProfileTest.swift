@@ -104,6 +104,7 @@ enum ProfileTest {
         testReportTemplates()
         testProfiles2Migration()
         testScorecards()
+        testRewriteReport()
         print(failures == 0 ? "ALL PASS" : "FAILURES: \(failures)")
         exit(failures == 0 ? 0 : 1)
     }
@@ -4219,5 +4220,110 @@ enum ProfileTest {
               interview?.section(titled: "Scorecard")?.criteria?.count == 4
               && interview.map { ClaudeAnalysisProvider.summarySystemPrompt(counterpart: "the candidate", template: $0) }?
                 .contains("Never judge age") == true)
+    }
+
+    /// Writes canned reports and remembers what it was asked, and whether
+    /// each call had to stay on this Mac.
+    private final class ReportRecorder: AnalysisProvider, @unchecked Sendable {
+        var summaries: [(template: ReportTemplate, local: Bool)] = []
+        var coachings = 0
+        var fail = false
+        var isConfigured: Bool { true }
+        func analyze(_ request: AnalysisRequest) async throws -> AnalysisResult { throw AnalysisError.missingAPIKey }
+        func summarize(transcript: String, insightTitles: [String], bookmarks: [String],
+                       instructions: String, counterpart: String, template: ReportTemplate) async throws -> String {
+            if fail { throw AnalysisError.badResponse("offline") }
+            summaries.append((template, CloudGate.forcesLocal))
+            return "Rewritten for \(counterpart).\n\nNext steps:\n- You send the Northwind deck [00:05]"
+        }
+        func coachingReport(transcript: String, talkPercentMe: Int, instructions: String,
+                            counterpart: String, template: ReportTemplate) async throws -> String {
+            coachings += 1
+            return "Call snapshot: fine.\n\nWhat went well:\n- Clear ask [00:05]"
+        }
+        func complete(system: String, user: String, maxTokens: Int) async throws -> String { "" }
+    }
+
+    @MainActor
+    static func testRewriteReport() {
+        guard !CloudGate.forcesLocal else { print("  (skipped rewrite: on-device only is on)"); return }
+        let schema = Schema([Meeting.self, TranscriptSegment.self, CallInsight.self, CallProfile.self, SpeakerProfile.self])
+        guard let container = try? ModelContainer(
+            for: schema, configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
+        ) else { check("rewrite: container", false); return }
+        let context = container.mainContext
+        let ai = ReportRecorder()
+        let rm = RecordingManager(memory: MeetingMemory(directory: nil), chats: AskChatStore(directory: nil), provider: ai)
+        rm.attachForHarness(modelContext: context)
+        let presets = ProfilePresets.all()
+        presets.forEach(context.insert)
+        func named(_ n: String) -> CallProfile { presets.first { $0.name == n }! }
+        let therapy = CallProfile(name: "Therapy", iconSystemName: "heart", summary: "", isBuiltIn: false, sortOrder: 30,
+                                  persona: "", tone: "", allowGeneralKnowledge: true, kinds: [], gauges: [])
+        therapy.onDeviceOnly = true
+        context.insert(therapy)
+        func meeting(_ title: String, profile: CallProfile, private isPrivate: Bool = false) -> Meeting {
+            let m = Meeting(title: title)
+            m.status = .done
+            m.profile = profile
+            m.onDeviceOnly = isPrivate
+            m.summary = "Old summary.\n\nNext steps:\n- Old promise [00:05]"
+            m.coaching = "Call snapshot: old."
+            context.insert(m)
+            for (t, who, text) in [(5.0, "Me", "I'll send the Northwind deck."), (9.0, "Them", "Great, thanks.")] {
+                let seg = TranscriptSegment(startTime: t, endTime: t + 3, text: text, speakerLabel: who, confidence: nil)
+                context.insert(seg)
+                seg.meeting = m
+            }
+            return m
+        }
+        let normal = meeting("Acme renewal", profile: named("Default"))
+        let secret = meeting("Acme board", profile: named("Default"), private: true)
+        let imported = meeting("Northwind import", profile: named("Default"))
+        imported.importedAt = .now
+        try? context.save()
+
+        let sem = DispatchSemaphore(value: 0)
+        Task { @MainActor in
+            let interview = named("Interview")
+            try? await rm.rewriteReport(normal, with: interview)
+            check("rewrite: new report with the new profile's template",
+                  normal.summary?.hasPrefix("Rewritten for the candidate") == true && ai.summaries.last?.template == interview.reportTemplate)
+            check("rewrite: coaching rewritten too", normal.coaching?.hasPrefix("Call snapshot: fine") == true && ai.coachings == 1)
+            check("rewrite: the meeting moves to that profile, with its template snapshot",
+                  normal.profile?.id == interview.id && normal.reportTemplate == interview.reportTemplate)
+            check("rewrite: a normal meeting uses the chosen reports AI", ai.summaries.last?.local == false)
+            check("rewrite: the old report is kept", normal.previousReport?.summary?.hasPrefix("Old summary") == true
+                  && normal.previousReport?.profileID == named("Default").id)
+            await rm.undoRewrite(normal)
+            check("undo: the old report, template and profile come back",
+                  normal.summary?.hasPrefix("Old summary") == true && normal.coaching == "Call snapshot: old."
+                  && normal.reportTemplateData == nil && normal.profile?.id == named("Default").id)
+            check("undo: one level, then nothing to undo", normal.previousReport == nil)
+
+            try? await rm.rewriteReport(normal, with: therapy)
+            check("rewrite: a private profile writes on this Mac", ai.summaries.last?.local == true)
+            check("rewrite: and makes the meeting private from now on", normal.onDeviceOnly)
+            await rm.undoRewrite(normal)
+            check("undo: never makes a meeting less private", normal.onDeviceOnly && normal.summary?.hasPrefix("Old summary") == true)
+
+            try? await rm.rewriteReport(secret, with: named("Sales discovery"))
+            check("rewrite: a private meeting stays on this Mac with any profile", ai.summaries.last?.local == true && secret.onDeviceOnly)
+
+            let coachingsBefore = ai.coachings
+            try? await rm.rewriteReport(imported, with: named("Sales discovery"))
+            check("rewrite: imports get no coaching (no 'Me' channel)", imported.coaching == nil && ai.coachings == coachingsBefore)
+            try? await rm.rewriteReport(secret, with: named("1:1 coaching"))
+            check("rewrite: coaching off in the template means no coaching call", secret.coaching == nil && ai.coachings == coachingsBefore)
+
+            ai.fail = true
+            let untouched = meeting("Acme follow-up", profile: named("Default"))
+            var threw = false
+            do { try await rm.rewriteReport(untouched, with: therapy) } catch { threw = true }
+            check("rewrite: a failed AI call changes nothing", threw && untouched.summary?.hasPrefix("Old summary") == true
+                  && untouched.profile?.id == named("Default").id && !untouched.onDeviceOnly && untouched.previousReport == nil)
+            sem.signal()
+        }
+        while sem.wait(timeout: .now()) == .timedOut { RunLoop.main.run(until: .now + 0.01) }
     }
 }

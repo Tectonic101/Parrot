@@ -8,6 +8,14 @@ enum MeetingStatus: String, Codable {
     case failed
 }
 
+/// What a "Rewrite Report" replaced: enough to put it back exactly.
+struct PreviousReport: Codable, Equatable {
+    var summary: String?
+    var coaching: String?
+    var templateData: Data?
+    var profileID: UUID?
+}
+
 @Model
 final class Meeting {
     var id: UUID
@@ -45,6 +53,9 @@ final class Meeting {
     /// ReportTemplate), so it renders the same after the profile changes.
     /// nil = the standard report (every meeting before Profiles 2.0).
     var reportTemplateData: Data? = nil
+    /// The report a "Rewrite Report" replaced (JSON PreviousReport), for its
+    /// one level of undo. Defaulted → old rows migrate.
+    var previousReportData: Data? = nil
     /// Per-call AI usage/cost snapshot (AIUsage JSON); nil for meetings recorded
     /// before cost tracking existed — those show no cost row.
     var aiUsageData: Data?
@@ -189,6 +200,18 @@ final class Meeting {
     /// nil = the standard report.
     var reportTemplate: ReportTemplate? {
         reportTemplateData.flatMap { try? JSONDecoder().decode(ReportTemplate.self, from: $0) }
+    }
+
+    var previousReport: PreviousReport? {
+        get { previousReportData.flatMap { try? JSONDecoder().decode(PreviousReport.self, from: $0) } }
+        set { previousReportData = newValue.flatMap { try? JSONEncoder().encode($0) } }
+    }
+
+    /// Me's share of the words spoken, nil when nobody spoke.
+    var talkPercentMe: Int? {
+        let me = segments.filter { $0.speakerLabel == "Me" }.reduce(0) { $0 + $1.text.split(separator: " ").count }
+        let total = segments.reduce(0) { $0 + $1.text.split(separator: " ").count }
+        return total > 0 ? Int(Double(me) / Double(total) * 100) : nil
     }
 
     var aiUsage: AIUsage? {
