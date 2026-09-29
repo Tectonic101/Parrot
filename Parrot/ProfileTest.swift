@@ -2811,7 +2811,7 @@ enum ProfileTest {
         check("mcp: ping", call("ping")?["result"] != nil)
         let tools = (call("tools/list")?["result"] as? [String: Any])?["tools"] as? [[String: Any]]
         check("mcp: read-only tools listed", tools?.compactMap { $0["name"] as? String }
-              == ["list_meetings", "get_meeting", "search_meetings", "get_transcript", "list_commitments", "export_meeting", "meeting_stats", "list_profiles", "get_profile"])
+              == ["list_meetings", "get_meeting", "search_meetings", "get_transcript", "list_commitments", "export_meeting", "meeting_stats", "list_profiles", "get_profile", "suggest_profile"])
         func text(_ reply: [String: Any]?) -> String {
             (((reply?["result"] as? [String: Any])?["content"] as? [[String: Any]])?.first?["text"] as? String) ?? ""
         }
@@ -2900,8 +2900,8 @@ enum ProfileTest {
               == "No commitments found.")
         check("mcp: advertises prompts", (initResult?["capabilities"] as? [String: Any])?["prompts"] != nil)
         let prompts = (call("prompts/list")?["result"] as? [String: Any])?["prompts"] as? [[String: Any]]
-        check("mcp: four ready-made prompts", prompts?.compactMap { $0["name"] as? String }
-              == ["weekly_digest", "follow_up_email", "prep_for_call", "prd_from_calls"])
+        check("mcp: seven ready-made prompts", prompts?.compactMap { $0["name"] as? String }
+              == ["weekly_digest", "follow_up_email", "prep_for_call", "prd_from_calls", "create_profile", "optimize_profile", "design_report"])
         func promptText(_ name: String, _ args: [String: Any] = [:]) -> String {
             let messages = (call("prompts/get", ["name": name, "arguments": args])?["result"] as? [String: Any])?["messages"] as? [[String: Any]]
             return ((messages?.first?["content"] as? [String: Any])?["text"] as? String) ?? ""
@@ -2914,11 +2914,41 @@ enum ProfileTest {
         check("mcp: a missing required argument is an error",
               (call("prompts/get", ["name": "follow_up_email"])?["error"] as? [String: Any])?["code"] as? Int == -32602)
         check("mcp: unknown prompt is an error", call("prompts/get", ["name": "nope"])?["error"] != nil)
-        check("mcp: every tool is read-only with a title", tools?.allSatisfy { t in
+        check("mcp: every tool but suggest_profile is read-only, all with a title", tools?.allSatisfy { t in
             let hints = t["annotations"] as? [String: Any]
-            return hints?["readOnlyHint"] as? Bool == true && hints?["destructiveHint"] as? Bool == false
+            let reads = t["name"] as? String != "suggest_profile"
+            return hints?["readOnlyHint"] as? Bool == reads && hints?["destructiveHint"] as? Bool == false
                 && hints?["openWorldHint"] as? Bool == false && !((t["title"] as? String) ?? "").isEmpty
         } == true)
+
+        // suggest_profile: files for review, never a change.
+        let inbox = FileManager.default.temporaryDirectory.appendingPathComponent("parrot-mcp-inbox-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: inbox) }
+        source.inbox = inbox
+        source.client = "claude-ai"
+        let pitch = ProfilePresets.all().first { $0.name == "Investor pitch" }!
+        pitch.name = "Acme board pitch"
+        let json = String(decoding: ProfileFile.encode(pitch), as: UTF8.self)
+        let sentNew = tool("suggest_profile", ["profile_json": json, "reason": "Your board calls need their own report."])
+        let landed = ProfileInbox.pending(in: inbox).first.flatMap { try? ProfileFile.decode(Data(contentsOf: $0)) }
+        check("suggest: a new profile lands in the inbox", sentNew.hasPrefix("Sent to Parrot: a new profile") && landed?.profile.name == "Acme board pitch")
+        check("suggest: says who sent it and why", landed?.suggestion?.from == "claude-ai" && landed?.meta?.source == "claude"
+              && landed?.suggestion?.reason == "Your board calls need their own report.")
+        let sentUpdate = tool("suggest_profile", ["profile_json": json, "reason": "Tighter cards.", "updates": "sales discovery"])
+        let update = ProfileInbox.pending(in: inbox).last.flatMap { try? ProfileFile.decode(Data(contentsOf: $0)) }
+        check("suggest: updates aims at that profile", sentUpdate.contains("changes to \"Sales discovery\"")
+              && update?.suggestion?.targetSharedID == ProfilePresets.all().first { $0.name == "Sales discovery" }?.id)
+        check("suggest: a broken file is refused with the reason, nothing written",
+              tool("suggest_profile", ["profile_json": "{\"format\":\"x\"}", "reason": "r"]).hasPrefix("Not sent:")
+              && ProfileInbox.pending(in: inbox).count == 2)
+        check("suggest: no reason, not sent", tool("suggest_profile", ["profile_json": json, "reason": " "]).hasPrefix("Not sent"))
+        check("suggest: an unknown profile to update, not sent",
+              tool("suggest_profile", ["profile_json": json, "reason": "r", "updates": "Nope"]).hasPrefix("Not sent"))
+        source.suggestionsAllowed = { false }
+        check("suggest: switched off in Parrot, nothing sent",
+              tool("suggest_profile", ["profile_json": json, "reason": "r"]).contains("switched off") && ProfileInbox.pending(in: inbox).count == 2)
+        source.suggestionsAllowed = { true }
+        check("mcp: list_profiles shows each report", tool("list_profiles", [:]).contains("Report: Overview, Pain points, Budget"))
         let stats = tool("meeting_stats", ["id": beta.uuidString])
         check("mcp: talk time per speaker, overlaps counted once", stats.contains("- Me: 0:06 (55%), 1 question\n- Priya: 0:05 (45%), 0 questions"))
         check("mcp: longest stretch", stats.contains("Longest stretch by one speaker: Me, 0:06 from 01:00."))

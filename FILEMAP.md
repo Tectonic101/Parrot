@@ -65,9 +65,9 @@ tree. Line counts are rough — they flag which files are worth reading whole.
 | `Services/Integrations.swift` | 230 | Apple Reminders, export folder (security-scoped bookmark), webhook (payload, HMAC, send) |
 | `Services/RecordingManager+Integrations.swift` | 90 | After-call actions, follow-up drafting, next steps → Reminders |
 | `Services/RecordingManager+Rewrite.swift` | 90 | Rewrite a meeting's report with another profile (all or nothing, privacy only tightens) and its one-step undo |
-| `Services/MCPServer.swift` | 330 | `--mcp`: read-only stdio MCP server (async loop; list/get/search meetings with meaning search and date/person filters, transcript pages, commitments, prompts, read-only annotations, export to Downloads/Parrot Exports, talk-time stats, read profiles; share settings via MCPAccess), opt-in, private meetings hidden |
+| `Services/MCPServer.swift` | 330 | `--mcp`: read-only stdio MCP server (async loop; list/get/search meetings with meaning search and date/person filters, transcript pages, commitments, prompts, read-only annotations, export to Downloads/Parrot Exports, talk-time stats, read profiles, suggest_profile leaves a suggestion in the ProfileInbox; share settings via MCPAccess), opt-in, private meetings hidden |
 | `Services/MCPCommitments.swift` | 55 | Pure: commitment bullets from a report, owner = speaker of the cited receipt line |
-| `Services/MCPPrompts.swift` | 115 | Pure: the four ready-made MCP prompts (weekly digest, follow-up email, call prep, PRD from calls) |
+| `Services/MCPPrompts.swift` | 170 | Pure: the seven ready-made MCP prompts (weekly digest, follow-up email, call prep, PRD from calls, create / improve a profile, design a report) |
 | `Services/ProfileFile.swift` | 230 | Pure: portable `.parrotprofile` JSON (encode a CallProfile incl. its report, decode with limits, unknown fields kept) |
 | `Services/ProfileReview.swift` | 130 | Pure: what a `.parrotprofile` would change (review screen groups) + `ProfileInbox`, where AI apps' suggestions wait (max 10) |
 | `Services/ReportTemplate.swift` | 200 | Pure: a profile's report sections + coaching lens; `.standard` = the classic report; builds a custom template's prompt (scorecards + fairness rule); `Scorecard` reads scores back (receipt or no score) |
@@ -138,7 +138,7 @@ tree. Line counts are rough — they flag which files are worth reading whole.
 | `Package.swift` | SwiftPM deps (WhisperKit, vendored CSpeexDSP) |
 | `scripts/release.sh` | Release packaging; mirrors the Makefile's bundle step; builds `Parrot.mcpb` and `server.json` |
 | `scripts/assemble-help.sh` | Builds the Apple Help Book into the .app from `docs/help/` (both builders call it) |
-| `integrations/claude-plugin/` | Claude plugin for the connector directory: `.mcp.json` + `server/launch.sh` (same launcher as the release `.mcpb`, harness-checked), four skills mirroring the MCP prompts, README, PRIVACY |
+| `integrations/claude-plugin/` | Claude plugin for the connector directory: `.mcp.json` + `server/launch.sh` (same launcher as the release `.mcpb`, harness-checked), seven skills mirroring the MCP prompts, README, PRIVACY |
 | `server.json` | MCP Registry entry, written by `scripts/release.sh` per release (version, `.mcpb` URL, sha256) |
 | `docs/help/` | User guide: one HTML set serving GitHub Pages AND the in-app Help menu |
 | `Vendor/CSpeexDSP/` | Vendored C echo canceller — do not modify |

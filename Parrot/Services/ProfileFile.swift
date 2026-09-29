@@ -82,6 +82,8 @@ struct ProfileFile: Codable {
     struct Suggestion: Codable, Equatable {
         var targetSharedID: UUID?
         var reason: String?
+        /// The AI app that sent it ("claude-ai", "cursor"…), for "Suggested by Claude".
+        var from: String?
     }
 
     struct Refused: Error, Equatable {

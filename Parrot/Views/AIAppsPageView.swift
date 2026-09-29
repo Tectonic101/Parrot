@@ -172,7 +172,7 @@ struct AIAppsPageView: View {
                 Text("Claude & AI Apps")
                     .font(Theme.Typography.title())
                     .foregroundStyle(Theme.Colors.ink)
-                Text("Use your meetings in Claude, Codex or Cursor: search them, catch up, draft follow-ups. Read-only, and your own plan does the thinking.")
+                Text("Use your meetings in Claude, Codex or Cursor: search them, catch up, draft follow-ups, improve your profiles. Nothing changes without your OK, and your own plan does the thinking.")
                     .font(Theme.Typography.lede)
                     .foregroundStyle(Theme.Colors.ink2)
                     .fixedSize(horizontal: false, vertical: true)
@@ -208,7 +208,7 @@ struct AIAppsPageView: View {
                     .fixedSize()
                 }
                 SettingsRow {
-                    Text("Never shown: meetings marked on-device only, audio, API keys and settings. AI apps can't change, delete or record anything.")
+                    Text("Never shown: meetings marked on-device only, audio, API keys and settings. AI apps can't change, delete or record meetings. Profile suggestions wait for your review.")
                         .font(Theme.Typography.secondary)
                         .foregroundStyle(Theme.Colors.ink2)
                         .fixedSize(horizontal: false, vertical: true)
