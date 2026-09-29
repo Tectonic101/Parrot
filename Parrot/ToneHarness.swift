@@ -2,26 +2,47 @@ import AppKit
 import SwiftData
 import SwiftUI
 
-/// `Parrot --nudge-replay [meeting-id-prefix]`: replays saved calls (default:
+/// `Parrot --nudge-replay [meeting-id-prefix] [--store path]`: replays saved calls (default:
 /// the newest) through the live nudge rules second by second and prints every
 /// nudge with its time and whether it would have shown. For tuning
-/// `NudgeDetector.Tuning` on real calls. Read-only on the store. Unanswered
+/// `NudgeDetector.Tuning` on real calls. Works on a copy of the store: the
+/// real one may be on an older schema, and migrating it here would change
+/// the file the installed app opens. Unanswered
 /// question and wrap-up can't replay (open cards and the wrap-up flag aren't
 /// saved); mood shift replays from the saved mood line.
 @MainActor
 enum NudgeReplay {
     static func run(args: [String]) {
         let schema = Schema([Meeting.self, TranscriptSegment.self, CallInsight.self, CallProfile.self, SpeakerProfile.self])
-        guard let container = try? ModelContainer(for: schema, configurations: [ModelConfiguration(schema: schema, allowsSave: false)]) else {
-            print("nudge-replay: can't open the store")
+        let fm = FileManager.default
+        // The app is sandboxed: its store lives in its container, which macOS
+        // may ask permission to read. `--store` points anywhere else.
+        var rest = args
+        var source = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Containers/com.uygar.parrot/Data/Library/Application Support/default.store")
+        if let i = rest.firstIndex(of: "--store"), i + 1 < rest.count {
+            source = URL(fileURLWithPath: rest[i + 1])
+            rest.removeSubrange(i...(i + 1))
+        }
+        let scratch = fm.temporaryDirectory.appendingPathComponent("parrot-nudge-replay", isDirectory: true)
+        try? fm.removeItem(at: scratch)
+        try? fm.createDirectory(at: scratch, withIntermediateDirectories: true)
+        let copy = scratch.appendingPathComponent(source.lastPathComponent)
+        for suffix in ["", "-wal", "-shm"] {
+            let from = URL(fileURLWithPath: source.path + suffix)
+            if fm.fileExists(atPath: from.path) { try? fm.copyItem(at: from, to: URL(fileURLWithPath: copy.path + suffix)) }
+        }
+        guard let container = try? ModelContainer(for: schema, configurations: [ModelConfiguration(schema: schema, url: copy)]) else {
+            print("nudge-replay: can't open a copy of the store")
             exit(1)
         }
         let all = (try? ModelContext(container).fetch(FetchDescriptor<Meeting>(sortBy: [SortDescriptor(\.date, order: .reverse)]))) ?? []
-        let picked = args.first.map { prefix in
+        let picked = rest.first.map { prefix in
             all.filter { $0.id.uuidString.lowercased().hasPrefix(prefix.lowercased()) }
         } ?? Array(all.prefix(1))
         guard !picked.isEmpty else {
-            print("nudge-replay: no matching meeting")
+            try? fm.removeItem(at: scratch)
+            print("nudge-replay: no matching meeting in \(source.path)")
             exit(1)
         }
         for meeting in picked {
@@ -35,6 +56,7 @@ enum NudgeReplay {
                 print("  [\(Receipts.stamp(n.time))] \(n.shown ? "shown" : "held ") \(n.kind.rawValue): \(n.text)")
             }
         }
+        try? fm.removeItem(at: scratch)
         exit(0)
     }
 
