@@ -411,6 +411,47 @@ enum HelpShots {
              ProfileMigrationView().environment(rm.profileStore).modelContainer(container))
         rm.profileStore.defaults.removeObject(forKey: ProfileStore.screenShownKey)
 
+        // Profiles 2.0, part two: scorecards, rewrite, share, review.
+        let interview = profiles.first { $0.name == "Interview" }
+        shot("profiles-scorecard.png", size: .init(width: 860, height: 2300), editor(interview?.id))
+        let scoreReport = """
+        Overview:
+        A first interview for the data role at Acme. The candidate walked through a pipeline rebuild.
+
+        Scorecard:
+        - Relevant experience: 4/5 - Rebuilt a nightly import, 3 hours down to 20 minutes [01:02]
+        - Problem solving: 3/5 - Moved to small batches and added retries [01:06]
+        - Communication: 4/5 [01:11]
+        - Teamwork: not enough evidence
+
+        Next steps:
+        - You send the take-home task by Friday [01:16]
+        """
+        shot("report-scorecard.png", size: .init(width: 640, height: 560),
+             ReportContentView(summary: scoreReport, coaching: nil, talkPercentMe: nil,
+                               receipts: meeting.receiptIndex, template: interview?.reportTemplate)
+                .padding(Theme.Metrics.pad).background(Theme.Colors.canvas))
+        meeting.status = .done
+        shot("rewrite-report.png", size: .init(width: 460, height: 330),
+             RewriteReportSheet(meeting: meeting).environment(rm).modelContainer(container))
+        if let salesProfile {
+            shot("profile-export.png", size: .init(width: 480, height: 420),
+                 ProfileExportSheet(profile: salesProfile))
+            var suggested = (try? ProfileFile.decode(ProfileFile.encode(salesProfile)))!
+            suggested.profile.persona = salesProfile.persona.replacingOccurrences(of: "authority", with: "who signs")
+            suggested.profile.kinds.removeAll { $0.key == "opportunity" }
+            suggested.profile.kinds.append(.init(key: "decision_maker", label: "Decision-maker", color: "3F9168",
+                                                 icon: "person.fill", trigger: "Who signs the deal came up.", pinned: false, priority: 0))
+            suggested.suggestion = .init(targetSharedID: salesProfile.id,
+                                         reason: "In your last 10 sales calls, Opportunity cards were ignored 8 times, and the report never said who signs.",
+                                         from: "claude-ai")
+            let item = PendingProfile(data: suggested.data(), origin: .suggestion(URL(fileURLWithPath: "/dev/null")))
+            shot("profile-review.png", size: .init(width: 560, height: 680),
+                 ProfileReviewView(item: item) {}.environment(rm.profileStore).environment(rm).modelContainer(container))
+            shot("profile-suggestion-banner.png", size: .init(width: 680, height: 70),
+                 ProfileSuggestionBanner(item: item, profiles: profiles, review: {}, later: {}).padding(8))
+        }
+
         print("help-shots: wrote \(made.count) → \(dir.path)")
         exit(made.count >= 12 ? 0 : 1)
     }

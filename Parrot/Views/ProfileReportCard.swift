@@ -148,7 +148,7 @@ struct ProfileReportCard: View {
                     Picker("", selection: sectionType(i)) {
                         Text("Paragraph").tag("prose")
                         Text("Bullet list").tag("bullets")
-                        if section.type == "scorecard" { Text("Scorecard").tag("scorecard") }
+                        Text("Scorecard").tag("scorecard")
                     }
                     .labelsHidden()
                     .fixedSize()
@@ -156,9 +156,13 @@ struct ProfileReportCard: View {
                 TextField("", text: sectionGuide(i), prompt: Text("What goes here"), axis: .vertical)
                     .textFieldStyle(.roundedBorder)
                     .lineLimit(1...3)
-                Toggle("Promises and next steps go here", isOn: sectionPromises(i))
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
+                if section.type == "scorecard" {
+                    criteriaEditor(i, section)
+                } else {
+                    Toggle("Promises and next steps go here", isOn: sectionPromises(i))
+                        .toggleStyle(.switch)
+                        .controlSize(.small)
+                }
                 if section.commitments == true {
                     Hint("Parrot checks each one against the transcript and uses them for Reminders, open items and \"what did I promise?\".")
                 }
@@ -170,6 +174,39 @@ struct ProfileReportCard: View {
                 .disabled(template.sections.count == 1)
                 .help("Remove this section")
         }
+    }
+
+    /// One row per criterion: its name and what it means. 1 to 8.
+    private func criteriaEditor(_ i: Int, _ section: ReportTemplate.Section) -> some View {
+        let criteria = section.criteria ?? []
+        return VStack(alignment: .leading, spacing: 6) {
+            ForEach(Array(criteria.enumerated()), id: \.element.key) { j, _ in
+                HStack(spacing: 8) {
+                    TextField("", text: criterionText(i, j, \.label), prompt: Text("Criterion"))
+                        .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: 200)
+                    TextField("", text: criterionGuide(i, j), prompt: Text("What it means"))
+                        .textFieldStyle(.roundedBorder)
+                    Button { update { $0.sections[i].criteria?.remove(at: j) } } label: { Image(systemName: "xmark") }
+                        .buttonStyle(.borderless)
+                        .foregroundStyle(Theme.Colors.ink3)
+                        .disabled(criteria.count == 1)
+                        .help("Remove this criterion")
+                }
+            }
+            HStack(spacing: 8) {
+                Button("+ Add criterion") {
+                    update { $0.sections[i].criteria = ($0.sections[i].criteria ?? []) + [Self.newCriterion()] }
+                }
+                .disabled(criteria.count >= ReportTemplate.maxCriteria)
+                Hint("Up to \(ReportTemplate.maxCriteria). Each gets a score from 1 to 5 with the moment that shows it. Never age, looks, accent or other personal traits.")
+            }
+        }
+        .padding(.leading, 12)
+    }
+
+    private static func newCriterion() -> ReportTemplate.Criterion {
+        .init(key: "c" + UUID().uuidString.prefix(6).lowercased(), label: "", guide: "")
     }
 
     private func coachField(_ label: String, text: Binding<String>, prompt: String) -> some View {
@@ -240,9 +277,34 @@ struct ProfileReportCard: View {
                 set: { v in update { if $0.sections.indices.contains(i) { $0.sections[i].guide = v } } })
     }
 
+    /// A scorecard needs at least one criterion; other types carry none.
     private func sectionType(_ i: Int) -> Binding<String> {
         Binding(get: { template.sections.indices.contains(i) ? template.sections[i].type : "bullets" },
-                set: { v in update { if $0.sections.indices.contains(i) { $0.sections[i].type = v } } })
+                set: { v in update {
+                    guard $0.sections.indices.contains(i) else { return }
+                    $0.sections[i].type = v
+                    if v == "scorecard" {
+                        if ($0.sections[i].criteria ?? []).isEmpty { $0.sections[i].criteria = [Self.newCriterion()] }
+                    } else {
+                        $0.sections[i].criteria = nil
+                    }
+                } })
+    }
+
+    private func criterion(_ i: Int, _ j: Int) -> ReportTemplate.Criterion? {
+        template.sections[i].criteria.flatMap { $0.indices.contains(j) ? $0[j] : nil }
+    }
+
+    private func criterionText(_ i: Int, _ j: Int, _ path: WritableKeyPath<ReportTemplate.Criterion, String>) -> Binding<String> {
+        Binding(get: { template.sections.indices.contains(i) ? criterion(i, j)?[keyPath: path] ?? "" : "" },
+                set: { v in update { if $0.sections.indices.contains(i), $0.sections[i].criteria?.indices.contains(j) == true {
+                    $0.sections[i].criteria?[j][keyPath: path] = v } } })
+    }
+
+    private func criterionGuide(_ i: Int, _ j: Int) -> Binding<String> {
+        Binding(get: { template.sections.indices.contains(i) ? criterion(i, j)?.guide ?? "" : "" },
+                set: { v in update { if $0.sections.indices.contains(i), $0.sections[i].criteria?.indices.contains(j) == true {
+                    $0.sections[i].criteria?[j].guide = v } } })
     }
 
     private func sectionPromises(_ i: Int) -> Binding<Bool> {

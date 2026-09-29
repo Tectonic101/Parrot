@@ -48,6 +48,8 @@ extension RecordingManager {
                 counterpart: profile.counterpart, template: template) : nil
             return (summary, coaching)
         }
+        // Cancelled while the AI was writing (the sheet's Cancel): keep the old one.
+        try Task.checkCancellation()
 
         meeting.previousReport = PreviousReport(summary: meeting.summary, coaching: meeting.coaching,
                                                 templateData: meeting.reportTemplateData, profileID: meeting.profile?.id)

@@ -11,6 +11,18 @@ struct ContentView: View {
     @Environment(ProfileStore.self) private var profileStore
     /// The welcome tour's sheet; the Profiles 2.0 screen waits for it.
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    /// The profile file on the review screen now.
+    @State private var reviewing: PendingProfile?
+    /// Suggestions the user said "Later" to this session (they stay in the inbox).
+    @State private var laterIDs: Set<UUID> = []
+    @Query(sort: \CallProfile.sortOrder) private var profiles: [CallProfile]
+
+    /// The AI suggestion the banner offers, if any.
+    private var suggestion: PendingProfile? {
+        appSession.profileReviews.first { item in
+            if case .suggestion = item.origin { return !laterIDs.contains(item.id) } else { return false }
+        }
+    }
     @Environment(\.modelContext) private var modelContext
     @State private var selectedMeeting: Meeting?
     @State private var page: MainPage = .dashboard
@@ -66,6 +78,12 @@ struct ContentView: View {
         .overlay(alignment: .top) {
             VStack(spacing: 8) {
                 AIAppsConnectedBanner()
+                if let suggestion, reviewing == nil, !recordingManager.isRecording {
+                    ProfileSuggestionBanner(item: suggestion, profiles: profiles,
+                                            review: { reviewing = suggestion },
+                                            later: { laterIDs.insert(suggestion.id) })
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
                 if let progress = recordingManager.importProgress {
                     ImportingBanner(progress: progress)
                         .transition(.move(edge: .top).combined(with: .opacity))
@@ -95,6 +113,20 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showBugReport) {
             BugReportSheet(screenshot: reportScreenshot)
+        }
+        // Files the user opened, dropped or imported go straight to review.
+        .onChange(of: appSession.profileReviews) { _, items in
+            if reviewing == nil, let file = items.first(where: { if case .file = $0.origin { true } else { false } }) {
+                reviewing = file
+            }
+        }
+        .sheet(item: $reviewing) { item in
+            ProfileReviewView(item: item) {
+                appSession.profileReviews.removeAll { $0.id == item.id }
+                reviewing = nil
+            }
+            .environment(profileStore)
+            .environment(recordingManager)
         }
         // Once, after the Profiles 2.0 migration (never on a fresh install).
         .sheet(isPresented: Binding(

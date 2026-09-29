@@ -155,6 +155,7 @@ struct AIAppsPageView: View {
     @AppStorage(MCPAccess.reportsKey) private var reports = true
     @AppStorage(MCPAccess.notesKey) private var notes = true
     @AppStorage(MCPAccess.cardsKey) private var cards = false
+    @AppStorage(MCPServer.suggestionsKey) private var suggestions = true
     @Query(sort: \CallProfile.sortOrder) private var profiles: [CallProfile]
     @State private var excluded: Set<UUID> = []
     /// Bumped to re-read the counters the --mcp process writes (another process: no KVO).
@@ -184,6 +185,10 @@ struct AIAppsPageView: View {
 
             SettingsCard(title: "Connection") {
                 SettingsToggleRow(title: "Allow AI apps to read my meetings", first: true, isOn: $enabled)
+                SettingsToggleRow(title: "Let AI apps suggest profiles",
+                                  detail: "Claude, Cursor or Codex can send a suggested profile. You review every change in Parrot first.",
+                                  isOn: $suggestions)
+                    .disabled(!enabled)
                 SettingsRow {
                     Label(statusLine, systemImage: enabled && AIApps.isConnected() ? "checkmark.circle.fill" : "circle")
                         .font(Theme.Typography.secondary)

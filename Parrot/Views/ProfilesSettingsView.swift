@@ -12,9 +12,11 @@ struct ProfilesSettingsView: View {
 
     @Environment(ProfileStore.self) private var profileStore
     @Environment(RecordingManager.self) private var recordingManager
+    @Environment(AppSession.self) private var appSession
     @Environment(\.modelContext) private var context
     @Query(sort: \CallProfile.sortOrder) private var profiles: [CallProfile]
     @State private var selectedID: UUID?
+    @State private var importing = false
 
     private var selectedProfile: CallProfile? {
         profiles.first { $0.id == selectedID }
@@ -34,6 +36,12 @@ struct ProfilesSettingsView: View {
                 .scrollContentBackground(.hidden)
                 .background(Theme.Colors.panel)
                 .frame(width: 220)
+                // Drop .parrotprofile files here to review and add them.
+                .dropDestination(for: URL.self) { urls, _ in
+                    let files = urls.filter { $0.pathExtension.lowercased() == "parrotprofile" }
+                    ProfileImport.queue(files, in: appSession)
+                    return !files.isEmpty
+                }
 
                 Divider()
 
@@ -65,6 +73,13 @@ struct ProfilesSettingsView: View {
                     .buttonStyle(.plain)
                     .disabled(selectedProfile == nil || selectedProfile?.isBuiltIn == true)
                     .help("Delete selected profile")
+
+                    Button { importing = true } label: {
+                        Image(systemName: "square.and.arrow.down")
+                            .font(Theme.Typography.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Import a profile (.parrotprofile)")
 
                     Spacer()
                 }
@@ -102,6 +117,10 @@ struct ProfilesSettingsView: View {
             if selectedID == nil {
                 selectedID = initialSelection ?? profiles.first?.id
             }
+        }
+        .fileImporter(isPresented: $importing, allowedContentTypes: [.parrotProfile, .json],
+                      allowsMultipleSelection: true) { result in
+            if case .success(let urls) = result { ProfileImport.queue(urls, in: appSession) }
         }
     }
 }
@@ -163,6 +182,8 @@ private struct ProfileRow: View {
 
 private struct ProfileDetailView: View {
     @Bindable var profile: CallProfile
+    @Environment(ProfileStore.self) private var profileStore
+    @State private var restoring: ProfileVersion?
     let knowledgeBase: KnowledgeBaseService
     let context: ModelContext
     @State private var advancedOpen: Bool
@@ -175,8 +196,22 @@ private struct ProfileDetailView: View {
         _advancedOpen = State(initialValue: advancedInitiallyOpen)
     }
 
+    @State private var exporting = false
+
     var body: some View {
         SettingsPage {
+            HStack(spacing: 8) {
+                Text(profile.name)
+                    .font(Theme.Typography.title())
+                    .foregroundStyle(Theme.Colors.ink)
+                    .lineLimit(1)
+                Spacer()
+                ShareLink(item: ProfileExport(name: profile.name, data: ProfileFile.encode(profile)),
+                          preview: SharePreview(profile.name)) { Text("Share…") }
+                Button("Export…") { exporting = true }
+            }
+            .sheet(isPresented: $exporting) { ProfileExportSheet(profile: profile) }
+
             // MARK: Profile section
             SettingsCard(title: "Profile") {
                 SettingsRow(first: true) {
@@ -255,6 +290,33 @@ private struct ProfileDetailView: View {
                         DocTagToggle(doc: doc, profileID: profile.id, knowledgeBase: knowledgeBase)
                     }
                 }
+            }
+
+            // MARK: Saved versions (undo for imports, suggestions, restores)
+            SettingsCard(title: "Saved Versions",
+                         blurb: "The last \(CallProfile.maxVersions) are kept. Restoring saves the current one first, so it can be undone too.") {
+                if profile.versions.isEmpty {
+                    SettingsRow(first: true) {
+                        Hint("None yet. Parrot saves one before an import, a suggestion or a report change.")
+                    }
+                }
+                ForEach(Array(profile.versions.reversed().enumerated()), id: \.offset) { index, version in
+                    SettingsLabeledRow(title: version.label,
+                                       detail: version.date.formatted(date: .abbreviated, time: .shortened),
+                                       first: index == 0) {
+                        Button("Restore…") { restoring = version }
+                            .controlSize(.small)
+                    }
+                }
+            }
+            .confirmationDialog("Restore this version?", isPresented: Binding(
+                get: { restoring != nil }, set: { if !$0 { restoring = nil } })) {
+                Button("Restore") {
+                    if let restoring { profileStore.restore(restoring, of: profile, in: context) }
+                    restoring = nil
+                }
+            } message: {
+                Text("The current settings are saved first, so you can undo this too.")
             }
 
             // MARK: Edit Advanced

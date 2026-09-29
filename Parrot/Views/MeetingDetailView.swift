@@ -59,6 +59,7 @@ struct MeetingDetailView: View {
     /// A transcript line to bring into view once the Transcript tab shows.
     @State private var scrollRequest: UUID?
     @State private var renamingBookmark: Bookmark?
+    @State private var showRewrite = false
     @State private var bookmarkLabelText = ""
 
     var body: some View {
@@ -161,6 +162,12 @@ struct MeetingDetailView: View {
 
                 AskClaudeMenu(meeting: meeting)
 
+                Button { showRewrite = true } label: {
+                    Label("Rewrite Report…", systemImage: "arrow.triangle.2.circlepath")
+                }
+                .help("Write this report again with a profile's report")
+                .disabled(meeting.status != .done || meeting.segments.isEmpty || recordingManager.isRecording)
+
                 Menu {
                     Button("Export as TXT") { MeetingActions.exportTXT(meeting) }
                     Button("Export as Markdown") { MeetingActions.exportMarkdown(meeting) }
@@ -223,6 +230,7 @@ struct MeetingDetailView: View {
         )) {
             Button("OK", role: .cancel) { actionMessage = nil }
         }
+        .sheet(isPresented: $showRewrite) { RewriteReportSheet(meeting: meeting) }
         .confirmationDialog("Delete this meeting?", isPresented: $confirmingDelete) {
             Button("Delete", role: .destructive) { onDelete?() }
         } message: {
@@ -547,6 +555,7 @@ struct MeetingDetailView: View {
                     }
                 } else {
                     VStack(alignment: .leading, spacing: 16) {
+                        if meeting.previousReport != nil { RewrittenBanner(meeting: meeting) }
                         AIAppsReportTip(meeting: meeting)
                         ReportContentView(
                             summary: meeting.summary,
