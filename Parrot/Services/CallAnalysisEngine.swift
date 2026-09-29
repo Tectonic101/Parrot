@@ -513,6 +513,9 @@ final class CallAnalysisEngine {
                 Self.log.notice("card [\(inserted.kindKey, privacy: .public)] \(inserted.title.prefix(80), privacy: .public)")
                 onInsightInserted?(inserted)
             }
+            onPassCompleted?(Self.nudgePass(time: anchorTime, sentiment: merged, insights: insights,
+                                            gauges: profile?.gauges ?? [],
+                                            pinnedKinds: Set(profile?.kinds.filter(\.isPinned).map(\.key) ?? [])))
             status = .listening
         } catch let error as AnalysisError {
             if isActive, !Task.isCancelled {
@@ -595,6 +598,29 @@ final class CallAnalysisEngine {
     nonisolated static let docAnswerThreshold = 0.75
     /// Dev harness observation hook (--copilot-replay): every insertion, wall time.
     var onInsightInserted: ((Insight) -> Void)?
+
+    static let wrappingUpKey = "wrapping_up"
+    static let nextStepKey = "next_step_agreed"
+    /// Insight kinds that mean "they asked and it's still open".
+    static let questionKinds: Set<String> = ["question", "unanswered_question"]
+
+    /// After every successful pass: gauges, open items and the wrap-up flags,
+    /// for live nudges and the report's mood line.
+    var onPassCompleted: ((NudgeDetector.Pass) -> Void)?
+
+    nonisolated static func nudgePass(time: TimeInterval, sentiment: [String: Int], insights: [Insight],
+                                      gauges: [SentimentGauge], pinnedKinds: Set<String>) -> NudgeDetector.Pass {
+        let keys = Set(gauges.map(\.key))
+        let open = insights.filter { !$0.isHandled && $0.kindKey != Insight.docExcerptKind }
+        return NudgeDetector.Pass(
+            time: time,
+            values: sentiment.filter { keys.contains($0.key) },
+            openQuestions: open.filter { questionKinds.contains($0.kindKey) }
+                .map { .init(title: $0.title, since: $0.callTime) },
+            openItems: open.filter { pinnedKinds.contains($0.kindKey) }.map(\.title),
+            wrappingUp: sentiment[wrappingUpKey] == 1,
+            nextStepAgreed: sentiment[nextStepKey] == 1)
+    }
     private(set) var fastPathStats: (attempts: Int, hits: Int, failures: Int) = (0, 0, 0)
     private var fastTask: Task<Void, Never>?
     private var consecutiveFastFailures = 0
