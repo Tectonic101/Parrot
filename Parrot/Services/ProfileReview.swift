@@ -88,6 +88,29 @@ struct ProfileChanges: Equatable {
     }
 }
 
+/// A profile file waiting for the review screen: one the user opened or
+/// dropped, or an AI app's suggestion from the inbox.
+struct PendingProfile: Identifiable, Equatable {
+    enum Origin: Equatable {
+        /// Opened, dropped or imported: the file's name.
+        case file(String)
+        /// From the inbox; the file is deleted once the user decides.
+        case suggestion(URL)
+    }
+    let id = UUID()
+    let data: Data
+    let origin: Origin
+
+    /// Reads at most a byte over the limit, so a huge file is refused by
+    /// `ProfileFile.decode` without ever being loaded whole.
+    static func read(_ url: URL, origin: Origin? = nil) -> PendingProfile? {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? handle.close() }
+        let data = (try? handle.read(upToCount: ProfileFile.maxBytes + 1)) ?? Data()
+        return PendingProfile(data: data, origin: origin ?? .file(url.lastPathComponent))
+    }
+}
+
 /// Profiles AI apps suggested, waiting for the user in Parrot. The MCP
 /// server (its own process) writes here; the app reads, reviews and deletes.
 /// Files only: a suggestion never touches the profile store.

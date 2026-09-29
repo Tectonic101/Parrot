@@ -4452,5 +4452,14 @@ enum ProfileTest {
         check("inbox: an invalid one is refused and nothing is written", threw && ProfileInbox.pending(in: inbox).count == 1)
         for _ in 0..<12 { _ = try? ProfileInbox.add(suggestion.data(), in: inbox) }
         check("inbox: at most 10, the oldest go", ProfileInbox.pending(in: inbox).count == ProfileInbox.limit)
+
+        // A double-clicked file is read with a cap, never whole.
+        let huge = inbox.appendingPathComponent("huge.parrotprofile")
+        try? Data(count: 5_000_000).write(to: huge)
+        let opened = PendingProfile.read(huge)
+        check("open: a huge file is read only past the limit, then refused",
+              opened?.data.count == ProfileFile.maxBytes + 1 && refusalOf(opened?.data ?? Data())?.contains("64 KB") == true)
+        check("open: a normal file keeps its name", PendingProfile.read(ProfileInbox.pending(in: inbox)[0])?.origin
+              == .file(ProfileInbox.pending(in: inbox)[0].lastPathComponent))
     }
 }
