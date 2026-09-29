@@ -150,6 +150,8 @@ struct ContentView: View {
         .task {
             guard !hasLoadedModel else { return }
             hasLoadedModel = true
+            // AI apps' profile suggestions, ones waiting from before too.
+            appSession.profileInbox.start { [appSession] in appSession.profileReviews += $0 }
             await recordingManager.prepare(modelContext: modelContext)
         }
     }

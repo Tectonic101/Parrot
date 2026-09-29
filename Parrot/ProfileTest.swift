@@ -4453,6 +4453,23 @@ enum ProfileTest {
         for _ in 0..<12 { _ = try? ProfileInbox.add(suggestion.data(), in: inbox) }
         check("inbox: at most 10, the oldest go", ProfileInbox.pending(in: inbox).count == ProfileInbox.limit)
 
+        // The app hears about suggestions: ones already waiting, then new ones.
+        let watched = FileManager.default.temporaryDirectory.appendingPathComponent("parrot-watch-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: watched) }
+        _ = try? ProfileInbox.add(suggestion.data(), in: watched)
+        var heard: [PendingProfile] = []
+        let watcher = ProfileInboxWatcher()
+        watcher.start(directory: watched) { heard += $0 }
+        check("watch: a suggestion that came while Parrot was closed is picked up", heard.count == 1
+              && { if case .suggestion = heard[0].origin { return true } else { return false } }())
+        _ = try? ProfileInbox.add(suggestion.data(), in: watched)
+        let deadline = Date().addingTimeInterval(3)
+        while heard.count < 2 && Date() < deadline { RunLoop.main.run(until: .now + 0.05) }
+        check("watch: a new suggestion arrives while Parrot runs", heard.count == 2)
+        RunLoop.main.run(until: .now + 0.2)
+        check("watch: each file handed over once", heard.count == 2)
+        watcher.stop()
+
         // A double-clicked file is read with a cap, never whole.
         let huge = inbox.appendingPathComponent("huge.parrotprofile")
         try? Data(count: 5_000_000).write(to: huge)

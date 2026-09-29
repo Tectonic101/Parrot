@@ -69,7 +69,7 @@ tree. Line counts are rough — they flag which files are worth reading whole.
 | `Services/MCPCommitments.swift` | 55 | Pure: commitment bullets from a report, owner = speaker of the cited receipt line |
 | `Services/MCPPrompts.swift` | 170 | Pure: the seven ready-made MCP prompts (weekly digest, follow-up email, call prep, PRD from calls, create / improve a profile, design a report) |
 | `Services/ProfileFile.swift` | 230 | Pure: portable `.parrotprofile` JSON (encode a CallProfile incl. its report, decode with limits, unknown fields kept) |
-| `Services/ProfileReview.swift` | 130 | Pure: what a `.parrotprofile` would change (review screen groups) + `ProfileInbox`, where AI apps' suggestions wait (max 10) |
+| `Services/ProfileReview.swift` | 210 | What a `.parrotprofile` would change (review screen groups); `PendingProfile` (a file waiting for review, read capped); `ProfileInbox`, where AI apps' suggestions wait (max 10), and its watcher |
 | `Services/ReportTemplate.swift` | 200 | Pure: a profile's report sections + coaching lens; `.standard` = the classic report; builds a custom template's prompt (scorecards + fairness rule); `Scorecard` reads scores back (receipt or no score) |
 | `Services/MCPAccess.swift` | 110 | What AI apps may see (share checkboxes, excluded call types), the gate every MCP tool reads through, activity counters |
 | `Services/MCPBundle.swift` | 150 | One-click connect: Claude Desktop `.mcpb` (manifest, launcher that finds a moved app, icon), Cursor link, Claude Code / Codex commands |

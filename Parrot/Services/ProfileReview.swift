@@ -146,3 +146,43 @@ enum ProfileInbox {
         }
     }
 }
+
+/// Tells the app when an AI app leaves a suggestion. The MCP server is its
+/// own process, so the inbox folder is the only channel: a directory watch,
+/// plus a first scan for what arrived while Parrot was closed.
+@MainActor
+final class ProfileInboxWatcher {
+    private var source: DispatchSourceFileSystemObject?
+    private var seen: Set<String> = []
+    private var directory = ProfileInbox.defaultDirectory
+    private var onNew: ([PendingProfile]) -> Void = { _ in }
+
+    func start(directory: URL = ProfileInbox.defaultDirectory, onNew: @escaping ([PendingProfile]) -> Void) {
+        stop()
+        self.directory = directory
+        self.onNew = onNew
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let fd = open(directory.path, O_EVTONLY)
+        guard fd >= 0 else { return }
+        let source = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: .write, queue: .main)
+        source.setEventHandler { [weak self] in MainActor.assumeIsolated { self?.scan() } }
+        source.setCancelHandler { close(fd) }
+        source.resume()
+        self.source = source
+        scan()
+    }
+
+    func stop() {
+        source?.cancel()
+        source = nil
+    }
+
+    /// Files not handed over yet. A file the user has decided on is deleted,
+    /// so `seen` only guards against one event firing twice.
+    private func scan() {
+        let fresh = ProfileInbox.pending(in: directory).filter { !seen.contains($0.lastPathComponent) }
+        guard !fresh.isEmpty else { return }
+        fresh.forEach { seen.insert($0.lastPathComponent) }
+        onNew(fresh.compactMap { PendingProfile.read($0, origin: .suggestion($0)) })
+    }
+}
