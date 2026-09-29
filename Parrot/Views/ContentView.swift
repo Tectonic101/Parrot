@@ -3,7 +3,7 @@ import SwiftData
 
 /// What the main window's detail area shows. One value instead of flags,
 /// so two pages can never both be "on".
-enum MainPage: Equatable { case dashboard, settings, ask, meeting }
+enum MainPage: Equatable { case dashboard, settings, ask, aiApps, meeting }
 
 struct ContentView: View {
     @Environment(RecordingManager.self) private var recordingManager
@@ -35,6 +35,8 @@ struct ContentView: View {
                 LiveRecordingView()
             } else if page == .settings {
                 settingsPane
+            } else if page == .aiApps {
+                AIAppsPageView()
             } else if page == .dashboard {
                 DashboardView(selectedMeeting: $selectedMeeting, page: $page)
             } else if let meeting = selectedMeeting {
@@ -60,6 +62,7 @@ struct ContentView: View {
         }
         .overlay(alignment: .top) {
             VStack(spacing: 8) {
+                AIAppsConnectedBanner()
                 if let progress = recordingManager.importProgress {
                     ImportingBanner(progress: progress)
                         .transition(.move(edge: .top).combined(with: .opacity))
@@ -108,16 +111,14 @@ struct ContentView: View {
             if appSession.pendingJump?.meetingID == id { appSession.pendingJump = nil }
         }
         // Ask Parrot's citations: open that meeting (the detail view seeks).
-        .onChange(of: appSession.pendingJump) { _, jump in
-            guard let jump else { return }
-            let id = jump.meetingID
-            let found = try? modelContext.fetch(FetchDescriptor<Meeting>(predicate: #Predicate { $0.id == id })).first
-            guard let meeting = found else {
-                appSession.pendingJump = nil
-                return
-            }
-            selectedMeeting = meeting
-            page = .meeting
+        .onChange(of: appSession.pendingJump) { _, jump in open(jump) }
+        // A window opened by a link finds the jump already waiting.
+        .onAppear { open(appSession.pendingJump) }
+        // openparrot:// links arrive through ParrotAppDelegate; keep them in
+        // this window rather than opening a new one.
+        .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
+        .onReceive(NotificationCenter.default.publisher(for: .parrotOpenAIApps)) { _ in
+            page = .aiApps
         }
         .onReceive(NotificationCenter.default.publisher(for: .parrotReportBug)) { _ in
             presentBugReport()
@@ -141,6 +142,19 @@ struct ContentView: View {
             hasLoadedModel = true
             await recordingManager.prepare(modelContext: modelContext)
         }
+    }
+
+    /// Selects the meeting a jump points at; the detail view seeks.
+    private func open(_ jump: AppSession.Jump?) {
+        guard let jump else { return }
+        let id = jump.meetingID
+        let found = try? modelContext.fetch(FetchDescriptor<Meeting>(predicate: #Predicate { $0.id == id })).first
+        guard let meeting = found else {
+            appSession.pendingJump = nil
+            return
+        }
+        selectedMeeting = meeting
+        page = .meeting
     }
 
     private func presentBugReport() {

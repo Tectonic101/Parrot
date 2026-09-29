@@ -166,6 +166,46 @@ else
   exit 1
 fi
 
+# The Claude Desktop install file, for the release page and the MCP Registry.
+# Built after the appcast, so generate_appcast never sees it. Its launcher has
+# no path baked in: it finds Parrot in Applications or by bundle id.
+echo "==> building the Claude Desktop install file (Parrot.mcpb)"
+MCPB="$DIST/Parrot.mcpb"
+.build/release/Parrot --mcpb "$MCPB" "$VERSION" "$APP/Contents/Resources/AppIcon.icns"
+if command -v npx >/dev/null 2>&1; then
+  CHECK="$(mktemp -d /tmp/parrot-mcpb-XXXXXX)"
+  unzip -q "$MCPB" -d "$CHECK"
+  npx -y @anthropic-ai/mcpb validate "$CHECK/manifest.json" > /dev/null \
+    || { echo "!! Parrot.mcpb failed Anthropic's manifest check" >&2; exit 1; }
+  rm -rf "$CHECK"
+else
+  echo "    (npx not found: skipped the manifest check)"
+fi
+
+# The MCP Registry entry for this version. Commit it with the appcast, then
+# publish with: mcp-publisher login github && mcp-publisher publish
+SHA="$(shasum -a 256 "$MCPB" | cut -d' ' -f1)"
+cat > server.json <<JSON
+{
+  "\$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.turantekin/parrot",
+  "title": "Parrot",
+  "description": "Your recorded Mac meetings in Claude: search, promises with owners, follow-ups. Local, read-only.",
+  "version": "$VERSION",
+  "websiteUrl": "https://openparrot.app",
+  "repository": { "url": "https://github.com/turantekin/Parrot", "source": "github" },
+  "packages": [
+    {
+      "registryType": "mcpb",
+      "identifier": "https://github.com/turantekin/Parrot/releases/download/v$VERSION/Parrot.mcpb",
+      "fileSha256": "$SHA",
+      "transport": { "type": "stdio" }
+    }
+  ]
+}
+JSON
+echo "    server.json updated for the MCP Registry (commit it with the appcast)"
+
 echo
 echo "Done: $DMG"
 echo "Publish: scripts/publish.sh $VERSION [notes.md]"

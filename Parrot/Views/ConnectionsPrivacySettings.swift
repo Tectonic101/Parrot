@@ -19,7 +19,6 @@ struct ConnectionsSettingsPage: View {
     @State private var secretSaved = (APIKeyStore.load(account: Webhook.secretAccount) ?? "").isEmpty == false
     @State private var testing = false
     @State private var testResult: String?
-    @State private var copiedConfig = false
 
     var body: some View {
         SettingsPage {
@@ -97,19 +96,14 @@ struct ConnectionsSettingsPage: View {
                 }
             }
 
-            SettingsCard(title: "AI Apps on This Mac (MCP)",
-                         blurb: "Let Claude Desktop, ChatGPT or another MCP app read and search your meetings, read-only. The app you connect usually sends what it reads to its own cloud, so on-device-only meetings are never shown to it.") {
+            SettingsCard(title: "Claude & AI Apps",
+                         blurb: "Let Claude, Codex or Cursor read and search your meetings, read-only. The app you connect usually sends what it reads to its own cloud, so on-device-only meetings are never shown to it.") {
                 SettingsToggleRow(title: "Allow AI apps to read my meetings", first: true, isOn: $mcpEnabled)
-                SettingsLabeledRow(title: "Connect Claude Desktop",
-                                   detail: "Copies the setup to paste into Claude Desktop → Settings → Developer → Edit Config, then restart Claude.") {
-                    Button(copiedConfig ? "Copied" : "Copy Setup") {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(
-                            MCPServer.claudeDesktopConfig(executable: Bundle.main.executablePath ?? "/Applications/Parrot.app/Contents/MacOS/Parrot"),
-                            forType: .string)
-                        copiedConfig = true
+                SettingsLabeledRow(title: "Connect an app, choose what it sees",
+                                   detail: "One click for Claude Desktop and Cursor, a command for Claude Code and Codex.") {
+                    Button("Open Claude & AI Apps") {
+                        NotificationCenter.default.post(name: .parrotOpenAIApps, object: nil)
                     }
-                    .disabled(!mcpEnabled)
                 }
             }
         }

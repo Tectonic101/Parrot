@@ -46,7 +46,7 @@ tree. Line counts are rough — they flag which files are worth reading whole.
 | `Services/KnowledgeBaseService.swift` | 532 | Ingests/chunks KB docs (heading-aware), on-device multilingual embeddings (re-embeds stale vectors), hybrid BM25 + embedding retrieval |
 | `Services/ProfileStore.swift` | 111 | Persists and mutates `CallProfile`s |
 | `Services/ProfilePresets.swift` | 170 | Built-in starter profiles (seven, incl. the buyer-side "Vendor call") |
-| `Services/ExportService.swift` | 235 | Export: TXT, SRT, Markdown (front matter, next-step checklist instead of repeated sections) |
+| `Services/ExportService.swift` | 265 | Export: TXT, SRT, Markdown (front matter, next-step checklist instead of repeated sections); `Parts` limits what an AI app gets |
 | `Services/PermissionFlow.swift` | 150 | System Audio (15+) / Screen Recording (14) + microphone grant flows |
 | `Services/AppUpdater.swift` | 56 | Sparkle updater: daily signed appcast check, installs on quit |
 | `Services/BugReport.swift` | 120 | Pre-filled GitHub issue: diagnostics, own-window screenshot, URL builder |
@@ -57,14 +57,20 @@ tree. Line counts are rough — they flag which files are worth reading whole.
 | `Services/CallWatcher.swift` | 356 | Polls the detector; Ask/Auto modes; notification actions + delegate; calendar reminders; `NotificationAccess` |
 | `Services/CalendarService.swift` | 250 | EventKit read-only: current event match, notes cleaning, invite context, title → profile |
 | `Services/LoginItem.swift` | 60 | "Open Parrot at login" via SMAppService.mainApp |
-| `Services/MeetingMemory.swift` | 300 | Local index of finished meetings (chunks + on-device vectors, one file per meeting), hybrid search |
+| `Services/MeetingMemory.swift` | 300 | Local index of finished meetings (chunks + on-device vectors, one file per meeting), hybrid search (optionally one kind of passage) |
 | `Services/AskChatStore.swift` | 170 | Ask Parrot's saved chats: AskMessage/AskChat values, one JSON file, rename/delete/stale sweep, titles, day groups |
 | `Services/AskEngine.swift` | 260 | Ask Parrot prompt/context, `[M2 12:34]` citation parsing + checks; LastCallBrief (previous meeting, open items) |
 | `Services/RecordingManager+Memory.swift` | 110 | meetingFinished hook, memory sync, previous meeting, `ask()` |
 | `Services/FollowUpEmail.swift` | 90 | Follow-up email prompt, subject/body split, open in Mail |
 | `Services/Integrations.swift` | 230 | Apple Reminders, export folder (security-scoped bookmark), webhook (payload, HMAC, send) |
 | `Services/RecordingManager+Integrations.swift` | 90 | After-call actions, follow-up drafting, next steps → Reminders |
-| `Services/MCPServer.swift` | 260 | `--mcp`: read-only stdio MCP server (list/get/search meetings), opt-in, private meetings hidden |
+| `Services/MCPServer.swift` | 330 | `--mcp`: read-only stdio MCP server (async loop; list/get/search meetings with meaning search and date/person filters, transcript pages, commitments, prompts, read-only annotations, export to Downloads/Parrot Exports, talk-time stats, read profiles; share settings via MCPAccess), opt-in, private meetings hidden |
+| `Services/MCPCommitments.swift` | 55 | Pure: commitment bullets from a report, owner = speaker of the cited receipt line |
+| `Services/MCPPrompts.swift` | 115 | Pure: the four ready-made MCP prompts (weekly digest, follow-up email, call prep, PRD from calls) |
+| `Services/ProfileFile.swift` | 250 | Pure: portable `.parrotprofile` JSON (encode a CallProfile, decode with limits, unknown fields kept) |
+| `Services/MCPAccess.swift` | 110 | What AI apps may see (share checkboxes, excluded call types), the gate every MCP tool reads through, activity counters |
+| `Services/MCPBundle.swift` | 150 | One-click connect: Claude Desktop `.mcpb` (manifest, launcher that finds a moved app, icon), Cursor link, Claude Code / Codex commands |
+| `Services/ParrotLink.swift` | 45 | Open-in-Parrot links: AI apps get `openparrot.app/open#m=<id>&t=` (the site hands on to `openparrot://`), ParrotAppDelegate opens them, reopening the window if closed |
 | `Services/CloudGate.swift` | 60 | On-device-only switch: global or per-call holds; checked by every cloud path |
 | `Services/Redactor.swift` | 200 | Hide emails/phones/cards/IBANs/names from cloud AI and restore them; request/result helpers |
 | `Services/Retention.swift` | 55 | Automatic clean-up rules (audio / whole meetings after N days) |
@@ -78,7 +84,7 @@ tree. Line counts are rough — they flag which files are worth reading whole.
 
 | File | L | Purpose |
 |---|---|---|
-| `Views/ContentView.swift` | 190 | Root split view (`MainPage`: dashboard/settings/ask/meeting) + empty state + corner bug button |
+| `Views/ContentView.swift` | 200 | Root split view (`MainPage`: dashboard/settings/ask/aiApps/meeting) + empty state + corner bug button |
 | `Views/SidebarView.swift` | 361 | Meeting list, rows, talk-ratio strip |
 | `Views/DashboardView.swift` | 350 | Landing stats + recent meetings |
 | `Views/CopilotHomeCard.swift` | 110 | Home card: turn on Copilot, finish setup, waiting for the model, just turned on |
@@ -113,7 +119,8 @@ tree. Line counts are rough — they flag which files are worth reading whole.
 | `Views/AutomationSettingsViews.swift` | 250 | Login item row, Call Detection + Calendar cards, detected-call banner |
 | `Views/AskPageView.swift` | ~330 | Ask Parrot page: saved-chat list, conversation, AI menu, Stop |
 | `Views/AskAnswerView.swift` | ~130 | ParrotAvatar + AskAnswerView (answer lines, citation chips, sources) |
-| `Views/ConnectionsPrivacySettings.swift` | 260 | Settings → Connections (folder, email, webhook, MCP) and → Privacy (lock, redaction, consent, clean-up) |
+| `Views/ConnectionsPrivacySettings.swift` | 255 | Settings → Connections (folder, email, webhook, switch + link to Claude & AI Apps) and → Privacy (lock, redaction, consent, clean-up) |
+| `Views/AIAppsPageView.swift` | 440 | Claude & AI Apps page (connect buttons, what apps see, six jobs, activity line), first-connection banner, meeting "Ask Claude" menu, weekly report tip; `AIApps` pure rules |
 
 ## Build & non-source
 
@@ -123,8 +130,10 @@ tree. Line counts are rough — they flag which files are worth reading whole.
 | `.github/workflows/ci.yml` | macOS CI: build, `--profile-test`, snapshot renders (artifact), ad-hoc `.app` assembly |
 | `project.yml` | xcodegen input; `Parrot.xcodeproj` is generated from it |
 | `Package.swift` | SwiftPM deps (WhisperKit, vendored CSpeexDSP) |
-| `scripts/release.sh` | Release packaging; mirrors the Makefile's bundle step |
+| `scripts/release.sh` | Release packaging; mirrors the Makefile's bundle step; builds `Parrot.mcpb` and `server.json` |
 | `scripts/assemble-help.sh` | Builds the Apple Help Book into the .app from `docs/help/` (both builders call it) |
+| `integrations/claude-plugin/` | Claude plugin for the connector directory: `.mcp.json` + `server/launch.sh` (same launcher as the release `.mcpb`, harness-checked), four skills mirroring the MCP prompts, README, PRIVACY |
+| `server.json` | MCP Registry entry, written by `scripts/release.sh` per release (version, `.mcpb` URL, sha256) |
 | `docs/help/` | User guide: one HTML set serving GitHub Pages AND the in-app Help menu |
 | `Vendor/CSpeexDSP/` | Vendored C echo canceller — do not modify |
 | `docs/IMPROVEMENT-ROADMAP.md` | Roadmap + build notes (incl. the Xcode race) |

@@ -159,6 +159,8 @@ struct MeetingDetailView: View {
                 .help("Ask about this call, or all of them")
                 .disabled(meeting.status != .done)
 
+                AskClaudeMenu(meeting: meeting)
+
                 Menu {
                     Button("Export as TXT") { MeetingActions.exportTXT(meeting) }
                     Button("Export as Markdown") { MeetingActions.exportMarkdown(meeting) }
@@ -545,6 +547,7 @@ struct MeetingDetailView: View {
                     }
                 } else {
                     VStack(alignment: .leading, spacing: 16) {
+                        AIAppsReportTip(meeting: meeting)
                         ReportContentView(
                             summary: meeting.summary,
                             coaching: meeting.coaching,
@@ -630,7 +633,10 @@ struct MeetingDetailView: View {
         guard let jump = appSession.pendingJump, jump.meetingID == meeting.id else { return }
         appSession.pendingJump = nil
         if let time = jump.time {
-            showInTranscript(time)
+            // Links and Ask chips carry whole seconds, but the line shown as
+            // "09:42" may start at 582.4: land on that line, not the one before.
+            let line = meeting.sortedSegments.first { $0.startTime >= time && $0.startTime < time + 1 }
+            showInTranscript(line?.startTime ?? time)
         } else {
             tab = .report
         }
