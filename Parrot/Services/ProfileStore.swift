@@ -200,6 +200,94 @@ final class ProfileStore {
         return copy
     }
 
+    // MARK: - Import, suggestions, restore (Profiles 2.0)
+
+    /// The profile a file would update: a suggestion's target, else the
+    /// profile with the same sharing id. nil = it's a new profile.
+    static func target(for file: ProfileFile, in profiles: [CallProfile]) -> CallProfile? {
+        guard let id = file.suggestion?.targetSharedID ?? file.sharedID else { return nil }
+        return profiles.first { $0.sharedID == id }
+    }
+
+    /// A new profile from a file: never a built-in, no documents yet, the
+    /// name made unique. `freshIdentity` for "Keep both", so the copy and
+    /// the original never answer to the same updates.
+    @discardableResult
+    func add(_ file: ProfileFile, source: String, freshIdentity: Bool = false, in context: ModelContext) -> CallProfile {
+        let all = profiles(in: context)
+        let f = file.profile
+        let p = CallProfile(name: f.name, iconSystemName: f.icon, summary: f.summary,
+                            isBuiltIn: false, sortOrder: (all.map(\.sortOrder).max() ?? 0) + 1,
+                            persona: f.persona, tone: f.tone, counterpart: f.counterpart,
+                            allowGeneralKnowledge: f.allowGeneralKnowledge, kinds: [], gauges: [])
+        Self.write(file, into: p)
+        // After write, which copies the file's own name.
+        p.name = Self.uniqueName(f.name, among: all.map(\.name))
+        p.sharedID = freshIdentity ? UUID() : (file.sharedID ?? UUID())
+        p.sharedVersion = max(file.version, 1)
+        p.sharedSource = source
+        context.insert(p)
+        try? context.save()
+        return p
+    }
+
+    /// Applies a file to a profile. The current state is saved first (the
+    /// editor's "Restore previous version" undoes it). Applying counts as
+    /// the user's own change, so preset refreshes keep it.
+    func apply(_ file: ProfileFile, to p: CallProfile, label: String, in context: ModelContext) {
+        p.saveVersion(label: label)
+        Self.write(file, into: p)
+        p.isUserModified = true
+        p.sharedVersion = max(p.sharedVersion + 1, file.version)
+        try? context.save()
+    }
+
+    /// Puts a saved version back, saving the current state first so the
+    /// restore can be undone too. Privacy still only tightens.
+    func restore(_ version: ProfileVersion, of p: CallProfile, in context: ModelContext) {
+        guard let file = try? ProfileFile.decode(version.file) else { return }
+        p.saveVersion(label: "Before restoring")
+        Self.write(file, into: p)
+        switch ReportChoice(rawValue: version.reportChoice) ?? .classic {
+        case .classic: p.setCustomReport(.standard)
+        case .preset: p.reportChoice = .preset; p.reportData = nil
+        case .custom: p.setCustomReport(file.profile.report ?? .standard)
+        }
+        try? context.save()
+    }
+
+    /// The fields a file carries, onto a profile. Never document tags, never
+    /// ids, and on-device only can be switched on, never off.
+    private static func write(_ file: ProfileFile, into p: CallProfile) {
+        let f = file.profile
+        p.name = f.name
+        p.iconSystemName = f.icon
+        p.summary = f.summary
+        p.persona = f.persona
+        p.tone = f.tone
+        p.counterpart = f.counterpart
+        p.allowGeneralKnowledge = f.allowGeneralKnowledge
+        p.kinds = f.kinds.map {
+            ProfileKind(id: UUID(), key: $0.key, label: $0.label, colorHex: $0.color, iconSystemName: $0.icon,
+                        triggerDescription: $0.trigger, isPinned: $0.pinned, priority: $0.priority)
+        }
+        p.gauges = f.gauges.map {
+            SentimentGauge(id: UUID(), key: $0.key, label: $0.label, lowLabel: $0.low, highLabel: $0.high, colorHex: $0.color)
+        }
+        if file.privacy?.recommendOnDeviceOnly == true { p.onDeviceOnly = true }
+        // A report equal to the built-in's own follows it again (editReport).
+        let report = f.report ?? .standard
+        p.editReport { $0 = report }
+    }
+
+    /// "Investor pitch", then "Investor pitch 2", "Investor pitch 3"…
+    static func uniqueName(_ name: String, among names: [String]) -> String {
+        guard names.contains(name) else { return name }
+        var n = 2
+        while names.contains("\(name) \(n)") { n += 1 }
+        return "\(name) \(n)"
+    }
+
     func delete(_ profile: CallProfile, in context: ModelContext) {
         guard !profile.isBuiltIn else { return }
         context.delete(profile)

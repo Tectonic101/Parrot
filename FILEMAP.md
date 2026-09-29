@@ -44,7 +44,7 @@ tree. Line counts are rough — they flag which files are worth reading whole.
 | `Services/CallAnalysisEngine.swift` | 815 | Drives live Copilot passes; per-pace question floor; Jev fast path ("From your docs" excerpt) |
 | `Services/JevDocMatcher.swift` | 175 | TypeSafe "Jev" client: one probability per KB chunk that it answers the question; same-issue verdicts for card dedup |
 | `Services/KnowledgeBaseService.swift` | 532 | Ingests/chunks KB docs (heading-aware), on-device multilingual embeddings (re-embeds stale vectors), hybrid BM25 + embedding retrieval |
-| `Services/ProfileStore.swift` | 210 | Persists and mutates `CallProfile`s; the one-time Profiles 2.0 migration (backup, sharing ids, restore point, report choice) |
+| `Services/ProfileStore.swift` | 310 | Persists and mutates `CallProfile`s; the one-time Profiles 2.0 migration (backup, sharing ids, restore point, report choice); import / apply / restore a `.parrotprofile` (privacy only tightens) |
 | `Services/ProfilePresets.swift` | 275 | Built-in starter profiles (eight, incl. the buyer-side "Vendor call" and "Investor pitch") and their report templates |
 | `Services/ExportService.swift` | 265 | Export: TXT, SRT, Markdown (front matter, next-step checklist instead of repeated sections); `Parts` limits what an AI app gets |
 | `Services/PermissionFlow.swift` | 150 | System Audio (15+) / Screen Recording (14) + microphone grant flows |
@@ -69,6 +69,7 @@ tree. Line counts are rough — they flag which files are worth reading whole.
 | `Services/MCPCommitments.swift` | 55 | Pure: commitment bullets from a report, owner = speaker of the cited receipt line |
 | `Services/MCPPrompts.swift` | 115 | Pure: the four ready-made MCP prompts (weekly digest, follow-up email, call prep, PRD from calls) |
 | `Services/ProfileFile.swift` | 230 | Pure: portable `.parrotprofile` JSON (encode a CallProfile incl. its report, decode with limits, unknown fields kept) |
+| `Services/ProfileReview.swift` | 130 | Pure: what a `.parrotprofile` would change (review screen groups) + `ProfileInbox`, where AI apps' suggestions wait (max 10) |
 | `Services/ReportTemplate.swift` | 200 | Pure: a profile's report sections + coaching lens; `.standard` = the classic report; builds a custom template's prompt (scorecards + fairness rule); `Scorecard` reads scores back (receipt or no score) |
 | `Services/MCPAccess.swift` | 110 | What AI apps may see (share checkboxes, excluded call types), the gate every MCP tool reads through, activity counters |
 | `Services/MCPBundle.swift` | 150 | One-click connect: Claude Desktop `.mcpb` (manifest, launcher that finds a moved app, icon), Cursor link, Claude Code / Codex commands |

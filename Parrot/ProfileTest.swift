@@ -105,6 +105,7 @@ enum ProfileTest {
         testProfiles2Migration()
         testScorecards()
         testRewriteReport()
+        testImportAndReview()
         print(failures == 0 ? "ALL PASS" : "FAILURES: \(failures)")
         exit(failures == 0 ? 0 : 1)
     }
@@ -3222,6 +3223,10 @@ enum ProfileTest {
         check("mcp access: first read never moves", d.object(forKey: MCPAccess.firstReadKey) as? Date == morning)
     }
 
+    static func refusalOf(_ data: Data) -> String? {
+        do { _ = try ProfileFile.decode(data); return nil } catch { return (error as? ProfileFile.Refused)?.reason }
+    }
+
     @MainActor
     static func testProfileFile() {
         for p in ProfilePresets.all() {
@@ -3246,7 +3251,10 @@ enum ProfileTest {
         check("profile file: on-device only is recommended", tunedFile?.privacy?.recommendOnDeviceOnly == true)
         check("profile file: no local id for a profile made here", (try? ProfileFile.decode(ProfileFile.encode(CallProfile(
             name: "Mine", iconSystemName: "star", summary: "", isBuiltIn: false, sortOrder: 9, persona: "", tone: "",
-            allowGeneralKnowledge: true, kinds: [], gauges: []))))?.sharedID == nil)
+            allowGeneralKnowledge: true, kinds: tuned.kinds, gauges: []))))?.sharedID == nil)
+        check("profile file: a profile with no card types refused", refusalOf(ProfileFile.encode(CallProfile(
+            name: "Empty", iconSystemName: "star", summary: "", isBuiltIn: false, sortOrder: 9, persona: "", tone: "",
+            allowGeneralKnowledge: true, kinds: [], gauges: [])))?.contains("at least one card type") == true)
 
         let base = (try? JSONSerialization.jsonObject(with: ProfileFile.encode(ProfilePresets.all()[1]))) as? [String: Any] ?? [:]
         func file(_ change: (inout [String: Any], inout [String: Any]) -> Void) -> Data {
@@ -3256,9 +3264,7 @@ enum ProfileTest {
             top["profile"] = profile
             return (try? JSONSerialization.data(withJSONObject: top)) ?? Data()
         }
-        func refusal(_ data: Data) -> String? {
-            do { _ = try ProfileFile.decode(data); return nil } catch { return (error as? ProfileFile.Refused)?.reason }
-        }
+        func refusal(_ data: Data) -> String? { refusalOf(data) }
         let aKind = (base["profile"] as? [String: Any])?["kinds"] as? [[String: Any]] ?? []
         check("profile file: 21 card types refused", refusal(file { _, p in p["kinds"] = Array(repeating: aKind[0], count: 21) })?
               .contains("20 card types") == true)
@@ -3927,7 +3933,7 @@ enum ProfileTest {
             check("meeting: template snapshot round-trips", m.reportTemplate == custom)
         }
         let mine = CallProfile(name: "Northwind accounts", iconSystemName: "star", summary: "", isBuiltIn: false, sortOrder: 9,
-                               persona: "", tone: "", allowGeneralKnowledge: true, kinds: [], gauges: [])
+                               persona: "", tone: "", allowGeneralKnowledge: true, kinds: ProfilePresets.all()[0].kinds, gauges: [])
         check("profile: new rows are classic", mine.reportChoice == .classic && mine.reportTemplate.isStandard)
         mine.setCustomReport(custom)
         check("profile: custom report stored", mine.reportChoice == .custom && mine.reportTemplate == custom)
@@ -4325,5 +4331,96 @@ enum ProfileTest {
             sem.signal()
         }
         while sem.wait(timeout: .now()) == .timedOut { RunLoop.main.run(until: .now + 0.01) }
+    }
+
+    @MainActor
+    static func testImportAndReview() {
+        let schema = Schema([Meeting.self, TranscriptSegment.self, CallInsight.self, CallProfile.self, SpeakerProfile.self])
+        guard let container = try? ModelContainer(
+            for: schema, configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
+        ) else { check("import: container", false); return }
+        let ctx = ModelContext(container)
+        let store = ProfileStore()
+        let presets = ProfilePresets.all()
+        presets.forEach(ctx.insert)
+        try? ctx.save()
+        let sales = presets.first { $0.name == "Sales discovery" }!
+        let all = store.profiles(in: ctx)
+
+        // A colleague's Northwind profile arrives as a file.
+        let theirs = CallProfile(name: "Northwind renewals", iconSystemName: "briefcase.fill", summary: "Renewal calls",
+                                 isBuiltIn: false, sortOrder: 1, persona: "Help keep Northwind.", tone: "Be brief.",
+                                 counterpart: "the client", allowGeneralKnowledge: true, kinds: sales.kinds, gauges: sales.gauges)
+        theirs.sharedID = UUID()
+        theirs.sharedVersion = 3
+        theirs.onDeviceOnly = true
+        theirs.setCustomReport(presets.first { $0.name == "Customer support" }!.reportTemplate)
+        guard let file = try? ProfileFile.decode(ProfileFile.encode(theirs)) else { check("import: file decodes", false); return }
+        check("import: a made-here profile exports its own sharing id", file.sharedID == theirs.sharedID && file.version == 3)
+        check("import: an unknown sharing id is a new profile", ProfileStore.target(for: file, in: all) == nil)
+        let fresh = ProfileChanges.between(nil, currentlyPrivate: false, and: file)
+        check("review: a new profile lists everything as added",
+              fresh.kindsAdded.count == sales.kinds.count && fresh.persona?.after == "Help keep Northwind." && fresh.turnsOnDeviceOnly)
+        let added = store.add(file, source: "file", in: ctx)
+        check("import: added as a user profile, not a built-in", !added.isBuiltIn && added.sharedSource == "file"
+              && added.sharedID == theirs.sharedID && added.sharedVersion == 3)
+        check("import: the report and privacy come along", added.reportChoice == .custom && added.onDeviceOnly
+              && added.reportTemplate == theirs.reportTemplate)
+        let second = store.add(file, source: "file", freshIdentity: true, in: ctx)
+        check("import: a second copy gets a unique name", second.name == "Northwind renewals 2")
+        check("import: the same file again is now an update", ProfileStore.target(for: file, in: store.profiles(in: ctx))?.id == added.id)
+
+        // An update that loosens privacy and changes things.
+        var update = file
+        update.profile.persona = "Help keep Northwind happy."
+        update.profile.kinds.removeFirst()
+        update.profile.kinds[0].trigger = "A new trigger."
+        update.profile.kinds.append(.init(key: "decision_maker", label: "Decision-maker", color: "3F9168", icon: "person.fill",
+                                          trigger: "Who signs.", pinned: false, priority: 0))
+        update.profile.report = nil
+        update.privacy = .init(recommendOnDeviceOnly: false)
+        let changes = ProfileChanges.between(ProfileFile.contents(of: added), currentlyPrivate: added.onDeviceOnly, and: update)
+        check("review: persona before and after", changes.persona?.before == "Help keep Northwind." && changes.persona?.after == "Help keep Northwind happy.")
+        check("review: cards added, removed, changed", changes.kindsAdded == ["Decision-maker"]
+              && changes.kindsRemoved == [sales.kinds[0].label] && changes.kindsChanged == [sales.kinds[1].label])
+        check("review: report before and after", changes.report?.after.first == "Overview" && changes.report?.before.first == "Issue")
+        check("review: a file can't be seen turning privacy off", !changes.turnsOnDeviceOnly)
+        check("review: nothing to change reads as empty",
+              ProfileChanges.between(ProfileFile.contents(of: added), currentlyPrivate: true, and: file).isEmpty)
+
+        store.apply(update, to: added, label: "Before the file from a colleague", in: ctx)
+        check("apply: the new settings land", added.persona == "Help keep Northwind happy." && added.kinds.contains { $0.key == "decision_maker" }
+              && added.reportTemplate.isStandard)
+        check("apply: privacy never loosens", added.onDeviceOnly)
+        check("apply: counts as your change, version bumped", added.isUserModified && added.sharedVersion == 4)
+        check("apply: the old state is saved first", added.versions.last?.label == "Before the file from a colleague")
+
+        // Undo via a saved version.
+        if let before = added.versions.last {
+            store.restore(before, of: added, in: ctx)
+            check("restore: the saved version comes back", added.persona == "Help keep Northwind."
+                  && added.reportChoice == .custom && added.reportTemplate == theirs.reportTemplate)
+            check("restore: and can be undone too", added.versions.last?.label == "Before restoring")
+        }
+
+        // A suggestion for a built-in, carrying the built-in's own report.
+        var suggestion = (try? ProfileFile.decode(ProfileFile.encode(sales)))!
+        suggestion.suggestion = .init(targetSharedID: sales.id, reason: "Ask about the decision-maker sooner.")
+        suggestion.profile.tone = "Ask who signs in the first ten minutes."
+        sales.sharedID = sales.id
+        check("suggest: aimed at its target", ProfileStore.target(for: suggestion, in: store.profiles(in: ctx))?.id == sales.id)
+        store.apply(suggestion, to: sales, label: "Before Claude's suggestion", in: ctx)
+        check("suggest: a built-in keeps following its own report", sales.reportChoice == .preset && sales.tone.hasPrefix("Ask who signs"))
+
+        // The inbox AI apps write to.
+        let inbox = FileManager.default.temporaryDirectory.appendingPathComponent("parrot-inbox-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: inbox) }
+        check("inbox: a valid suggestion lands", (try? ProfileInbox.add(suggestion.data(), in: inbox)) != nil
+              && ProfileInbox.pending(in: inbox).count == 1)
+        var threw = false
+        do { try ProfileInbox.add(Data("not a profile".utf8), in: inbox) } catch { threw = true }
+        check("inbox: an invalid one is refused and nothing is written", threw && ProfileInbox.pending(in: inbox).count == 1)
+        for _ in 0..<12 { _ = try? ProfileInbox.add(suggestion.data(), in: inbox) }
+        check("inbox: at most 10, the oldest go", ProfileInbox.pending(in: inbox).count == ProfileInbox.limit)
     }
 }

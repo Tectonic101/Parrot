@@ -91,28 +91,36 @@ struct ProfileFile: Codable {
     // MARK: Encode
 
     /// The profile as a file. A built-in the user never tuned keeps its fixed
-    /// id and preset version; a tuned one says what it's based on.
+    /// id and preset version; a tuned one says what it's based on; a profile
+    /// made or imported by the user carries its own sharing id, so a later
+    /// copy of it is recognised as an update.
     static func encode(_ p: CallProfile, source: String? = nil) -> Data {
-        let pristine = p.isBuiltIn && !p.isUserModified
+        let pristine = p.isBuiltIn && !p.isUserModified && p.reportChoice != .custom
         let file = ProfileFile(
-            sharedID: pristine ? p.id : nil,
-            version: pristine ? p.presetVersion : 1,
-            profile: Profile(
-                name: p.name, icon: p.iconSystemName, summary: p.summary, persona: p.persona, tone: p.tone,
-                counterpart: p.counterpart, allowGeneralKnowledge: p.allowGeneralKnowledge,
-                kinds: p.kinds.map {
-                    Kind(key: $0.key, label: $0.label, color: $0.colorHex, icon: $0.iconSystemName,
-                         trigger: $0.triggerDescription, pinned: $0.isPinned, priority: $0.priority)
-                },
-                gauges: p.gauges.map {
-                    Gauge(key: $0.key, label: $0.label, low: $0.lowLabel, high: $0.highLabel, color: $0.colorHex)
-                },
-                report: p.reportTemplate.isStandard ? nil : p.reportTemplate),
+            sharedID: pristine ? p.id : (p.isBuiltIn ? nil : p.sharedID),
+            version: pristine ? p.presetVersion : max(p.sharedVersion, 1),
+            profile: contents(of: p),
             privacy: Privacy(recommendOnDeviceOnly: p.onDeviceOnly),
             meta: Meta(source: source ?? (pristine ? "builtin" : "user"),
                        basedOn: p.isBuiltIn && !pristine ? BasedOn(sharedID: p.id, version: p.presetVersion) : nil,
                        createdWith: "Parrot \(AppUpdater.currentVersion)"))
         return file.data()
+    }
+
+    /// What a file says about a profile: the part imports and suggestions
+    /// compare and apply.
+    static func contents(of p: CallProfile) -> Profile {
+        Profile(
+            name: p.name, icon: p.iconSystemName, summary: p.summary, persona: p.persona, tone: p.tone,
+            counterpart: p.counterpart, allowGeneralKnowledge: p.allowGeneralKnowledge,
+            kinds: p.kinds.map {
+                Kind(key: $0.key, label: $0.label, color: $0.colorHex, icon: $0.iconSystemName,
+                     trigger: $0.triggerDescription, pinned: $0.isPinned, priority: $0.priority)
+            },
+            gauges: p.gauges.map {
+                Gauge(key: $0.key, label: $0.label, low: $0.lowLabel, high: $0.highLabel, color: $0.colorHex)
+            },
+            report: p.reportTemplate.isStandard ? nil : p.reportTemplate)
     }
 
     /// Pretty JSON, with any unknown fields from the decoded file put back.
@@ -182,6 +190,8 @@ struct ProfileFile: Codable {
         try text(p.persona, "The persona", max: 4000)
         try text(p.tone, "The tone", max: 4000)
         guard p.kinds.count <= 20 else { throw Refused(reason: "A profile can have at most 20 card types.") }
+        // The live Copilot needs at least one kind of card to write.
+        guard !p.kinds.isEmpty else { throw Refused(reason: "A profile needs at least one card type.") }
         guard p.gauges.count <= 6 else { throw Refused(reason: "A profile can have at most 6 gauges.") }
         for k in p.kinds {
             for (value, what) in [(k.key, "A card key"), (k.label, "A card name"), (k.color, "A card color"),
