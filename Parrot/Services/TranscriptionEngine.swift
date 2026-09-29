@@ -46,9 +46,8 @@ final class TranscriptionEngine {
     /// healthy stream off Deepgram with it. Guarded by `bufferLock`.
     private var deepgramFailedSources: Set<AudioSource> = []
     /// Offset added to locally-derived timestamps, per source. Sample counts
-    /// don't measure dead time: when a stream falls off Deepgram mid-call (or
-    /// the mic restarts after a device change) the counter is way behind the
-    /// meeting clock, and without re-anchoring the fallback segments restart
+    /// don't measure dead time: when a stream falls off Deepgram mid-call the
+    /// counter is way behind the meeting clock, and without re-anchoring the fallback segments restart
     /// at 0:00 — the bug that filed the back half of a call under minute 3.
     /// Guarded by `bufferLock`.
     private var localClockOffset: [AudioSource: TimeInterval] = [:]
@@ -988,10 +987,10 @@ final class TranscriptionEngine {
     }
 
     /// Re-anchor a stream's locally-derived timestamps to "now" in meeting time.
-    /// Called when a stream falls off Deepgram mid-call and when the mic capture
-    /// restarts after an input-device change — in both cases the sample counter
-    /// wasn't ticking through the gap, so the next locally-transcribed segments
-    /// would otherwise land minutes early.
+    /// Called when a stream falls off Deepgram mid-call: the local sample
+    /// counter wasn't ticking while Deepgram had the audio, so the next
+    /// locally-transcribed segments would otherwise land minutes early. (Gaps
+    /// in capture itself are padded with silence upstream, in AudioCaptureManager.)
     func reanchorLocalClock(source: AudioSource) {
         let elapsed = Date().timeIntervalSince(meetingStartTime)
         bufferLock.withLock {
