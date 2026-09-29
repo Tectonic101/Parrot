@@ -21,6 +21,10 @@
 
 No bot joins your meeting. It works with Google Meet, Zoom, Teams, or anything else your Mac can hear. Transcription, speaker detection and your documents stay on your Mac. The copilot's brain is your choice: **Claude** with your own key, any OpenAI-compatible server, or a **local model through Ollama, which makes the whole thing free and offline**.
 
+https://github.com/user-attachments/assets/76dc07c7-6667-497e-b39f-8218e077c88c
+
+*Parrot in 73 seconds. Turn the sound on, or follow the captions.*
+
 <img src=".github/readme/hero.png" alt="Parrot's live call screen: call score 78 with a coach line, a suggested answer quoted from northwind-faq.md, a resolved pricing question, a next step you promised, and the live transcript" width="100%">
 
 *The live call screen, as drawn on [openparrot.app](https://openparrot.app). The other side asked about data residency, and the answer came straight from the FAQ you dropped in.*
