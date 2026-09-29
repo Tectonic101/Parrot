@@ -433,7 +433,7 @@ final class ClaudeAnalysisProvider: AnalysisProvider {
         if !instructions.isEmpty {
             sections.append("The user's standing goals/instructions:\n\(instructions)")
         }
-        sections.append("Talk balance: you spoke roughly \(talkPercentMe)% of the words, "
+        sections.append("Talk balance: you spoke roughly \(talkPercentMe)% of the speaking time, "
             + "\(counterpart) \(100 - talkPercentMe)%.")
         sections.append("Full call transcript:\n<transcript>\n\(transcript)\n</transcript>")
         return sections.joined(separator: "\n\n---\n\n")

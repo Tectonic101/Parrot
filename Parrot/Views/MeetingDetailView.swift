@@ -597,14 +597,8 @@ struct MeetingDetailView: View {
         .overlay(RoundedRectangle(cornerRadius: Theme.Metrics.radius).strokeBorder(Theme.Colors.line))
     }
 
-    /// Me's share of the words, for the talk-balance bar.
-    private var talkPercentMe: Int? {
-        let me = meeting.segments
-            .filter { $0.speakerLabel == "Me" }
-            .reduce(0) { $0 + $1.text.split(separator: " ").count }
-        let total = meeting.segments.reduce(0) { $0 + $1.text.split(separator: " ").count }
-        return total > 0 ? Int(Double(me) / Double(total) * 100) : nil
-    }
+    /// Me's share of the speaking time, for the talk-balance bar.
+    private var talkPercentMe: Int? { meeting.talkPercentMe }
 
     // MARK: - Receipts + bookmarks
 

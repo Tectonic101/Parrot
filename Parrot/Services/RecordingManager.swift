@@ -400,7 +400,8 @@ final class RecordingManager {
                 self?.callAnalysisEngine.ingest(
                     text: result.text,
                     at: result.endTime,
-                    source: result.source
+                    source: result.source,
+                    duration: result.endTime - result.startTime
                 )
             }
         }
@@ -819,12 +820,9 @@ final class RecordingManager {
 
         guard includeCoaching else { return }
 
-        // Coaching + follow-ups report, with the user's real talk balance.
-        let meWords = segments
-            .filter { $0.speakerLabel == "Me" }
-            .reduce(0) { $0 + $1.text.split(separator: " ").count }
-        let totalWords = segments.reduce(0) { $0 + $1.text.split(separator: " ").count }
-        let talkPercentMe = totalWords > 0 ? Int(Double(meWords) / Double(totalWords) * 100) : 0
+        // Coaching + follow-ups report, with the user's real talk balance
+        // (seconds of speech, the same number the live gauge and timeline show).
+        let talkPercentMe = meeting.talkPercentMe ?? 0
         do {
             let coaching = try await callAnalysisEngine.provider.coachingReport(
                 transcript: transcript,
