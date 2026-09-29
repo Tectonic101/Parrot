@@ -66,6 +66,10 @@ struct ParrotMain {
             MainActor.assumeIsolated { CopilotReplay.run(transcriptPath: args[i + 1], args: rest) }
             return
         }
+        if let i = args.firstIndex(of: "--store-upgrade-test"), i + 1 < args.count {
+            MainActor.assumeIsolated { StoreUpgradeTest.run(path: args[i + 1]) }
+            return
+        }
         if args.contains("--profile-test") {
             MainActor.assumeIsolated { ProfileTest.run() }
             return

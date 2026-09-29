@@ -1025,6 +1025,84 @@ enum ReportEval {
     }
 }
 
+/// `Parrot --store-upgrade-test <file.store>`: opens a store written by an
+/// older Parrot (a copy, never the live one) the way this version would.
+/// First read-only, like the MCP server before the app has run; then
+/// read-write with the Profiles 2.0 migration, using throwaway settings and
+/// a throwaway backup folder. Prints PASS/FAIL; exits non-zero on a FAIL.
+enum StoreUpgradeTest {
+    @MainActor
+    static func run(path: String) {
+        let fm = FileManager.default
+        let url = URL(fileURLWithPath: path)
+        var failures = 0
+        func check(_ name: String, _ ok: Bool) { print((ok ? "PASS " : "FAIL ") + name); if !ok { failures += 1 } }
+        let schema = Schema([Meeting.self, TranscriptSegment.self, CallInsight.self, CallProfile.self, SpeakerProfile.self])
+
+        // 1. Read-only, on a copy (SQLite keeps -wal/-shm beside the file).
+        let ro = url.deletingLastPathComponent().appendingPathComponent("readonly-" + url.lastPathComponent)
+        for suffix in ["", "-wal", "-shm"] {
+            let from = URL(fileURLWithPath: path + suffix), to = URL(fileURLWithPath: ro.path + suffix)
+            try? fm.removeItem(at: to)
+            if fm.fileExists(atPath: from.path) { try? fm.copyItem(at: from, to: to) }
+        }
+        let readOnly = try? ModelContainer(for: schema, configurations: [ModelConfiguration(schema: schema, url: ro, allowsSave: false)])
+        let roMeetings = readOnly.flatMap { try? ModelContext($0).fetch(FetchDescriptor<Meeting>()) }
+        print("read-only open (MCP before the app runs): \(readOnly == nil ? "fails" : "opens"), meetings \(roMeetings?.count ?? -1)")
+
+        // 2. The app: read-write, then the migration.
+        guard let container = try? ModelContainer(for: schema, configurations: [ModelConfiguration(schema: schema, url: url)]) else {
+            check("store opens with the new schema", false); exit(1)
+        }
+        check("store opens with the new schema", true)
+        let ctx = ModelContext(container)
+        let before = (try? ctx.fetch(FetchDescriptor<CallProfile>())) ?? []
+        let meetingsBefore = (try? ctx.fetch(FetchDescriptor<Meeting>())) ?? []
+        let copilot = Dictionary(uniqueKeysWithValues: before.map { ($0.id, [$0.persona, $0.tone, $0.counterpart]
+            + [$0.kindsData.base64EncodedString(), $0.gaugesData.base64EncodedString(), "\($0.onDeviceOnly)"]) })
+        let summaries = Dictionary(uniqueKeysWithValues: meetingsBefore.map { ($0.id, $0.summary ?? "") })
+        check("old rows read with the new fields defaulted",
+              before.allSatisfy { $0.reportChoice == .classic && $0.sharedID == nil && $0.versions.isEmpty })
+
+        let suite = "parrot.test.store-upgrade"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        let backups = fm.temporaryDirectory.appendingPathComponent("parrot-upgrade-\(UUID().uuidString)")
+        defer { defaults.removePersistentDomain(forName: suite); try? fm.removeItem(at: backups) }
+        let store = ProfileStore()
+        store.defaults = defaults
+        store.backupFolder = backups
+        store.seedAndMigrateIfNeeded(context: ctx, knowledgeBase: KnowledgeBaseService(persistent: false))
+
+        let after = (try? ctx.fetch(FetchDescriptor<CallProfile>())) ?? []
+        check("migration ran and the screen is due", defaults.bool(forKey: ProfileStore.migrationDoneKey) && store.showProfiles2Screen)
+        check("a backup per profile", ((try? fm.contentsOfDirectory(atPath: backups.path))?.count ?? 0) == before.count)
+        check("Copilot fields unchanged on every old profile", before.allSatisfy { p in
+            let now = [p.persona, p.tone, p.counterpart, p.kindsData.base64EncodedString(), p.gaugesData.base64EncodedString(), "\(p.onDeviceOnly)"]
+            return copilot[p.id] == now || (p.isBuiltIn && !p.isUserModified) })
+        check("tuned built-ins keep their Copilot settings exactly",
+              before.filter { $0.isBuiltIn && $0.isUserModified }.allSatisfy { p in
+                  copilot[p.id] == [p.persona, p.tone, p.counterpart, p.kindsData.base64EncodedString(),
+                                    p.gaugesData.base64EncodedString(), "\(p.onDeviceOnly)"] })
+        check("new built-ins added", after.count >= before.count && after.contains { $0.name == "Investor pitch" })
+        check("meetings untouched", ((try? ctx.fetch(FetchDescriptor<Meeting>())) ?? []).allSatisfy {
+            summaries[$0.id] == ($0.summary ?? "") && $0.reportTemplateData == nil })
+        for p in after.sorted(by: { $0.sortOrder < $1.sortOrder }) {
+            print("  \(p.name) | \(p.isBuiltIn ? "built-in" : "yours")\(p.isUserModified ? ", tuned" : "") | report \(p.reportChoiceRaw)"
+                  + (p.reportOfferPending ? " + offer" : "") + " | versions \(p.versions.count)")
+        }
+
+        // 3. It stuck: a fresh container on the same file sees the new state.
+        let choices = Dictionary(uniqueKeysWithValues: after.map { ($0.id, $0.reportChoiceRaw) })
+        let reopened = (try? ModelContainer(for: schema, configurations: [ModelConfiguration(schema: schema, url: url)]))
+            .flatMap { try? ModelContext($0).fetch(FetchDescriptor<CallProfile>()) } ?? []
+        check("the migration is saved to disk", !reopened.isEmpty
+              && reopened.allSatisfy { choices[$0.id] == $0.reportChoiceRaw && $0.sharedID != nil })
+        print(failures == 0 ? "ALL PASS" : "FAILURES: \(failures)")
+        exit(failures == 0 ? 0 : 1)
+    }
+}
+
 /// Dev only: Ask Parrot against the user's REAL meetings, read-only, for
 /// testing answer quality. Run from the signed bundle (the sandbox gives it
 /// the container): questions come from a file, one per line; a blank line
