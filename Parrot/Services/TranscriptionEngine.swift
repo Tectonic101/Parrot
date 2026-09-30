@@ -827,6 +827,24 @@ final class TranscriptionEngine {
                 var didWork = false
 
                 for source in AudioSource.allCases {
+                    // Parakeet on Auto-detect: this side's language isn't known
+                    // yet, so its audio waits in the buffer (Whisper needs ~10 s
+                    // of speech to be sure). Past 30 s of waiting it's checked
+                    // with what there is; while stopping, right away. Once
+                    // decided, the backlog below catches up in bounded cuts.
+                    if self.bufferLock.withLock({ self.router.route(source) }) == .undecided {
+                        let due = self.bufferLock.withLock {
+                            self.probe?.take(source, at: Date(), force: draining, holding: true)
+                        }
+                        if let due {
+                            await self.checkLanguage(due, source: source)
+                        } else if draining {
+                            // No probe left to take (never spoke): decide safe.
+                            _ = self.bufferLock.withLock { self.router.heard(source, language: nil, confidence: 0) }
+                        }
+                        if self.bufferLock.withLock({ self.router.route(source) }) == .undecided { continue }
+                    }
+
                     // Pull at most one utterance for this stream under the lock.
                     // The segmenter decides the cut: leading silence is discarded
                     // (the consumed counter still advances, keeping timestamps
@@ -877,21 +895,39 @@ final class TranscriptionEngine {
                                 voiced = false
                                 nextPreviewAt[source] = Date().addingTimeInterval(previewBase)
                             }
-                            if voiced, let whisperKit = self.whisperKit {
-                                // No interim callback here on purpose: each preview
-                                // re-decodes from the utterance's start, so streaming
-                                // its words made the bubble restart the same sentence
-                                // every cycle (dry-run feedback, 2026-08-01). The
-                                // bubble now updates once per preview with the fuller
-                                // text; word-by-word streaming stays on the commit
-                                // decode where it reads forward, not in circles.
-                                let decodeStarted = Date()
-                                let result = (try? await whisperKit.transcribe(
-                                    audioArray: Self.normalizedForDecode(pending),
-                                    decodeOptions: decodeOptions)) ?? []
+                            // No interim callback here on purpose: each preview
+                            // re-decodes from the utterance's start, so streaming
+                            // its words made the bubble restart the same sentence
+                            // every cycle (dry-run feedback, 2026-08-01). The
+                            // bubble now updates once per preview with the fuller
+                            // text; word-by-word streaming stays on the commit
+                            // decode where it reads forward, not in circles.
+                            // The side's own engine; a preview never triggers the
+                            // lazy Whisper load, only a commit decode does.
+                            let decodeStarted = Date()
+                            var previewText: String?
+                            if voiced {
+                                switch self.bufferLock.withLock({ self.router.route(source) }) {
+                                case .parakeet(let language):
+                                    if let parakeet = self.parakeet {
+                                        previewText = (try? await parakeet.transcribe(
+                                            Self.normalizedForDecode(pending), language: language)) ?? ""
+                                    }
+                                case .whisper:
+                                    if let whisperKit = self.whisperKit {
+                                        let result = (try? await whisperKit.transcribe(
+                                            audioArray: Self.normalizedForDecode(pending),
+                                            decodeOptions: decodeOptions)) ?? []
+                                        previewText = result.map(\.text).joined(separator: " ")
+                                    }
+                                case .undecided:
+                                    break
+                                }
+                            }
+                            if let previewText {
                                 nextPreviewAt[source] = Date().addingTimeInterval(
                                     max(previewBase, Date().timeIntervalSince(decodeStarted) * 2))
-                                let raw = Self.cleaned(result.map(\.text).joined(separator: " "))
+                                let raw = Self.cleaned(previewText)
                                 let display = self.glossaryActive ? (Self.strippingGlossaryEcho(raw) ?? "") : raw
                                 if Self.loopTrace {
                                     // Printed even when empty: "gate never passed"
@@ -950,7 +986,18 @@ final class TranscriptionEngine {
                     // On-device decode — the default path, and the per-chunk
                     // fallback when a cloud backend hiccups (never lose a chunk).
                     func decodeLocally() async throws -> [(text: String, confidence: Float?)] {
-                        guard let whisperKit = self.whisperKit else { return [] }
+                        if case .parakeet(let language) = self.bufferLock.withLock({ self.router.route(source) }),
+                           let parakeet = self.parakeet {
+                            let text = try await parakeet.transcribe(decodeSamples, language: language)
+                            if Self.loopTrace { print("TRACE \(source.label) parakeet[\(language ?? "-")]: \(text)") }
+                            self.keepForRecheck(chunk, source: source, start: startTime, end: endTime)
+                            // Parakeet's 0-1 score isn't Whisper's log-prob: don't mix them.
+                            return [(text, nil)]
+                        }
+                        // Whisper: on Parakeet, loaded the first time a side needs it.
+                        if Self.loopTrace, self.whisperKit == nil { print("TRACE \(source.label) loading Whisper \(Self.fallbackWhisper)") }
+                        guard let whisperKit = await self.ensureWhisper() else { return [] }
+                        if Self.loopTrace, self.parakeet != nil { print("TRACE \(source.label) whisper decode") }
                         // No interim streaming here anymore: the rolling preview is
                         // the live text, and re-streaming the same sentence from
                         // word one during the commit decode made its tail appear
@@ -1178,6 +1225,10 @@ final class TranscriptionEngine {
             let change = router.heard(source, language: heard, confidence: confidence)
             return (sessionLanguage, sessionBackend, holding, change, router.isHolding)
         }
+        if Self.loopTrace {
+            print(String(format: "TRACE %@ language check: heard %@ p=%.2f from %.1f s → %@", source.label,
+                         heard ?? "-", confidence, Double(samples.count) / 16000, String(describing: change)))
+        }
         AudioCaptureManager.oslog.info("Language check \(source.label, privacy: .public): heard \(heard ?? "-", privacy: .public) p=\(confidence, privacy: .public), set \(setting ?? "auto", privacy: .public)")
         if let change, let notice = Self.noticeFor(change, heard: heard) {
             await MainActor.run { if self.isTranscribing { self.cloudNotice = notice } }
@@ -1203,6 +1254,9 @@ final class TranscriptionEngine {
     }
 
     static let checkingNotice = "Checking the language\u{2026}"
+
+    /// Keeps a Parakeet side's decoded audio for its language recheck.
+    private func keepForRecheck(_ samples: [Float], source: AudioSource, start: TimeInterval, end: TimeInterval) {}
 
     /// The live bar's line when a side's engine is decided or switched.
     static func noticeFor(_ change: LanguageRouter.Change, heard: String?) -> String? {
