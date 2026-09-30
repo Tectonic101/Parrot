@@ -373,6 +373,8 @@ enum HelpShots {
                 .environment(rm).environment(rm.profileStore).environment(AppSession())
                 .modelContainer(container))
 
+        shot("language-banner.png", size: .init(width: 1160, height: 64),
+             LanguageMismatchBanner(heard: "tr", current: "en").background(Theme.Colors.canvas))
         shot("live-screen.png", size: .init(width: 1160, height: 720),
              LiveRecordingView()
                 .environment(rm).environment(rm.profileStore).environment(AppSession())

@@ -49,6 +49,15 @@ struct LiveRecordingView: View {
 
             Divider()
 
+            if let heard = recordingManager.transcriptionEngine.languageMismatch {
+                LanguageMismatchBanner(
+                    heard: heard,
+                    current: TranscriptionLanguage.selected,
+                    onSwitch: { recordingManager.transcriptionEngine.switchLanguage(to: heard) },
+                    onKeep: { recordingManager.transcriptionEngine.dismissLanguageMismatch() })
+                Divider()
+            }
+
             // Copilot center stage + collapsible side panel. Drag the divider to
             // resize; without the copilot the side panel takes the whole stage.
             HSplitView {
@@ -275,19 +284,6 @@ struct LiveRecordingView: View {
                     .font(.appCaption2)
                     .foregroundStyle(Theme.Colors.warn)
                     .help("System audio isn't in the expected format, so speaker bleed may transcribe as \"Me\". Headphones avoid this entirely.")
-            }
-
-            if let heard = recordingManager.transcriptionEngine.languageMismatch {
-                let name = TranscriptionLanguage.name(heard)
-                Button {
-                    recordingManager.transcriptionEngine.switchLanguage(to: heard)
-                } label: {
-                    Label("sounds like \(name), switch to \(name)", systemImage: "character.bubble")
-                        .font(.appCaption2)
-                        .foregroundStyle(Theme.Colors.warn)
-                }
-                .buttonStyle(.plain)
-                .help("Parrot is set to \(TranscriptionLanguage.selected.map(TranscriptionLanguage.name) ?? "auto-detect"), but this call sounds like \(name). Wrong language turns speech into nonsense and leaves Copilot with nothing to read. Switching also sets \(name) for your next calls.")
             }
 
             if let notice = recordingManager.transcriptionEngine.cloudNotice {
@@ -707,5 +703,46 @@ struct AudioWaveformView: View {
             levels.append(newValue)
         }
         .animation(.linear(duration: 0.1), value: levels)
+    }
+}
+
+/// The wrong-language banner: across the call screen, with real buttons,
+/// so it can't be mistaken for a status label. A pinned English on a
+/// Turkish call turns every line into nonsense until it's switched.
+struct LanguageMismatchBanner: View {
+    let heard: String
+    /// The language the call is set to (nil = auto-detect).
+    let current: String?
+    var onSwitch: () -> Void = {}
+    var onKeep: () -> Void = {}
+
+    var body: some View {
+        let name = TranscriptionLanguage.name(heard)
+        let currentName = current.map(TranscriptionLanguage.name)
+        HStack(spacing: Theme.Metrics.controlGap) {
+            Image(systemName: "character.bubble")
+                .font(.appTitle3)
+                .foregroundStyle(Theme.Colors.warn)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(currentName.map { "This call sounds like \(name), but Parrot is set to \($0)." }
+                     ?? "This call sounds like \(name).")
+                    .font(Theme.Typography.cardTitle)
+                    .foregroundStyle(Theme.Colors.ink)
+                Text("Lines come out wrong until you switch. Your next calls use it too.")
+                    .font(Theme.Typography.secondary)
+                    .foregroundStyle(Theme.Colors.ink2)
+            }
+            Spacer(minLength: Theme.Metrics.controlGap)
+            if let currentName {
+                Button("Keep \(currentName)", action: onKeep)
+            }
+            // No Return shortcut: typing notes mid-call must never switch it.
+            Button("Switch to \(name)", action: onSwitch)
+                .buttonStyle(.borderedProminent)
+        }
+        .padding(.horizontal, Theme.Metrics.pad)
+        .padding(.vertical, Theme.Metrics.bannerInsetV)
+        .background(Theme.Colors.alertFill)
+        .overlay(alignment: .bottom) { Rectangle().fill(Theme.Colors.alertLine).frame(height: 1) }
     }
 }

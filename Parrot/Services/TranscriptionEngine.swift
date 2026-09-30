@@ -1191,6 +1191,13 @@ final class TranscriptionEngine {
         return streamer
     }
 
+    /// "Keep English": the banner goes, and the watch has already marked
+    /// that language as offered, so it won't come back this call.
+    @MainActor
+    func dismissLanguageMismatch() {
+        languageMismatch = nil
+    }
+
     /// Switch the running call to `code` and remember it for the next one.
     /// Deepgram sockets are pinned to a language at connect, so each healthy
     /// one is replaced; the old socket flushes its finals, then closes. The
