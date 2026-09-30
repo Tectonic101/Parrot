@@ -69,6 +69,10 @@ struct SettingsView: View {
     @State private var ollamaCustomModelEditing = false
     @AppStorage("transcriptionLanguage") private var transcriptionLanguage = "auto"
     @AppStorage("customVocabulary") private var customVocabulary = ""
+    /// Parakeet knows 25 European languages; a pin outside them rules it out.
+    private var parakeetFitsLanguage: Bool {
+        transcriptionLanguage == "auto" || LanguageRouter.parakeetLanguages.contains(transcriptionLanguage)
+    }
     @AppStorage("echoCancellationEnabled") private var echoCancellation = true
     @AppStorage(TranscriptionBackend.defaultsKey) private var transcriptionBackend = TranscriptionBackend.local.rawValue
     @AppStorage("polishAfterCall") private var polishAfterCall = false
@@ -323,7 +327,7 @@ struct SettingsView: View {
             SettingsCard(title: "Engine") {
                 SettingsBlockRow(title: "Engine", first: true) {
                     Picker("", selection: $transcriptionBackend) {
-                        Text("On-device Whisper — private, free").tag(TranscriptionBackend.local.rawValue)
+                        Text("On-device — private, free").tag(TranscriptionBackend.local.rawValue)
                         Text("Groq cloud — big-model accuracy, ~$0.08/hr").tag(TranscriptionBackend.groq.rawValue)
                         Text("Deepgram cloud — word-by-word streaming, ~$0.70/hr").tag(TranscriptionBackend.deepgram.rawValue)
                     }
@@ -354,6 +358,9 @@ struct SettingsView: View {
             SettingsCard(title: "On-Device Model") {
                 SettingsBlockRow(title: "Model", first: true) {
                     Picker("", selection: $selectedModel) {
+                        Text("Parakeet v3 — 0.5 GB, fastest, 25 European languages (no Turkish)")
+                            .tag(ParakeetTranscriber.modelID)
+                            .selectionDisabled(!parakeetFitsLanguage)
                         Text("Tiny — 40 MB, fastest").tag("tiny")
                         Text("Base — 140 MB, good balance").tag("base")
                         Text("Small — 460 MB, better accuracy").tag("small")
@@ -362,6 +369,12 @@ struct SettingsView: View {
                     }
                     .pickerStyle(.radioGroup)
                     .labelsHidden()
+
+                    if selectedModel == ParakeetTranscriber.modelID {
+                        Hint(parakeetFitsLanguage
+                             ? "Calls in other languages, like Turkish, switch to Whisper Large V3 Turbo Compressed on their own."
+                             : "Parakeet can't do \(TranscriptionLanguage.name(transcriptionLanguage)), so calls use Whisper.")
+                    }
                 }
                 SettingsRow {
                     HStack(spacing: 12) {
@@ -451,7 +464,7 @@ struct SettingsView: View {
             SettingsCard(title: "Custom Vocabulary") {
                 SettingsBlockRow(
                     title: "Names and jargon Whisper mis-hears",
-                    detail: "Comma or line separated (e.g. LaunchEase, Uygar).",
+                    detail: "Comma or line separated (e.g. LaunchEase, Uygar). Whisper only: Parakeet doesn't take a word list.",
                     first: true
                 ) {
                     TextEditor(text: $customVocabulary)
