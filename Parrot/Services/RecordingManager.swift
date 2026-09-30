@@ -405,6 +405,12 @@ final class RecordingManager {
             }
         }
 
+        // A Parakeet side that turned out to be another language mid-call:
+        // its last stretch, re-done with Whisper, replaces what Parakeet wrote.
+        transcriptionEngine.onReplace = { [weak self] source, range, results in
+            Task { @MainActor in self?.replaceSegments(source: source, in: range, with: results) }
+        }
+
         // Live speaker labels reach the copilot as names, not "Them".
         callAnalysisEngine.speakerNames = { [weak self] in
             guard let meeting = self?.currentMeeting else { return [:] }
@@ -711,6 +717,16 @@ final class RecordingManager {
                 NSLog("Parrot: idle reminder notification failed, \(error.localizedDescription)")
             }
         }
+    }
+
+    /// A rewind: one side's lines in `range` came from the wrong model.
+    private func replaceSegments(source: AudioSource, in range: ClosedRange<TimeInterval>,
+                                 with results: [TranscriptionEngine.TranscriptionResult]) {
+        guard let modelContext, let meeting = currentMeeting else { return }
+        let ids = Set(meeting.segmentIDs(label: source.label, in: range))
+        for segment in meeting.segments where ids.contains(segment.id) { modelContext.delete(segment) }
+        results.forEach(addSegment)
+        try? modelContext.save()
     }
 
     private func addSegment(_ result: TranscriptionEngine.TranscriptionResult) {
@@ -1169,7 +1185,7 @@ enum RecordingError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .modelNotReady: "WhisperKit model is not loaded yet. Please wait."
+        case .modelNotReady: "The speech model is still loading. Please wait."
         }
     }
 }

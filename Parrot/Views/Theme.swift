@@ -51,6 +51,9 @@ enum Theme {
         static let warn = Color(nsColor: .systemOrange)
         /// Recording / destructive / failures.
         static let stop = Color(nsColor: .systemRed)
+        /// Something needs a decision now (the wrong-language banner).
+        static let alertFill = warn.opacity(0.14)
+        static let alertLine = warn.opacity(0.45)
 
         // Legacy semantic names — same tokens, kept so call sites read naturally.
         static let action = good
@@ -139,6 +142,8 @@ enum Theme {
         static let chatMaxWidth: CGFloat = 760
         /// Ask Parrot's "thinking" dots.
         static let thinkingDot: CGFloat = 5
+        /// A calendar's colour dot in the calendar picker.
+        static let calendarDot: CGFloat = 8
     }
 }
 

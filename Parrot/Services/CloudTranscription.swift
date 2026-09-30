@@ -22,7 +22,7 @@ enum TranscriptionBackend: String, CaseIterable {
 
     var label: String {
         switch self {
-        case .local: "On-device Whisper"
+        case .local: "On-device"
         case .groq: "Groq cloud"
         case .deepgram: "Deepgram cloud"
         }

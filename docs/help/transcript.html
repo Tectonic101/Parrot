@@ -36,11 +36,31 @@ bit, and the preview can flicker through a wrong language before the real
 sentence lands. If your calls are always in one language, set it explicitly in
 Settings → Transcription and everything gets steadier.</p>
 <p>A language you set is followed exactly, so a Turkish call with English
-picked comes out as English-sounding nonsense. Parrot listens to the first
-few seconds of speech on every call to catch this. If it hears a different
-language, the device bar at the top of the call screen shows <strong>sounds like Turkish, switch to
-Turkish</strong> (with whatever language it heard). Click it and the rest of
-the call is transcribed in that language, and so are your next calls.</p>
+picked comes out as English-sounding nonsense. Parrot checks each side of the
+call every half minute or so of speech to catch this, including a call that
+changes language halfway. If it hears a different language, a banner across
+the top of the call screen says <strong>This call sounds like Turkish, but
+Parrot is set to English</strong> (with whatever languages apply). Click
+<strong>Switch to Turkish</strong> and the rest of the call is transcribed in
+Turkish, and so are your next calls; <strong>Keep English</strong> closes it
+for this call.</p>
+<h2 id="parakeet">Parakeet and other languages</h2>
+<p>Parakeet v3 is the fastest on-device model, but it only knows 25 European
+languages (English, German, French, Spanish, Italian, Portuguese, Dutch,
+Russian, Ukrainian, Polish and others). Turkish, Arabic, Chinese, Japanese,
+Korean and Hindi aren't among them, and on those it doesn't stay quiet: it
+writes European-looking nonsense.</p>
+<p>So with Parakeet and the language on auto-detect, Parrot holds each side of
+the call for its first ten seconds or so of speech, checks the language, then
+sends it to Parakeet or, for anything else, to Whisper. Your first lines appear
+a few seconds later than usual while it checks; the bar says <strong>Checking
+the language</strong>. Whisper is only loaded when a call needs it. If a side
+switches language later, Parrot notices within about a minute, moves that side
+to Whisper and redoes its last stretch. A language you pick by hand is used as
+is: pick one Parakeet doesn't know and the call uses Whisper.</p>
+<p>Quickest of all: pick the <strong>Call language</strong> on the dashboard,
+under Start recording, before you hit record. With nothing to detect, the call
+gets the right engine from the first word.</p>
 <p>Using Deepgram? Its auto-detect only knows English, Spanish, French,
 German, Hindi, Russian, Portuguese, Japanese, Italian and Dutch. For Turkish,
 Arabic, Chinese or Korean calls, pick the language by name.</p>
@@ -53,7 +73,7 @@ Custom vocabulary, separated by commas. Parrot whispers them to the model on
 every pass so it spells them right.</p>
 
 <h2>Cloud engines, if you want them</h2>
-<p>On-device Whisper is the default and needs no account. If you prefer, you
+<p>On-device transcription is the default and needs no account. If you prefer, you
 can transcribe through Groq or stream through Deepgram with your own API keys
 in Settings → Transcription. If a cloud engine hiccups mid-call, Parrot
 quietly falls back to the on-device model for the affected part, so a flaky

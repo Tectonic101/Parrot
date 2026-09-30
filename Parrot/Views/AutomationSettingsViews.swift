@@ -121,8 +121,28 @@ struct CalendarCard: View {
     @AppStorage(CalendarService.useDetailsKey) private var useDetails = false
     @AppStorage(CalendarService.remindersKey) private var reminders = false
     @State private var connecting = false
+    @State private var choices: [CalendarService.Choice] = []
+    @State private var excluded: Set<String> = []
 
     private var calendar: CalendarService { recordingManager.calendar }
+
+    private struct Account: Identifiable {
+        var name: String
+        var calendars: [CalendarService.Choice]
+        var id: String { name }
+    }
+
+    /// The Mac's calendars by account, in the order the picker shows them.
+    private var accounts: [Account] {
+        Dictionary(grouping: choices, by: \.account)
+            .map { Account(name: $0.key, calendars: $0.value) }
+            .sorted { $0.name < $1.name }
+    }
+
+    private func reloadChoices() {
+        choices = calendar.calendarChoices()
+        excluded = calendar.excluded
+    }
 
     var body: some View {
         SettingsCard(title: "Calendar",
@@ -160,9 +180,44 @@ struct CalendarCard: View {
                     detail: "A notification a minute before a meeting with guests or a video link starts.",
                     isOn: $reminders
                 )
+                if !choices.isEmpty {
+                    SettingsBlockRow(
+                        title: "Calendars Parrot reads",
+                        detail: "Untick a calendar to leave its events out, like a shared team calendar or events found in Mail. Invites you haven't answered are always left out."
+                    ) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            ForEach(accounts) { account in
+                                Text(account.name.isEmpty ? "On this Mac" : account.name)
+                                    .font(Theme.Typography.caption)
+                                    .foregroundStyle(Theme.Colors.ink3)
+                                ForEach(account.calendars) { choice in
+                                    Toggle(isOn: Binding(
+                                        get: { !excluded.contains(choice.id) },
+                                        set: { reads in
+                                            calendar.setReads(choice.id, reads)
+                                            excluded = calendar.excluded
+                                        }
+                                    )) {
+                                        HStack(spacing: 6) {
+                                            Circle()
+                                                .fill(choice.color.map { Color(cgColor: $0) } ?? Theme.Colors.ink3)
+                                                .frame(width: Theme.Metrics.calendarDot, height: Theme.Metrics.calendarDot)
+                                            Text(choice.title).font(Theme.Typography.body)
+                                        }
+                                    }
+                                    .toggleStyle(.checkbox)
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
-        .onAppear { calendar.refreshAccess() }
+        .onAppear {
+            calendar.refreshAccess()
+            reloadChoices()
+        }
+        .onChange(of: calendar.isConnected) { reloadChoices() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             calendar.refreshAccess()
         }
