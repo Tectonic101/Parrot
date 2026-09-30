@@ -8,7 +8,7 @@ import Security
 enum ProfileTest {
     private static var failures = 0
 
-    private static func check(_ name: String, _ cond: @autoclosure () -> Bool) {
+    static func check(_ name: String, _ cond: @autoclosure () -> Bool) {
         if cond() { print("PASS \(name)") } else { print("FAIL \(name)"); failures += 1 }
     }
 
@@ -101,6 +101,9 @@ enum ProfileTest {
         testOllamaService()
         testOllamaInstaller()
         testOnboardingModel()
+        testLanguageRouter()
+        testLanguageProbe()
+        testEngineRecommendation()
         print(failures == 0 ? "ALL PASS" : "FAILURES: \(failures)")
         exit(failures == 0 ? 0 : 1)
     }
