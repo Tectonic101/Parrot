@@ -65,6 +65,10 @@ final class Meeting {
     /// Moments the user marked (JSON [Bookmark]); see `bookmarks`.
     /// Defaulted → old rows migrate.
     var bookmarksData: Data? = nil
+    /// Live nudges from this call (JSON [Nudge]); see `nudges`. Defaulted → old rows migrate.
+    var nudgesData: Data? = nil
+    /// The Copilot's gauges after each pass (JSON MoodTimeline); see `moodTimeline`.
+    var moodTimelineData: Data? = nil
 
     /// People on the calendar invite this call matched (JSON [Attendee]).
     /// Defaulted → old rows migrate.
@@ -182,6 +186,10 @@ final class Meeting {
         return (try? JSONDecoder().decode([ProfileKind].self, from: data)) ?? []
     }
 
+    /// Me's share of the speaking time, nil when nobody spoke. Seconds, not
+    /// words: the same number as the live talk balance and the tone timeline.
+    var talkPercentMe: Int? { ToneTimeline.talkPercentMe(ToneTimeline.spans(segments)) }
+
     var aiUsage: AIUsage? {
         guard let data = aiUsageData else { return nil }
         return try? JSONDecoder().decode(AIUsage.self, from: data)
@@ -241,6 +249,26 @@ final class Meeting {
             bookmarksData = newValue.isEmpty
                 ? nil
                 : try? JSONEncoder().encode(newValue.sorted { $0.time < $1.time })
+        }
+    }
+
+    /// Live nudges, time-sorted (see `nudgesData`).
+    var nudges: [Nudge] {
+        get {
+            guard let data = nudgesData else { return [] }
+            return ((try? JSONDecoder().decode([Nudge].self, from: data)) ?? []).sorted { $0.time < $1.time }
+        }
+        set {
+            nudgesData = newValue.isEmpty ? nil : try? JSONEncoder().encode(newValue.sorted { $0.time < $1.time })
+        }
+    }
+
+    /// Gauge history for the report's tone timeline (see `moodTimelineData`).
+    var moodTimeline: MoodTimeline? {
+        get { moodTimelineData.flatMap { try? JSONDecoder().decode(MoodTimeline.self, from: $0) } }
+        set {
+            guard let newValue, !newValue.snapshots.isEmpty else { moodTimelineData = nil; return }
+            moodTimelineData = try? JSONEncoder().encode(newValue)
         }
     }
 

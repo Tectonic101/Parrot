@@ -109,6 +109,15 @@ enum ProfileTest {
         testParakeetDoubt()
         testRewindRange()
         testImportRoute()
+        testNudgeModels()
+        testNudgeRules()
+        testToneTimeline()
+        testTalkSeconds()
+        testNudgeCopilotRules()
+        testNudgeLimiter()
+        testCopilotFlags()
+        testNudgeSession()
+        testNudgeReplay()
         print(failures == 0 ? "ALL PASS" : "FAILURES: \(failures)")
         exit(failures == 0 ? 0 : 1)
     }
@@ -1302,7 +1311,9 @@ enum ProfileTest {
         let rm = RecordingManager(memory: MeetingMemory(directory: nil), chats: AskChatStore(directory: nil), provider: recorder)
         rm.attachForHarness(modelContext: context)
         func add(_ title: String, _ text: String, onDeviceOnly: Bool) {
-            let m = Meeting(title: title, date: .now.addingTimeInterval(-3600))
+            // An hour ago, but never before midnight: "today" must include it
+            // (this failed every night between 00:00 and 01:00).
+            let m = Meeting(title: title, date: max(Calendar.current.startOfDay(for: .now), .now.addingTimeInterval(-3600)))
             m.status = .done
             m.onDeviceOnly = onDeviceOnly
             context.insert(m)
@@ -1653,7 +1664,7 @@ enum ProfileTest {
         engine.seedForSnapshot(
             profile: nil,
             insights: [Insight(kindKey: "blocker", title: "t", detail: "d", callTime: 0, source: nil)],
-            sentiment: [:], read: nil, meCharacters: 0, themCharacters: 0)
+            sentiment: [:], read: nil, meSeconds: 0, themSeconds: 0)
         engine.setPaused(true)
         check("pause flips status", engine.isPaused && engine.status == .paused)
         check("pause keeps cards", engine.insights.count == 1)
@@ -2104,7 +2115,7 @@ enum ProfileTest {
         check("no marked section without bookmarks", !noMarks.contains("<marked>"))
         let coachContent = ClaudeAnalysisProvider.coachingUserContent(
             transcript: "x", talkPercentMe: 40, instructions: "", counterpart: "Sam")
-        check("coaching content talk balance", coachContent.contains("you spoke roughly 40% of the words, Sam 60%."))
+        check("coaching content talk balance", coachContent.contains("you spoke roughly 40% of the speaking time, Sam 60%."))
     }
 
     @MainActor
