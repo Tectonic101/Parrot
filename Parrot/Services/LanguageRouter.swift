@@ -29,7 +29,9 @@ struct LanguageRouter: Equatable {
     ]
     /// 0.24.2's bar: real calls scored 0.93-1.00 on 10 s of speech.
     static let sure: Float = 0.8
-    static let recheckEvery: TimeInterval = 60
+    /// Short enough that a call switching to Turkish is caught in about 30 s
+    /// of speech, well inside the 90 s of audio kept for the redo.
+    static let recheckEvery: TimeInterval = 30
 
     private(set) var routes: [AudioSource: Route]
     private var sinceCheck: [AudioSource: TimeInterval] = [:]
@@ -160,13 +162,14 @@ struct LanguageProbe {
 }
 
 /// 0.24.2's "sounds like Turkish, switch to Turkish" banner, kept up all
-/// call: each side is checked again after every minute of its speech, so a
+/// call: each side is checked again after every 30 s of its speech, so a
 /// call that changes language is caught too. A language already offered or
 /// used in this call is never offered again, so a bilingual call (you in
 /// English, them in Turkish) can't bounce the banner between the two. Pure.
 struct MismatchWatch {
-    /// A side's speech between checks: a minute at 16 kHz.
-    static let recheckAfter = 60 * 16000
+    /// Speech to let pass before gathering again: 20 s here plus the 10 s the
+    /// probe then gathers = a check every 30 s of a side's speech.
+    static let recheckAfter = 20 * 16000
     static let unsureRetries = 3
 
     private(set) var used: Set<String>

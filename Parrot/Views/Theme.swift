@@ -139,6 +139,8 @@ enum Theme {
         static let chatMaxWidth: CGFloat = 760
         /// Ask Parrot's "thinking" dots.
         static let thinkingDot: CGFloat = 5
+        /// A calendar's colour dot in the calendar picker.
+        static let calendarDot: CGFloat = 8
     }
 }
 

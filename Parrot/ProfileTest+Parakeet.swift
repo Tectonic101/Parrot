@@ -31,11 +31,11 @@ extension ProfileTest {
 
         var recheck = R(parakeet: true, pinned: nil)
         _ = recheck.heard(.them, language: "en", confidence: 0.99)
-        check("recheck: not before 60 s of speech", !recheck.decoded(.them, seconds: 40))
-        check("recheck: due at 60 s", recheck.decoded(.them, seconds: 25))
+        check("recheck: not before 30 s of speech", !recheck.decoded(.them, seconds: 20))
+        check("recheck: due at 30 s", recheck.decoded(.them, seconds: 12))
         check("recheck: still English → stays", recheck.heard(.them, language: "en", confidence: 0.97) == nil
               && recheck.route(.them) == .parakeet(language: "en"))
-        check("recheck: counter restarts after a check", !recheck.decoded(.them, seconds: 30))
+        check("recheck: counter restarts after a check", !recheck.decoded(.them, seconds: 20))
         check("recheck: Turkish now → switch", recheck.heard(.them, language: "tr", confidence: 0.9) == .switchedToWhisper(.them))
         check("recheck: unsure Turkish doesn't switch", {
             var r = R(parakeet: true, pinned: nil)
@@ -76,18 +76,18 @@ extension ProfileTest {
               && warn.add(Array(repeating: 0.1, count: LanguageProbe.full), voiced: true, from: .me, at: t0, holding: false) != nil)
         var later = LanguageProbe()
         _ = later.add(Array(repeating: 0.1, count: LanguageProbe.full), voiced: true, from: .them, at: t0, holding: false)
-        later.rearm(.them, skipping: 16000 * 60)
+        later.rearm(.them, skipping: MismatchWatch.recheckAfter)
         var gathered = 0
-        for _ in 0..<60 { if later.add(second, voiced: true, from: .them, at: t0, holding: false) != nil { gathered += 1 } }
-        check("probe: a minute of speech passes before the next check", gathered == 0)
+        for _ in 0..<20 { if later.add(second, voiced: true, from: .them, at: t0, holding: false) != nil { gathered += 1 } }
+        check("probe: 20 s of speech passes before gathering again", gathered == 0)
         var fired = false
         for _ in 0..<10 { if later.add(second, voiced: true, from: .them, at: t0, holding: false) != nil { fired = true } }
-        check("probe: then the next 10 s is checked", fired)
+        check("probe: then the next 10 s is checked (30 s apart in all)", fired)
     }
 
     static func testMismatchWatch() {
         var pinned = MismatchWatch(setting: "en")
-        check("watch: a side that matches waits a minute", pinned.heard(.them, mismatch: nil, confidence: 0.95) == (nil, MismatchWatch.recheckAfter))
+        check("watch: a side that matches waits 30 s of speech", pinned.heard(.them, mismatch: nil, confidence: 0.95) == (nil, MismatchWatch.recheckAfter))
         check("watch: Turkish later in the call is offered", pinned.heard(.them, mismatch: "tr", confidence: 0.99).offer == "tr")
         check("watch: the same offer isn't repeated", pinned.heard(.them, mismatch: "tr", confidence: 0.99).offer == nil)
         pinned.switched(to: "tr")
@@ -95,7 +95,7 @@ extension ProfileTest {
         var quiet = MismatchWatch(setting: "en")
         check("watch: unsure looks again right away", quiet.heard(.me, mismatch: nil, confidence: 0.5).recheckAfter == 0
               && quiet.heard(.me, mismatch: nil, confidence: 0.5).recheckAfter == 0)
-        check("watch: after a few unsure looks, wait a minute", quiet.heard(.me, mismatch: nil, confidence: 0.5).recheckAfter == MismatchWatch.recheckAfter)
+        check("watch: after a few unsure looks, wait 30 s", quiet.heard(.me, mismatch: nil, confidence: 0.5).recheckAfter == MismatchWatch.recheckAfter)
     }
 
     static func testEngineRecommendation() {
