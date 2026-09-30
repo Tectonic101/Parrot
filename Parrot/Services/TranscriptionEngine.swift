@@ -286,9 +286,16 @@ final class TranscriptionEngine {
         case "large-v3-turbo": "Large V3 Turbo"
         case "large-v3-v20240930_626MB": "Large V3 Turbo Compressed"
         case "tiny", "base", "small", "medium": modelName.capitalized
+        case ParakeetTranscriber.modelID: ParakeetTranscriber.displayName
         default: modelName
         }
     }
+
+    nonisolated static func isParakeet(_ modelName: String) -> Bool { modelName == ParakeetTranscriber.modelID }
+    /// The Whisper a Parakeet call switches to for other languages.
+    nonisolated static let fallbackWhisper = "large-v3-v20240930_626MB"
+    /// Whisper's language check while Parakeet is the model.
+    nonisolated static let detectorModel = "tiny"
 
     /// The on-disk folder for a model, if already downloaded. WhisperKit's repo
     /// spells variants inconsistently ('_' vs '-' between segments), hence the
