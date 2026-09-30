@@ -27,6 +27,14 @@ final class TranscriptionEngine {
     /// Set per recording: the call is on-device only (see CloudGate).
     var forceLocal = false
     private var whisperKit: WhisperKit?
+    /// The model the user picked (a Whisper tag or `ParakeetTranscriber.modelID`).
+    @ObservationIgnored private(set) var currentModel = ""
+    /// Loaded when Parakeet is the model; `whisperKit` then stays nil until a
+    /// side of a call needs Whisper (see `ensureWhisper`).
+    @ObservationIgnored private var parakeet: ParakeetTranscriber?
+    /// Whisper Tiny, only for "which language is this?" while on Parakeet.
+    @ObservationIgnored private var tinyDetector: WhisperKit?
+    @ObservationIgnored private var whisperLoad: Task<WhisperKit?, Never>?
     /// Silero voice-activity model (FluidAudio, on-device), the last gate
     /// before every decode. Whisper narrates noise ("so", "What can I do?"
     /// from an idle room), and no loudness rule tells quiet speech from room
@@ -162,39 +170,38 @@ final class TranscriptionEngine {
     private func performLoad(_ modelName: String, generation: Int) async {
         isReady = false
         loadingModelName = Self.displayName(for: modelName)
-        do {
-            let resolvedModelName = Self.hubVariant(for: modelName)
-            let modelFolder: URL
-            if let localFolder = Self.localModelFolder(for: modelName) {
-                modelFolder = localFolder
-            } else {
-                modelState = .downloading(progress: 0)
-                modelFolder = try await Self.withStallTimeout(seconds: 60) { tick in
-                    try await WhisperKit.download(variant: resolvedModelName) { progress in
-                        let fraction = min(max(progress.fractionCompleted, 0), 1)
-                        tick(fraction)
-                        Task { @MainActor [weak self] in
-                            guard let self, self.loadGeneration == generation,
-                                  case .downloading(let current) = self.modelState else { return }
-                            self.modelState = .downloading(progress: max(current, fraction))
-                        }
-                    }
-                }
+        currentModel = modelName
+        // Download progress lands on the main actor, for this load only.
+        let progress: @Sendable (Double) -> Void = { [weak self] fraction in
+            Task { @MainActor [weak self] in
+                guard let self, self.loadGeneration == generation,
+                      case .downloading(let current) = self.modelState else { return }
+                self.modelState = .downloading(progress: max(current, fraction))
             }
-
+        }
+        do {
+            if Self.isParakeet(modelName) {
+                modelState = ParakeetTranscriber.isDownloaded ? .loading : .downloading(progress: 0)
+                let parakeet = try await ParakeetTranscriber.load(progress: progress)
+                // No detector just means every side goes to Whisper: safe.
+                let detector = try? await Self.makeWhisperKit(Self.detectorModel)
+                guard loadGeneration == generation else { return }
+                self.parakeet = parakeet
+                tinyDetector = detector
+                whisperKit = nil   // loaded again only when a call needs it
+                modelState = .ready
+                isReady = true
+                Task { await self.loadSpeechDetector() }
+                Task.detached(priority: .utility) { await Self.prepareFallback() }
+                return
+            }
+            if Self.localModelFolder(for: modelName) == nil { modelState = .downloading(progress: 0) }
+            let kit = try await Self.makeWhisperKit(modelName, loading: { @MainActor [weak self] in
+                if let self, self.loadGeneration == generation { self.modelState = .loading }
+            }, progress: progress)
             guard loadGeneration == generation else { return }
-            modelState = .loading
-            let config = WhisperKitConfig(
-                model: resolvedModelName,
-                modelFolder: modelFolder.path,
-                verbose: false,
-                logLevel: .none,
-                prewarm: true,
-                load: true,
-                download: false
-            )
-            let kit = try await Self.withTimeout(seconds: 300) { try await WhisperKit(config) }
-            guard loadGeneration == generation else { return }
+            parakeet = nil
+            tinyDetector = nil
             whisperKit = kit
             modelState = .ready
             isReady = true
@@ -205,6 +212,65 @@ final class TranscriptionEngine {
             modelState = .error(error.localizedDescription)
             isReady = false
         }
+    }
+
+    /// Download (if missing) and load one WhisperKit model. `loading` runs
+    /// once the files are there, before the (possibly long) Core ML load.
+    nonisolated static func makeWhisperKit(_ modelName: String,
+                                           loading: (@Sendable () async -> Void)? = nil,
+                                           progress: (@Sendable (Double) -> Void)? = nil) async throws -> WhisperKit {
+        let resolvedModelName = hubVariant(for: modelName)
+        let modelFolder: URL
+        if let localFolder = localModelFolder(for: modelName) {
+            modelFolder = localFolder
+        } else {
+            modelFolder = try await withStallTimeout(seconds: 60) { tick in
+                try await WhisperKit.download(variant: resolvedModelName) { download in
+                    let fraction = min(max(download.fractionCompleted, 0), 1)
+                    tick(fraction)
+                    progress?(fraction)
+                }
+            }
+        }
+        await loading?()
+        let config = WhisperKitConfig(
+            model: resolvedModelName,
+            modelFolder: modelFolder.path,
+            verbose: false,
+            logLevel: .none,
+            prewarm: true,
+            load: true,
+            download: false
+        )
+        return try await withTimeout(seconds: 300) { try await WhisperKit(config) }
+    }
+
+    /// What answers "which language is this?": Tiny while Parakeet is the
+    /// model, else the loaded Whisper (English-only models can't tell).
+    private var languageDetector: WhisperKit? { parakeet != nil ? tinyDetector : whisperKit }
+
+    /// The Whisper to decode with. On Parakeet it's the fallback, loaded the
+    /// first time a side of a call needs it (seconds, thanks to
+    /// `prepareFallback`); that side's audio waits in its buffer meanwhile.
+    // ponytail: only the transcription loop and imports call this, never both at once.
+    func ensureWhisper() async -> WhisperKit? {
+        if let whisperKit { return whisperKit }
+        if let whisperLoad { return await whisperLoad.value }
+        let load = Task { try? await Self.makeWhisperKit(Self.fallbackWhisper) }
+        whisperLoad = load
+        let kit = await load.value
+        whisperKit = kit
+        whisperLoad = nil
+        return kit
+    }
+
+    /// Download the fallback and load it once, so macOS prepares it for the
+    /// Neural Engine now (the first load can take minutes) instead of mid-call.
+    nonisolated static func prepareFallback() async {
+        let key = "parakeetFallbackPrepared"
+        guard UserDefaults.standard.string(forKey: key) != fallbackWhisper else { return }
+        guard (try? await makeWhisperKit(fallbackWhisper)) != nil else { return }
+        UserDefaults.standard.set(fallbackWhisper, forKey: key)
     }
 
     /// Loads the voice-activity model (~1 MB from Hugging Face the first
@@ -1260,6 +1326,8 @@ final class TranscriptionEngine {
         isTranscribing = false          // flips the loop into drain mode
         await transcriptionTask?.value  // deliberately not cancel(): let it finish
         transcriptionTask = nil
+        // On Parakeet, a Whisper loaded for this call goes again: memory back.
+        if parakeet != nil { whisperKit = nil }
 
         bufferLock.withLock {
             audioBuffers = [.me: [], .them: []]

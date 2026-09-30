@@ -1169,7 +1169,7 @@ enum RecordingError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .modelNotReady: "WhisperKit model is not loaded yet. Please wait."
+        case .modelNotReady: "The speech model is still loading. Please wait."
         }
     }
 }
