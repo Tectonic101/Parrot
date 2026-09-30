@@ -30,9 +30,14 @@ final class ParakeetTranscriber: Sendable {
     /// One utterance (16 kHz mono). `language`: the ISO code heard, which
     /// Parakeet uses as a script filter (Latin, Cyrillic, Greek); nil = any.
     func transcribe(_ samples: [Float], language: String?) async throws -> String {
+        try await transcribeScored(samples, language: language).text
+    }
+
+    /// The same, with Parakeet's own 0-1 confidence for the line.
+    func transcribeScored(_ samples: [Float], language: String?) async throws -> (text: String, confidence: Float) {
         var state = TdtDecoderState.make(decoderLayers: await manager.decoderLayerCount)
         let result = try await manager.transcribe(samples, decoderState: &state,
                                                   language: language.flatMap(Language.init(rawValue:)))
-        return result.text
+        return (result.text, result.confidence)
     }
 }

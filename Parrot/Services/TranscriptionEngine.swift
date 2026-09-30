@@ -744,7 +744,7 @@ final class TranscriptionEngine {
             probe = LanguageProbe()
         }
         kept = [:]
-        pendingRecheck = []
+        pendingRecheck = [:]
 
         if backend == .deepgram {
             if let key = APIKeyStore.load(account: TranscriptionBackend.deepgram.keychainAccount!), !key.isEmpty {
@@ -847,7 +847,9 @@ final class TranscriptionEngine {
                             continue
                         }
                     }
-                    if self.pendingRecheck.remove(source) != nil { await self.recheck(source, options: decodeOptions) }
+                    if let seconds = self.pendingRecheck.removeValue(forKey: source) {
+                        await self.recheck(source, seconds: seconds, options: decodeOptions)
+                    }
 
                     // Pull at most one utterance for this stream under the lock.
                     // The segmenter decides the cut: leading silence is discarded
@@ -992,9 +994,10 @@ final class TranscriptionEngine {
                     func decodeLocally() async throws -> [(text: String, confidence: Float?)] {
                         if case .parakeet(let language) = self.bufferLock.withLock({ self.router.route(source) }),
                            let parakeet = self.parakeet {
-                            let text = try await parakeet.transcribe(decodeSamples, language: language)
-                            if Self.loopTrace { print("TRACE \(source.label) parakeet[\(language ?? "-")]: \(text)") }
-                            self.keepForRecheck(chunk, source: source, start: startTime, end: endTime)
+                            let (text, score) = try await parakeet.transcribeScored(decodeSamples, language: language)
+                            if Self.loopTrace { print(String(format: "TRACE %@ parakeet[%@] conf=%.3f: %@", source.label, language ?? "-", score, text)) }
+                            self.keepForRecheck(chunk, source: source, start: startTime, end: endTime,
+                                                doubtful: Self.parakeetDoubts(score, seconds: endTime - startTime))
                             // Parakeet's 0-1 score isn't Whisper's log-prob: don't mix them.
                             return [(text, nil)]
                         }
@@ -1261,9 +1264,18 @@ final class TranscriptionEngine {
     /// A Parakeet side's lines since its last clean language check, with
     /// their audio, so a late switch to Whisper can re-do them. Loop-only.
     @ObservationIgnored private var kept: [AudioSource: [(start: TimeInterval, end: TimeInterval, audio: [Float])]] = [:]
-    /// Sides due a language recheck; the loop runs it before that side's
-    /// next cut, so a recheck never races the decode it might redo.
-    @ObservationIgnored private var pendingRecheck: Set<AudioSource> = []
+    /// Sides due a language recheck, and how many seconds of their latest
+    /// audio to check; the loop runs it before that side's next cut, so a
+    /// recheck never races the decode it might redo.
+    @ObservationIgnored private var pendingRecheck: [AudioSource: Int] = [:]
+
+    /// Parakeet was unsure of a line it wrote: on English its lines scored
+    /// 0.98-1.00, on Turkish (which it can't do) 0.10-0.71. That only asks
+    /// for a language check on the spot. It never drops or hides a line.
+    nonisolated static let parakeetDoubt: Float = 0.9
+    nonisolated static func parakeetDoubts(_ score: Float, seconds: TimeInterval) -> Bool {
+        score < parakeetDoubt && seconds >= 1.5
+    }
     /// Replace one side's lines in a time range (a rewind), same hop as onSegment.
     var onReplace: ((AudioSource, ClosedRange<TimeInterval>, [TranscriptionResult]) -> Void)?
 
@@ -1272,21 +1284,29 @@ final class TranscriptionEngine {
         Array(clips.joined().suffix(seconds * 16000))
     }
 
-    /// Keeps a Parakeet side's decoded audio for its language recheck.
-    private func keepForRecheck(_ samples: [Float], source: AudioSource, start: TimeInterval, end: TimeInterval) {
+    /// Keeps a Parakeet side's decoded audio for its language recheck: every
+    /// 30 s of speech on its latest 10 s, or at once on the latest 5 s when
+    /// Parakeet doubted the line (a side switching to Turkish, most likely).
+    private func keepForRecheck(_ samples: [Float], source: AudioSource, start: TimeInterval, end: TimeInterval,
+                                doubtful: Bool = false) {
         kept[source, default: []].append((start, end, samples))
         // ponytail: 90 s cap per side, so failed checks can't grow memory.
         while (kept[source]?.reduce(0) { $0 + $1.audio.count } ?? 0) > 90 * 16000 { kept[source]?.removeFirst() }
-        if bufferLock.withLock({ router.decoded(source, seconds: end - start) }) { pendingRecheck.insert(source) }
+        let due = bufferLock.withLock { router.decoded(source, seconds: end - start) }
+        if doubtful {
+            pendingRecheck[source] = 5
+        } else if due, pendingRecheck[source] == nil {
+            pendingRecheck[source] = 10
+        }
     }
 
     /// Ask again what language a Parakeet side speaks. Still one of
     /// Parakeet's: those lines are verified. Something else (Turkish mid-call):
     /// the side is on Whisper from now on, and its lines since the last clean
     /// check are re-done with Whisper and replaced.
-    private func recheck(_ source: AudioSource, options: DecodingOptions) async {
+    private func recheck(_ source: AudioSource, seconds: Int, options: DecodingOptions) async {
         let clips = kept[source] ?? []
-        await checkLanguage(Self.recheckAudio(clips.map(\.audio), seconds: 10), source: source)
+        await checkLanguage(Self.recheckAudio(clips.map(\.audio), seconds: seconds), source: source)
         guard bufferLock.withLock({ router.route(source) }) == .whisper else {
             kept[source] = []
             return
@@ -1570,7 +1590,7 @@ final class TranscriptionEngine {
         if parakeet != nil { whisperKit = nil }
         bufferLock.withLock { probe = nil }
         kept = [:]
-        pendingRecheck = []
+        pendingRecheck = [:]
 
         bufferLock.withLock {
             audioBuffers = [.me: [], .them: []]

@@ -88,11 +88,11 @@ enum TranscribeTest {
 }
 
 extension TranscribeTest {
-    /// `--language-test <audio> [modelFolder]`: the live language check on a
+    /// `--language-test <audio> [modelFolder] [seconds]`: the live language check on a
     /// saved track. Gathers voiced buffers the way `appendAudio` does, then
     /// prints what Whisper hears and what the live bar would offer for an
     /// English pin and for Deepgram on auto.
-    static func detectLanguage(audioPath: String, modelFolder: String) {
+    static func detectLanguage(audioPath: String, modelFolder: String, seconds: Int? = nil) {
         let sem = DispatchSemaphore(value: 0)
         Task {
             do {
@@ -102,7 +102,8 @@ extension TranscribeTest {
                 let audio = AudioProcessor.convertBufferToArray(
                     buffer: try AudioProcessor.loadAudio(fromPath: audioPath))
                 var probe: [Float] = []
-                for start in stride(from: 0, to: audio.count, by: 1600) where probe.count < TranscriptionEngine.languageProbeSamples {
+                let wanted = seconds.map { $0 * 16000 } ?? TranscriptionEngine.languageProbeSamples
+                for start in stride(from: 0, to: audio.count, by: 1600) where probe.count < wanted {
                     let buffer = audio[start ..< min(start + 1600, audio.count)]
                     let energy = buffer.reduce(into: Float(0)) { $0 += abs($1) } / Float(buffer.count)
                     if energy > TranscriptionEngine.Segmenter.silenceFloor { probe.append(contentsOf: buffer) }
@@ -514,7 +515,8 @@ enum LiveLoopTest {
             while i < samples.count {
                 let end = min(i + slice, samples.count)
                 engine.appendAudio(pcmBuffer(Array(samples[i..<end])), source: .them)
-                if let heard = engine.languageMismatch {
+                // LIVELOOP_NOSWITCH=1 leaves the banner unanswered (keeps a pin).
+                if let heard = engine.languageMismatch, ProcessInfo.processInfo.environment["LIVELOOP_NOSWITCH"] == nil {
                     print(String(format: "liveloop-test: at %.1fs heard %@, switching", Double(end) / 16000, heard))
                     engine.switchLanguage(to: heard)
                 }

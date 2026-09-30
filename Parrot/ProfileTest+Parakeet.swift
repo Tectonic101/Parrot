@@ -58,11 +58,21 @@ extension ProfileTest {
         let second = [Float](repeating: 0.1, count: 16000)
         var p = LanguageProbe()
         var ready: [Float]?
-        for i in 0..<9 { ready = p.add(second, voiced: true, from: .them, at: t0.addingTimeInterval(Double(i)), holding: true) }
-        check("probe: not ready at 9 s", ready == nil)
-        ready = p.add(second, voiced: true, from: .them, at: t0.addingTimeInterval(9), holding: true)
-        check("probe: ready at 10 s of speech", ready?.count == LanguageProbe.full)
-        check("probe: once per track", p.add(second, voiced: true, from: .them, at: t0.addingTimeInterval(10), holding: true) == nil)
+        for i in 0..<4 { ready = p.add(second, voiced: true, from: .them, at: t0.addingTimeInterval(Double(i)), holding: true) }
+        check("probe: a held side isn't ready at 4 s", ready == nil)
+        ready = p.add(second, voiced: true, from: .them, at: t0.addingTimeInterval(4), holding: true)
+        check("probe: a held side's first look is at 5 s", ready?.count == LanguageProbe.quick)
+        check("probe: once per track", p.add(second, voiced: true, from: .them, at: t0.addingTimeInterval(5), holding: true) == nil)
+        p.rearm(.them)
+        var again: [Float]?
+        for i in 0..<9 { again = p.add(second, voiced: true, from: .them, at: t0.addingTimeInterval(Double(6 + i)), holding: true) }
+        check("probe: the second look gathers the full 10 s", again == nil
+              && p.add(second, voiced: true, from: .them, at: t0.addingTimeInterval(15), holding: true)?.count == LanguageProbe.full)
+        var banner = LanguageProbe()
+        var early: [Float]?
+        for i in 0..<9 { early = banner.add(second, voiced: true, from: .me, at: t0.addingTimeInterval(Double(i)), holding: false) }
+        check("probe: the banner check keeps 0.24.2's 10 s", early == nil
+              && banner.add(second, voiced: true, from: .me, at: t0.addingTimeInterval(9), holding: false)?.count == LanguageProbe.full)
         check("probe: silence doesn't count", p.add(second, voiced: false, from: .me, at: t0, holding: true) == nil)
         _ = p.add(second, voiced: true, from: .me, at: t0, holding: true)
         check("probe: other track is separate", p.take(.me, at: t0.addingTimeInterval(5), force: false, holding: true) == nil)
@@ -115,6 +125,13 @@ extension ProfileTest {
         check("recommend: reads past call languages", Set(langs) == ["tr", "en"])
         check("parakeet: model id is recognised", TranscriptionEngine.isParakeet("parakeet-v3") && !TranscriptionEngine.isParakeet("base"))
         check("parakeet: display name", TranscriptionEngine.displayName(for: "parakeet-v3") == "Parakeet v3")
+    }
+
+    static func testParakeetDoubt() {
+        typealias T = TranscriptionEngine
+        check("doubt: a sure English line asks nothing", !T.parakeetDoubts(0.98, seconds: 4))
+        check("doubt: a Turkish-looking line asks for a check", T.parakeetDoubts(0.55, seconds: 4))
+        check("doubt: a one-word line is too short to judge", !T.parakeetDoubts(0.3, seconds: 0.8))
     }
 
     static func testRouteNotices() {

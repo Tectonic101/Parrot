@@ -108,11 +108,16 @@ struct LanguageRouter: Equatable {
 struct LanguageProbe {
     /// 10 s of speech at 16 kHz (`TranscriptionEngine.languageProbeSamples`).
     static let full = 10 * 16000
+    /// A held side's first look: 5 s. Tiny scored p >= 0.95 on 3 s of clean
+    /// or phone-quality speech; an unsure first look gathers the full 10 s.
+    static let quick = 5 * 16000
     static let wait: TimeInterval = 30
 
     private(set) var gathered: [AudioSource: [Float]] = [:]
     private var firstSpeechAt: [AudioSource: Date] = [:]
     private var done: Set<AudioSource> = []
+    /// Sides that had their quick first look; the next gather is the full 10 s.
+    private var looked: Set<AudioSource> = []
     /// Voiced samples to let pass before gathering again (see `rearm`).
     private var skip: [AudioSource: Int] = [:]
 
@@ -128,7 +133,8 @@ struct LanguageProbe {
             if firstSpeechAt[source] == nil { firstSpeechAt[source] = now }
             gathered[source, default: []].append(contentsOf: samples)
         }
-        let full = (gathered[source]?.count ?? 0) >= Self.full
+        let needed = holding && !looked.contains(source) ? Self.quick : Self.full
+        let full = (gathered[source]?.count ?? 0) >= needed
         let waited = holding && firstSpeechAt[source].map { now.timeIntervalSince($0) >= Self.wait } == true
         return full || waited ? finish(source) : nil
     }
@@ -155,6 +161,7 @@ struct LanguageProbe {
 
     private mutating func finish(_ source: AudioSource) -> [Float] {
         done.insert(source)
+        looked.insert(source)
         let audio = gathered[source] ?? []
         gathered[source] = nil
         return audio

@@ -106,6 +106,7 @@ enum ProfileTest {
         testMismatchWatch()
         testEngineRecommendation()
         testRouteNotices()
+        testParakeetDoubt()
         testRewindRange()
         testImportRoute()
         print(failures == 0 ? "ALL PASS" : "FAILURES: \(failures)")
