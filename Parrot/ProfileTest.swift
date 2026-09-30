@@ -103,6 +103,7 @@ enum ProfileTest {
         testOnboardingModel()
         testLanguageRouter()
         testLanguageProbe()
+        testMismatchWatch()
         testEngineRecommendation()
         testRouteNotices()
         testRewindRange()

@@ -15,6 +15,9 @@ struct LanguageRouter: Equatable {
 
     enum Change: Equatable {
         case decided(AudioSource, Route)
+        /// Unsure the first time (a quiet side, or the speakers leaking into
+        /// the mic): keep holding and check the next stretch once more.
+        case retry(AudioSource)
         /// A Parakeet side now hears a language Parakeet doesn't know: its
         /// lines since the last clean check get re-done with Whisper.
         case switchedToWhisper(AudioSource)
@@ -33,6 +36,7 @@ struct LanguageRouter: Equatable {
     /// Parakeet on Auto-detect: the only case the router decides anything.
     /// A pinned language is the user's call; 0.24.2's banner handles a wrong pin.
     private let auto: Bool
+    private var retried: Set<AudioSource> = []
 
     init(parakeet: Bool, pinned: String?) {
         auto = parakeet && pinned == nil
@@ -56,6 +60,12 @@ struct LanguageRouter: Equatable {
         let sure = confidence >= Self.sure
         switch route(source) {
         case .undecided:
+            // An answer that isn't sure gets one more look before Whisper;
+            // no answer at all (no detector) has nothing to retry.
+            if language != nil, !sure, !retried.contains(source) {
+                retried.insert(source)
+                return .retry(source)
+            }
             let decided: Route = supported && sure ? .parakeet(language: language) : .whisper
             routes[source] = decided
             sinceCheck[source] = 0
@@ -89,8 +99,8 @@ struct LanguageRouter: Equatable {
 }
 
 /// 0.24.2's language probe, per side: voiced audio gathered until there's
-/// enough to ask Whisper what language it is. Each side is checked once
-/// (plus `rearm`). While the router holds a side, it's also checked 30 s
+/// enough to ask Whisper what language it is. Each side is checked once,
+/// then again whenever it's re-armed (optionally after skipping some speech). While the router holds a side, it's also checked 30 s
 /// after its first speech with whatever there is, so a side that barely
 /// talks still gets transcribed.
 struct LanguageProbe {
@@ -101,11 +111,17 @@ struct LanguageProbe {
     private(set) var gathered: [AudioSource: [Float]] = [:]
     private var firstSpeechAt: [AudioSource: Date] = [:]
     private var done: Set<AudioSource> = []
+    /// Voiced samples to let pass before gathering again (see `rearm`).
+    private var skip: [AudioSource: Int] = [:]
 
     /// Feed one buffer; returns the probe when this side is ready to check.
     mutating func add(_ samples: [Float], voiced: Bool, from source: AudioSource,
                       at now: Date, holding: Bool) -> [Float]? {
         guard !done.contains(source) else { return nil }
+        if voiced, let left = skip[source], left > 0 {
+            skip[source] = left - samples.count
+            return nil
+        }
         if voiced {
             if firstSpeechAt[source] == nil { firstSpeechAt[source] = now }
             gathered[source, default: []].append(contentsOf: samples)
@@ -126,11 +142,13 @@ struct LanguageProbe {
         return finish(source)
     }
 
-    /// An inconclusive answer: gather this side again.
-    mutating func rearm(_ source: AudioSource) {
+    /// Gather this side again, once `skipping` more voiced samples have
+    /// passed (0 = right away: an unsure answer; a minute: the next check).
+    mutating func rearm(_ source: AudioSource, skipping: Int = 0) {
         done.remove(source)
         gathered[source] = nil
         firstSpeechAt[source] = nil
+        skip[source] = skipping
     }
 
     private mutating func finish(_ source: AudioSource) -> [Float] {
@@ -138,5 +156,45 @@ struct LanguageProbe {
         let audio = gathered[source] ?? []
         gathered[source] = nil
         return audio
+    }
+}
+
+/// 0.24.2's "sounds like Turkish, switch to Turkish" banner, kept up all
+/// call: each side is checked again after every minute of its speech, so a
+/// call that changes language is caught too. A language already offered or
+/// used in this call is never offered again, so a bilingual call (you in
+/// English, them in Turkish) can't bounce the banner between the two. Pure.
+struct MismatchWatch {
+    /// A side's speech between checks: a minute at 16 kHz.
+    static let recheckAfter = 60 * 16000
+    static let unsureRetries = 3
+
+    private(set) var used: Set<String>
+    private var unsure: [AudioSource: Int] = [:]
+
+    init(setting: String?) {
+        used = setting.map { [$0] } ?? []
+    }
+
+    /// One check's result. `mismatch`: 0.24.2's rule, what it would offer.
+    /// Returns the language to offer (if any) and how much more of this
+    /// side's speech to let pass before checking it again.
+    mutating func heard(_ source: AudioSource, mismatch: String?, confidence: Float) -> (offer: String?, recheckAfter: Int) {
+        if let mismatch {
+            guard !used.contains(mismatch) else { return (nil, Self.recheckAfter) }
+            used.insert(mismatch)
+            return (mismatch, Self.recheckAfter)
+        }
+        // Unsure: look again right away, a few times, before waiting a minute.
+        if confidence < 0.6 {
+            unsure[source, default: 0] += 1
+            if unsure[source, default: 0] < Self.unsureRetries { return (nil, 0) }
+        }
+        return (nil, Self.recheckAfter)
+    }
+
+    /// The call switched language (the banner, or by hand).
+    mutating func switched(to code: String) {
+        used.insert(code)
     }
 }

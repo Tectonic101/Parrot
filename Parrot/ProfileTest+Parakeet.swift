@@ -11,8 +11,14 @@ extension ProfileTest {
         check("router: both decided → no hold", !auto.isHolding)
 
         var unsure = R(parakeet: true, pinned: nil)
-        check("router: unsure → Whisper", unsure.heard(.me, language: "en", confidence: 0.5) == .decided(.me, .whisper))
-        check("router: no answer → Whisper", unsure.heard(.them, language: nil, confidence: 0) == .decided(.them, .whisper))
+        check("router: unsure once → one more look", unsure.heard(.me, language: "en", confidence: 0.5) == .retry(.me) && unsure.isHolding)
+        check("router: unsure twice → Whisper", unsure.heard(.me, language: "en", confidence: 0.55) == .decided(.me, .whisper))
+        check("router: no answer → Whisper, nothing to retry", unsure.heard(.them, language: nil, confidence: 0) == .decided(.them, .whisper))
+        var second = R(parakeet: true, pinned: nil)
+        _ = second.heard(.me, language: "en", confidence: 0.52)
+        check("router: sure on the second look → Parakeet", second.heard(.me, language: "en", confidence: 0.95) == .decided(.me, .parakeet(language: "en")))
+        var turkish = R(parakeet: true, pinned: nil)
+        check("router: sure Turkish needs no retry", turkish.heard(.them, language: "tr", confidence: 0.99) == .decided(.them, .whisper))
 
         let german = R(parakeet: true, pinned: "de")
         check("router: pinned German → Parakeet, no hold", german.route(.me) == .parakeet(language: "de") && !german.isHolding)
@@ -68,6 +74,28 @@ extension ProfileTest {
         warn.rearm(.me)
         check("probe: rearm gathers again", warn.take(.me, at: t0, force: false) == nil
               && warn.add(Array(repeating: 0.1, count: LanguageProbe.full), voiced: true, from: .me, at: t0, holding: false) != nil)
+        var later = LanguageProbe()
+        _ = later.add(Array(repeating: 0.1, count: LanguageProbe.full), voiced: true, from: .them, at: t0, holding: false)
+        later.rearm(.them, skipping: 16000 * 60)
+        var gathered = 0
+        for _ in 0..<60 { if later.add(second, voiced: true, from: .them, at: t0, holding: false) != nil { gathered += 1 } }
+        check("probe: a minute of speech passes before the next check", gathered == 0)
+        var fired = false
+        for _ in 0..<10 { if later.add(second, voiced: true, from: .them, at: t0, holding: false) != nil { fired = true } }
+        check("probe: then the next 10 s is checked", fired)
+    }
+
+    static func testMismatchWatch() {
+        var pinned = MismatchWatch(setting: "en")
+        check("watch: a side that matches waits a minute", pinned.heard(.them, mismatch: nil, confidence: 0.95) == (nil, MismatchWatch.recheckAfter))
+        check("watch: Turkish later in the call is offered", pinned.heard(.them, mismatch: "tr", confidence: 0.99).offer == "tr")
+        check("watch: the same offer isn't repeated", pinned.heard(.them, mismatch: "tr", confidence: 0.99).offer == nil)
+        pinned.switched(to: "tr")
+        check("watch: a bilingual call can't bounce back to English", pinned.heard(.me, mismatch: "en", confidence: 0.99).offer == nil)
+        var quiet = MismatchWatch(setting: "en")
+        check("watch: unsure looks again right away", quiet.heard(.me, mismatch: nil, confidence: 0.5).recheckAfter == 0
+              && quiet.heard(.me, mismatch: nil, confidence: 0.5).recheckAfter == 0)
+        check("watch: after a few unsure looks, wait a minute", quiet.heard(.me, mismatch: nil, confidence: 0.5).recheckAfter == MismatchWatch.recheckAfter)
     }
 
     static func testEngineRecommendation() {

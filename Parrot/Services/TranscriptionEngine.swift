@@ -83,10 +83,8 @@ final class TranscriptionEngine {
     /// Which engine each side uses (Parakeet on Auto-detect holds each side
     /// until its check). Guarded by `bufferLock`.
     private var router = LanguageRouter(parakeet: false, pinned: nil)
-    private var languageChecks = 0
-    /// The mismatch banner looks at the first conclusive check only (0.24.2's
-    /// rule), so a bilingual call can't bounce it between two languages.
-    private var warningChecked = false
+    /// The mismatch banner, kept up all call (see `MismatchWatch`). Main actor.
+    @ObservationIgnored private var watch = MismatchWatch(setting: nil)
     /// Enough speech for Whisper to be sure: 10 s scored p ≥ 0.93 on 8 real
     /// tracks (Turkish and English, both sides), and warns twice as soon as 20.
     static let languageProbeSamples = 10 * 16000
@@ -739,8 +737,7 @@ final class TranscriptionEngine {
         // Resolve the user's transcription language ("auto"/nil = auto-detect).
         let language = TranscriptionLanguage.selected
         languageMismatch = nil
-        languageChecks = 0
-        warningChecked = false
+        watch = MismatchWatch(setting: language)
         deepgramKey = nil
         bufferLock.withLock {
             sessionLanguage = language
@@ -1193,6 +1190,7 @@ final class TranscriptionEngine {
     func switchLanguage(to code: String) {
         UserDefaults.standard.set(code, forKey: TranscriptionLanguage.defaultsKey)
         languageMismatch = nil
+        watch.switched(to: code)
         bufferLock.withLock {
             sessionLanguage = code
             router.switchLanguage(to: code)
@@ -1230,6 +1228,8 @@ final class TranscriptionEngine {
         let (setting, backend, holding, change, stillHolding) = bufferLock.withLock {
             let holding = router.route(source) == .undecided
             let change = router.heard(source, language: heard, confidence: confidence)
+            // Unsure while holding: this side gets one more stretch.
+            if case .retry = change { probe?.rearm(source) }
             return (sessionLanguage, sessionBackend, holding, change, router.isHolding)
         }
         if Self.loopTrace {
@@ -1243,20 +1243,16 @@ final class TranscriptionEngine {
             await MainActor.run { if self.cloudNotice == Self.checkingNotice { self.cloudNotice = nil } }
         }
         // A routing check on Auto isn't a warning check: Auto on this Mac
-        // transcribes any language, so there's nothing to offer.
-        guard !holding, let heard else { return }
+        // transcribes any language, so there's nothing to offer. The banner
+        // can only fire on a pinned language, or Deepgram on auto; only
+        // those keep checking every side all call.
+        guard !holding, let heard, setting != nil || backend == .deepgram else { return }
+        let mismatch = Self.languageMismatch(setting: setting, backend: backend, heard: heard, confidence: confidence)
         await MainActor.run {
-            guard self.isTranscribing, !self.warningChecked else { return }
-            if let mismatch = Self.languageMismatch(setting: setting, backend: backend,
-                                                     heard: heard, confidence: confidence) {
-                self.warningChecked = true
-                self.languageMismatch = mismatch
-            } else if confidence < 0.6 {
-                self.languageChecks += 1
-                if self.languageChecks < 3 { self.bufferLock.withLock { self.probe?.rearm(source) } }
-            } else {
-                self.warningChecked = true
-            }
+            guard self.isTranscribing else { return }
+            let (offer, recheckAfter) = self.watch.heard(source, mismatch: mismatch, confidence: confidence)
+            if let offer { self.languageMismatch = offer }
+            self.bufferLock.withLock { self.probe?.rearm(source, skipping: recheckAfter) }
         }
     }
 
