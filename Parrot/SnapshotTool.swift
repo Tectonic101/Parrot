@@ -493,6 +493,13 @@ enum LiveLoopTest {
 
             var emitted: [(text: String, start: TimeInterval, end: TimeInterval)] = []
             engine.onSegment = { r in emitted.append((r.text, r.startTime, r.endTime)) }
+            // A Parakeet rewind replaces lines, as RecordingManager does in the app.
+            // ponytail: the harness feeds one side only, so the range alone decides.
+            engine.onReplace = { _, range, results in
+                emitted.removeAll { range.contains($0.start) }
+                emitted += results.map { ($0.text, $0.startTime, $0.endTime) }
+                emitted.sort { $0.start < $1.start }
+            }
 
             let samples: [Float]
             do { samples = try loadSamples16k(path: audioPath) } catch {

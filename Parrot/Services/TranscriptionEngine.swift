@@ -746,6 +746,8 @@ final class TranscriptionEngine {
             sessionLanguage = language
             probe = LanguageProbe()
         }
+        kept = [:]
+        pendingRecheck = []
 
         if backend == .deepgram {
             if let key = APIKeyStore.load(account: TranscriptionBackend.deepgram.keychainAccount!), !key.isEmpty {
@@ -838,12 +840,17 @@ final class TranscriptionEngine {
                         }
                         if let due {
                             await self.checkLanguage(due, source: source)
-                        } else if draining {
-                            // No probe left to take (never spoke): decide safe.
-                            _ = self.bufferLock.withLock { self.router.heard(source, language: nil, confidence: 0) }
                         }
-                        if self.bufferLock.withLock({ self.router.route(source) }) == .undecided { continue }
+                        if self.bufferLock.withLock({ self.router.route(source) }) == .undecided {
+                            // Nothing to take while stopping means this side's
+                            // check is already running (the probe filled): wait
+                            // for its answer rather than guess. Draining never
+                            // sleeps on its own, so pace the wait here.
+                            if draining { try? await Task.sleep(for: .milliseconds(50)) }
+                            continue
+                        }
                     }
+                    if self.pendingRecheck.remove(source) != nil { await self.recheck(source, options: decodeOptions) }
 
                     // Pull at most one utterance for this stream under the lock.
                     // The segmenter decides the cut: leading silence is discarded
@@ -1255,8 +1262,58 @@ final class TranscriptionEngine {
 
     static let checkingNotice = "Checking the language\u{2026}"
 
+    /// A Parakeet side's lines since its last clean language check, with
+    /// their audio, so a late switch to Whisper can re-do them. Loop-only.
+    @ObservationIgnored private var kept: [AudioSource: [(start: TimeInterval, end: TimeInterval, audio: [Float])]] = [:]
+    /// Sides due a language recheck; the loop runs it before that side's
+    /// next cut, so a recheck never races the decode it might redo.
+    @ObservationIgnored private var pendingRecheck: Set<AudioSource> = []
+    /// Replace one side's lines in a time range (a rewind), same hop as onSegment.
+    var onReplace: ((AudioSource, ClosedRange<TimeInterval>, [TranscriptionResult]) -> Void)?
+
+    /// The latest `seconds` of a side's kept audio, for its recheck.
+    nonisolated static func recheckAudio(_ clips: [[Float]], seconds: Int) -> [Float] {
+        Array(clips.joined().suffix(seconds * 16000))
+    }
+
     /// Keeps a Parakeet side's decoded audio for its language recheck.
-    private func keepForRecheck(_ samples: [Float], source: AudioSource, start: TimeInterval, end: TimeInterval) {}
+    private func keepForRecheck(_ samples: [Float], source: AudioSource, start: TimeInterval, end: TimeInterval) {
+        kept[source, default: []].append((start, end, samples))
+        // ponytail: 90 s cap per side, so failed checks can't grow memory.
+        while (kept[source]?.reduce(0) { $0 + $1.audio.count } ?? 0) > 90 * 16000 { kept[source]?.removeFirst() }
+        if bufferLock.withLock({ router.decoded(source, seconds: end - start) }) { pendingRecheck.insert(source) }
+    }
+
+    /// Ask again what language a Parakeet side speaks. Still one of
+    /// Parakeet's: those lines are verified. Something else (Turkish mid-call):
+    /// the side is on Whisper from now on, and its lines since the last clean
+    /// check are re-done with Whisper and replaced.
+    private func recheck(_ source: AudioSource, options: DecodingOptions) async {
+        let clips = kept[source] ?? []
+        await checkLanguage(Self.recheckAudio(clips.map(\.audio), seconds: 10), source: source)
+        guard bufferLock.withLock({ router.route(source) }) == .whisper else {
+            kept[source] = []
+            return
+        }
+        kept[source] = nil
+        guard let first = clips.first, let last = clips.last, let whisper = await ensureWhisper() else { return }
+        var bare = options
+        bare.promptTokens = nil
+        bare.usePrefillPrompt = false
+        var redone: [TranscriptionResult] = []
+        for clip in clips {
+            let pieces = (try? await whisper.transcribe(audioArray: Self.normalizedForDecode(clip.audio),
+                                                        decodeOptions: bare)) ?? []
+            let text = Self.cleaned(pieces.map(\.text).joined(separator: " "))
+            if !text.isEmpty {
+                redone.append(TranscriptionResult(text: text, source: source, startTime: clip.start,
+                                                  endTime: clip.end, confidence: nil))
+            }
+        }
+        if Self.loopTrace { print("TRACE \(source.label) rewind \(clips.count) line(s), \(first.start)-\(last.end) s") }
+        let replacement = redone
+        await MainActor.run { self.onReplace?(source, first.start...last.end, replacement) }
+    }
 
     /// The live bar's line when a side's engine is decided or switched.
     static func noticeFor(_ change: LanguageRouter.Change, heard: String?) -> String? {
@@ -1436,6 +1493,8 @@ final class TranscriptionEngine {
         // On Parakeet, a Whisper loaded for this call goes again: memory back.
         if parakeet != nil { whisperKit = nil }
         bufferLock.withLock { probe = nil }
+        kept = [:]
+        pendingRecheck = []
 
         bufferLock.withLock {
             audioBuffers = [.me: [], .them: []]

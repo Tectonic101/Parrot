@@ -96,4 +96,16 @@ extension ProfileTest {
         check("notice: Parakeet decided → none", T.noticeFor(.decided(.me, .parakeet(language: "en")), heard: "en") == nil)
         check("notice: mid-call switch", T.noticeFor(.switchedToWhisper(.them), heard: "tr") == "Turkish heard: using Whisper for them from here")
     }
+
+    static func testRewindRange() {
+        let m = Meeting(title: "rewind")
+        let lines = [(10.0, "Them"), (40.0, "Them"), (40.0, "Me"), (95.0, "Them")].map { t, label in
+            TranscriptSegment(startTime: t, endTime: t + 3, text: "x", speakerLabel: label)
+        }
+        m.segments = lines
+        check("rewind: only that side, only that stretch", Set(m.segmentIDs(label: "Them", in: 30...90)) == [lines[1].id])
+        let clips: [[Float]] = [Array(repeating: 1, count: 16000 * 6), Array(repeating: 2, count: 16000 * 6)]
+        let audio = TranscriptionEngine.recheckAudio(clips, seconds: 10)
+        check("rewind: recheck uses the latest 10 s", audio.count == 16000 * 10 && audio.last == 2 && audio.first == 1)
+    }
 }

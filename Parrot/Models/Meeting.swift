@@ -225,6 +225,11 @@ final class Meeting {
         set { speakerNamesData = try? JSONEncoder().encode(newValue) }
     }
 
+    /// Lines from one side whose start falls in `range` (a rewind replaces them).
+    func segmentIDs(label: String, in range: ClosedRange<TimeInterval>) -> [UUID] {
+        segments.filter { $0.speakerLabel == label && range.contains($0.startTime) }.map(\.id)
+    }
+
     /// Marked moments, time-sorted (see `bookmarksData`).
     var bookmarks: [Bookmark] {
         get {
