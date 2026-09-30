@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="keywords" content="transcript, live, sentences, language, turkish, auto detect, custom vocabulary, glossary, names, spelling, typing bubble, delay">
+<meta name="keywords" content="transcript, live, sentences, language, turkish, auto detect, wrong language, switch language, deepgram language, custom vocabulary, glossary, names, spelling, typing bubble, delay">
 <title>The live transcript</title>
 <link rel="canonical" href="https://openparrot.app/help/transcript.html">
 <!-- The guide's home is openparrot.app/help. GitHub Pages sends visitors there; the in-app copy stays put. -->
@@ -35,6 +35,15 @@ handy for mixed-language calls but can occasionally guess wrong on a noisy
 bit, and the preview can flicker through a wrong language before the real
 sentence lands. If your calls are always in one language, set it explicitly in
 Settings → Transcription and everything gets steadier.</p>
+<p>A language you set is followed exactly, so a Turkish call with English
+picked comes out as English-sounding nonsense. Parrot listens to the first
+few seconds of speech on every call to catch this. If it hears a different
+language, the device bar at the top of the call screen shows <strong>sounds like Turkish, switch to
+Turkish</strong> (with whatever language it heard). Click it and the rest of
+the call is transcribed in that language, and so are your next calls.</p>
+<p>Using Deepgram? Its auto-detect only knows English, Spanish, French,
+German, Hindi, Russian, Portuguese, Japanese, Italian and Dutch. For Turkish,
+Arabic, Chinese or Korean calls, pick the language by name.</p>
 
 <h2>Teach it your words</h2>
 <p>Whisper has never met your company name. If the transcript keeps mangling

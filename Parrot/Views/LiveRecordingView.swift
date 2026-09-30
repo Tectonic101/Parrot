@@ -282,7 +282,7 @@ struct LiveRecordingView: View {
                 Button {
                     recordingManager.transcriptionEngine.switchLanguage(to: heard)
                 } label: {
-                    Label("sounds like \(name) — switch to \(name)", systemImage: "character.bubble")
+                    Label("sounds like \(name), switch to \(name)", systemImage: "character.bubble")
                         .font(.appCaption2)
                         .foregroundStyle(Theme.Colors.warn)
                 }
