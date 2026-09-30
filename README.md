@@ -55,6 +55,7 @@ An always-on assistant that watches the conversation and puts the right thing on
 - **Pinned cards** for objections and open questions. They stay on screen until you handle them, then resolve themselves.
 - **Next steps** captured the moment you promise them ("Promised by you").
 - **A live call score** from 0 to 100, a one-line coach, a mood read, and gauges like *Buying temp* or *You're talking*. Your talk share turns orange past 70%.
+- **Nudges when the call drifts.** A short tip over whatever app the call is in, for about ten seconds: *"They've gone quiet since you said 'the price goes up in January'."* It catches long silences, monologues, talking over them, short answers, speeding up and repeating yourself; with the Copilot on, also a mood shift, a question you didn't answer, and a call wrapping up with no next step. At most one every two minutes, and it's kept out of screen sharing. It reads timing and words, never emotion from anyone's voice. **Settings > Copilot > Live Nudges**.
 - **Brief it before the call.** A line or two on the dashboard ("Renewal call, legal wants to know where the data is stored") and it knows who you're talking to from the first second. Edit the brief mid-call from the *Briefed* card.
 - **You control what it spends.** Pace (Fast, Balanced, Relaxed for free tiers), how much conversation each request carries (2, 5 or 10 minutes), and a pause button on the call screen: while paused, nothing is sent and nothing is spent.
 - **Answers from your docs in about half a second** (optional, Claude mode): add a TypeSafe AI key and the matching excerpt shows as a *From your docs* card while Claude is still writing.
@@ -100,6 +101,7 @@ Tell Parrot what kind of call it is, and the profile decides what the copilot wa
 
 <p align="center"><img src=".github/readme/after.png" alt="A post-call report: summary, pain points, talk balance, objections handled and missed, what went well, what to improve, and commitments" width="480"></p>
 
+- **How the call went:** a timeline at the top of the report with your talk share against theirs minute by minute, the profile's main gauge over the call, and numbered moments (tips, turning points, your marks) with Play.
 - **Summary:** overview, pain points, key points, next steps.
 - **Receipts on every point.** Each bullet carries a time chip (`12:34`): click it for the exact quote, *Play from Here* or *Show in Transcript*. Chips are checked against the transcript on your Mac, and a promise nobody actually made is marked *unverified* instead of stated as fact.
 - **Moments you marked** during the call (the *Mark* button, or ⌃⌥M from any app) get their own card, and the report is written knowing they mattered.
@@ -124,6 +126,7 @@ Live cards and post-call reports can use different brains (say, Ollama live and 
 | Transcription | Why pick it | ~Cost per call hour (both sides) |
 |---|---|---|
 | **On-device Whisper** (default) | Private, offline, free. Five models from Tiny (40 MB) to Large V3 Turbo (1.6 GB). | Free |
+| **On-device Parakeet v3** | Private, offline, free, and the fastest. 25 European languages only (no Turkish): any other language on the call hands that side to Whisper, which loads only then. | Free |
 | **Groq** `whisper-large-v3-turbo` | Big-model accuracy, same latency as local. | ~$0.08 |
 | **Deepgram** Nova-3 | True streaming, words appear ~300 ms after they're spoken. | ~$0.70 ($0.58 with one language pinned) |
 
@@ -131,12 +134,12 @@ Cloud engines fall back to on-device automatically if anything fails mid-call. A
 
 ### 🌍 Your language, too
 
-Whisper auto-detects the language of the call, or you can pin one of 14 (English, Turkish, Spanish, German, French, Italian, Portuguese, Dutch, Russian, Arabic, Hindi, Chinese, Japanese, Korean). The copilot and the report answer in the language of the call. Documents work in most major languages, including Turkish, Dutch, Polish, Russian, Arabic, Hindi, Chinese, Japanese and Korean, and an English question can find the answer in a Turkish or Spanish document. For anything but English, pick Large V3 Turbo or Groq. If a call doesn't sound like the language you picked, Parrot notices in the first few seconds and offers a one-click switch. With Deepgram, pick Turkish, Arabic, Chinese or Korean by name: its auto-detect covers ten languages and skips those. A **custom vocabulary** list teaches Whisper your product and people names.
+Whisper auto-detects the language of the call, or you can pin one of 14 (English, Turkish, Spanish, German, French, Italian, Portuguese, Dutch, Russian, Arabic, Hindi, Chinese, Japanese, Korean). The copilot and the report answer in the language of the call. Documents work in most major languages, including Turkish, Dutch, Polish, Russian, Arabic, Hindi, Chinese, Japanese and Korean, and an English question can find the answer in a Turkish or Spanish document. For anything but English, pick Large V3 Turbo or Groq. Pick the call's language right under **Start recording**. If a call doesn't sound like the language you picked, a banner says so in the first few seconds with a one-click switch, and Parrot keeps listening every 30 seconds in case the call changes language. With Deepgram, pick Turkish, Arabic, Chinese or Korean by name: its auto-detect covers ten languages and skips those. A **custom vocabulary** list teaches Whisper your product and people names.
 
 ### 🧰 And all the everyday stuff
 
 - **Notices your calls.** When Zoom, Meet, Teams or FaceTime starts using the mic, Parrot asks *"Record it?"* (or records on its own, if you choose) and offers to stop when the call ends. It only sees that the mic is in use, never another app's audio. Dictation apps like Wispr Flow don't count as calls.
-- **Knows your calendar** (opt-in, read-only, local): meetings take their event's name and guest list, guests become one-click speaker names, and an event title like "Interview: Jane" picks the matching profile.
+- **Knows your calendar** (opt-in, read-only, local): meetings take their event's name and guest list, guests become one-click speaker names, and an event title like "Interview: Jane" picks the matching profile. Only your own events count (not invites you haven't answered), and you can untick calendars you don't want read.
 - **Opens at login**, if you like, so it's there for the first call of the day.
 - **Records system audio and your mic** as two tracks. On macOS 15+ it uses the audio-only System Audio permission (Core Audio taps); on macOS 14, ScreenCaptureKit. No virtual audio drivers.
 - **Echo cancellation** (SpeexDSP) so the other side doesn't leak into your mic on speakers. The mic reconnects by itself when AirPods die or switch mid-call.
@@ -159,7 +162,7 @@ This is a microphone-and-system-audio app, so you shouldn't have to take my word
 | Feature | Sends | To | When |
 |---|---|---|---|
 | Recording, on-device transcription, speaker detection, voiceprints, document index | Nothing | No one | Always local |
-| Model downloads | A download request | Hugging Face (Whisper, voice-detection and speaker-detection models); Apple (language model for Arabic, Indic and some Cyrillic documents) | Once, first use |
+| Model downloads | A download request | Hugging Face (Whisper, Parakeet, voice-detection and speaker-detection models); Apple (language model for Arabic, Indic and some Cyrillic documents) | Once, first use |
 | Update check | The app's version | GitHub Pages (Sparkle feed) | Once a day; can switch off auto-install |
 | Copilot on Claude or a custom server | Transcript text, matched document passages, profile instructions | Anthropic, or the server you picked | Only if you turn Copilot on |
 | TypeSafe doc answers | The question, a couple of lines of context, candidate document snippets | TypeSafe AI | Only with a TypeSafe key, Claude mode |
@@ -195,7 +198,7 @@ Found something that contradicts any of this? That's a security issue, see [SECU
    - **Balanced** (recommended): audio stays on your Mac, only text goes to Claude. Paste a key from [console.anthropic.com](https://console.anthropic.com) and press **Check key**.
    - **Cloud**: Deepgram writes the words live, Claude runs the Copilot. Both keys are checked before they're saved.
    - Or **Decide later**: a card on Home and **Settings > Copilot > Set up Copilot** bring you back.
-4. **Speech to text.** Parrot picks the Whisper model that fits your Mac's memory and starts the download right away. It carries on after you close the tour:
+4. **Speech to text.** Parrot picks the model that fits your Mac's memory and the languages you use, and starts the download right away. It carries on after you close the tour:
 
    | Model | Size | Good for |
    |---|---|---|
@@ -204,6 +207,7 @@ Found something that contradicts any of this? That's a security issue, see [SECU
    | Small | 460 MB | Better accuracy |
    | Large V3 Turbo Compressed | 626 MB | Near-best, low memory |
    | Large V3 Turbo | 1.6 GB | Best accuracy, and best for non-English calls. Picked on 12 GB and up |
+   | Parakeet v3 | 0.5 GB | Fastest, 25 European languages (no Turkish). Picked when all your languages are among them |
 
 5. **Use your meetings in Claude** (optional). The tour's last step connects Claude Desktop in one click; Cursor, Codex and Claude Code connect from **Claude & AI Apps** in the sidebar. It's the one part of Parrot that isn't private like the rest: what the app reads goes to its company under your account. The tour leaves it out if you picked Private.
 6. **Hit record** on your next call.
@@ -229,7 +233,7 @@ Want the tour again? **Help > Show Welcome Tour**.
 | What | How |
 |------|-----|
 | UI | SwiftUI, native macOS, Inter |
-| Speech-to-text (default) | [WhisperKit](https://github.com/argmaxinc/WhisperKit), on-device on the Neural Engine |
+| Speech-to-text (default) | [WhisperKit](https://github.com/argmaxinc/WhisperKit), on-device on the Neural Engine · Parakeet v3 via FluidAudio, on-device |
 | Speech-to-text (optional, your key) | Groq `whisper-large-v3-turbo` (HTTP chunks) · Deepgram Nova-3 (websocket streaming) |
 | Voice detection | Silero VAD (MIT) via FluidAudio, on-device: only clips with a voice in them reach Whisper, so an idle room stays blank |
 | Speaker detection | [FluidAudio](https://github.com/FluidInference/FluidAudio) (Apache-2.0), on-device pyannote-derived models (CC-BY-4.0) |
@@ -286,7 +290,7 @@ The easiest way to report anything: click the little ladybug in the bottom right
 ## Known issues (I'm working on it)
 
 - **Audio permissions reset on ad-hoc source builds.** Identity-less builds look like a new app every time. `make signing-help` shows two fixes. Downloaded release builds keep the grant across updates.
-- **Models need internet once.** Whisper, voice-detection and speaker-detection models download on first use, and macOS fetches a language model the first time you add an Arabic, Indic or (on some Macs) Cyrillic document. After that, everything runs offline.
+- **Models need internet once.** Whisper, Parakeet, voice-detection and speaker-detection models download on first use, and macOS fetches a language model the first time you add an Arabic, Indic or (on some Macs) Cyrillic document. After that, everything runs offline.
 - **Speaker detection isn't perfect.** Me vs Them is exact (separate tracks). Similar voices or heavy crosstalk on the other side can still get a line wrong; right-click it to reassign.
 - **Ask Parrot on a small local model.** With a small Ollama model (like gemma3:4b), answers that span many meetings can skip sources or mix up details. Answers about one meeting are fine, and Claude handles the broad ones well.
 - **Mic bleed on speakers.** Without headphones, a loud call can still leak into your mic now and then. Headphones fix it.
