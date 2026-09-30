@@ -40,6 +40,7 @@ enum ProfileTest {
         testQuietMic()
         testIdleReminder()
         testCopilotBudget()
+        testLanguageMismatch()
         testJevMatcher()
         testBriefCard()
         testDocExcerpt()
@@ -1581,6 +1582,20 @@ enum ProfileTest {
               RecordingManager.diarizedLabel(for: (25, 26), turns: turns) == "Speaker 2")
         check("diarize no turns gives nil",
               RecordingManager.diarizedLabel(for: (0, 1), turns: []) == nil)
+    }
+
+    /// The live "sounds like Turkish — switch" offer (2026-09-30: a Turkish
+    /// call pinned to English came out as 46 minutes of nonsense).
+    static func testLanguageMismatch() {
+        let m = TranscriptionEngine.languageMismatch
+        check("lang: Turkish call pinned to English → offer Turkish",
+              m("en", .deepgram, "tr", 0.99) == "tr")
+        check("lang: same language → quiet", m("tr", .deepgram, "tr", 0.99) == nil)
+        check("lang: unsure guess → quiet", m("en", .local, "tr", 0.3) == nil)
+        check("lang: Deepgram auto can't do Turkish → offer Turkish", m(nil, .deepgram, "tr", 0.99) == "tr")
+        check("lang: Deepgram auto covers Spanish → quiet", m(nil, .deepgram, "es", 0.99) == nil)
+        check("lang: Whisper auto handles Turkish → quiet", m(nil, .local, "tr", 0.99) == nil)
+        check("lang: never offer a language the picker lacks", m("en", .local, "sw", 0.99) == nil)
     }
 
     // The #20 budget controls: pace presets, the live context window, pause.

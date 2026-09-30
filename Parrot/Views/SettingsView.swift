@@ -427,29 +427,24 @@ struct SettingsView: View {
             SettingsCard(title: "Language") {
                 SettingsLabeledRow(
                     title: "Language",
-                    detail: "Applies to the next recording. Pick a language only if auto-detect keeps guessing wrong.",
+                    detail: "Set this to the language your calls are in. Parrot warns you during a call if it hears a different one.",
                     first: true
                 ) {
                     Picker("", selection: $transcriptionLanguage) {
                         Text("Auto-detect").tag("auto")
-                        Text("English").tag("en")
-                        Text("Turkish").tag("tr")
-                        Text("Spanish").tag("es")
-                        Text("German").tag("de")
-                        Text("French").tag("fr")
-                        Text("Italian").tag("it")
-                        Text("Portuguese").tag("pt")
-                        Text("Dutch").tag("nl")
-                        Text("Russian").tag("ru")
-                        Text("Arabic").tag("ar")
-                        Text("Chinese").tag("zh")
-                        Text("Japanese").tag("ja")
-                        Text("Korean").tag("ko")
-                        Text("Hindi").tag("hi")
+                        ForEach(TranscriptionLanguage.options, id: \.code) { Text($0.name).tag($0.code) }
                     }
                     .labelsHidden()
                     .pickerStyle(.menu)
                     .fixedSize()
+                }
+                if transcriptionBackend == TranscriptionBackend.deepgram.rawValue, transcriptionLanguage == "auto" {
+                    SettingsRow {
+                        Label("Deepgram's auto-detect doesn't cover Turkish, Arabic, Chinese or Korean. Pick the language for those calls.",
+                              systemImage: "exclamationmark.triangle.fill")
+                            .font(Theme.Typography.secondary)
+                            .foregroundStyle(Theme.Colors.warn)
+                    }
                 }
             }
 

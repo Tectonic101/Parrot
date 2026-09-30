@@ -277,6 +277,19 @@ struct LiveRecordingView: View {
                     .help("System audio isn't in the expected format, so speaker bleed may transcribe as \"Me\". Headphones avoid this entirely.")
             }
 
+            if let heard = recordingManager.transcriptionEngine.languageMismatch {
+                let name = TranscriptionLanguage.name(heard)
+                Button {
+                    recordingManager.transcriptionEngine.switchLanguage(to: heard)
+                } label: {
+                    Label("sounds like \(name) — switch to \(name)", systemImage: "character.bubble")
+                        .font(.appCaption2)
+                        .foregroundStyle(Theme.Colors.warn)
+                }
+                .buttonStyle(.plain)
+                .help("Parrot is set to \(TranscriptionLanguage.selected.map(TranscriptionLanguage.name) ?? "auto-detect"), but this call sounds like \(name). Wrong language turns speech into nonsense and leaves Copilot with nothing to read. Switching also sets \(name) for your next calls.")
+            }
+
             if let notice = recordingManager.transcriptionEngine.cloudNotice {
                 Label(notice, systemImage: "icloud.slash")
                     .font(.appCaption2)
