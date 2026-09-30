@@ -104,6 +104,7 @@ enum ProfileTest {
         testLanguageRouter()
         testLanguageProbe()
         testEngineRecommendation()
+        testRouteNotices()
         print(failures == 0 ? "ALL PASS" : "FAILURES: \(failures)")
         exit(failures == 0 ? 0 : 1)
     }

@@ -17,6 +17,10 @@ extension ProfileTest {
         let german = R(parakeet: true, pinned: "de")
         check("router: pinned German → Parakeet, no hold", german.route(.me) == .parakeet(language: "de") && !german.isHolding)
         check("router: pinned Turkish → Whisper", R(parakeet: true, pinned: "tr").route(.them) == .whisper)
+        var pinnedEnglish = R(parakeet: true, pinned: "en")
+        check("router: a pin isn't overruled (the banner offers the switch)",
+              pinnedEnglish.heard(.them, language: "tr", confidence: 0.99) == nil && pinnedEnglish.route(.them) == .parakeet(language: "en"))
+        check("router: a pin needs no rechecks", !pinnedEnglish.decoded(.them, seconds: 600))
         check("router: Whisper model → always Whisper", R(parakeet: false, pinned: nil).route(.me) == .whisper)
 
         var recheck = R(parakeet: true, pinned: nil)
@@ -83,5 +87,13 @@ extension ProfileTest {
         check("recommend: reads past call languages", Set(langs) == ["tr", "en"])
         check("parakeet: model id is recognised", TranscriptionEngine.isParakeet("parakeet-v3") && !TranscriptionEngine.isParakeet("base"))
         check("parakeet: display name", TranscriptionEngine.displayName(for: "parakeet-v3") == "Parakeet v3")
+    }
+
+    static func testRouteNotices() {
+        typealias T = TranscriptionEngine
+        check("notice: Turkish on their side", T.noticeFor(.decided(.them, .whisper), heard: "tr") == "Turkish heard: using Whisper for them")
+        check("notice: unsure on your side", T.noticeFor(.decided(.me, .whisper), heard: nil) == "Language unclear: using Whisper for you")
+        check("notice: Parakeet decided → none", T.noticeFor(.decided(.me, .parakeet(language: "en")), heard: "en") == nil)
+        check("notice: mid-call switch", T.noticeFor(.switchedToWhisper(.them), heard: "tr") == "Turkish heard: using Whisper for them from here")
     }
 }

@@ -30,8 +30,12 @@ struct LanguageRouter: Equatable {
 
     private(set) var routes: [AudioSource: Route]
     private var sinceCheck: [AudioSource: TimeInterval] = [:]
+    /// Parakeet on Auto-detect: the only case the router decides anything.
+    /// A pinned language is the user's call; 0.24.2's banner handles a wrong pin.
+    private let auto: Bool
 
     init(parakeet: Bool, pinned: String?) {
+        auto = parakeet && pinned == nil
         let start: Route
         if !parakeet {
             start = .whisper
@@ -58,7 +62,7 @@ struct LanguageRouter: Equatable {
             return .decided(source, decided)
         case .parakeet:
             sinceCheck[source] = 0
-            guard sure, language != nil, !supported else { return nil }
+            guard auto, sure, language != nil, !supported else { return nil }
             routes[source] = .whisper
             return .switchedToWhisper(source)
         case .whisper:
@@ -68,7 +72,7 @@ struct LanguageRouter: Equatable {
 
     /// Parakeet decoded `seconds` more of `source`; true when a recheck is due.
     mutating func decoded(_ source: AudioSource, seconds: TimeInterval) -> Bool {
-        guard case .parakeet = route(source) else { return false }
+        guard auto, case .parakeet = route(source) else { return false }
         let total = (sinceCheck[source] ?? 0) + seconds
         sinceCheck[source] = total
         return total >= Self.recheckEvery

@@ -76,11 +76,17 @@ final class TranscriptionEngine {
     private var sessionLanguage: String?
     private var sessionBackend: TranscriptionBackend = .local
     private var deepgramKey: String?
-    /// Voiced audio gathered per source for the one-shot language check (one
-    /// track each: interleaving both would feed Whisper stitched-up audio).
-    /// nil once the first track fills and the check fires. Guarded by `bufferLock`.
-    private var languageProbe: [AudioSource: [Float]]?
+    /// Voiced audio gathered per side for the language check (one side each:
+    /// interleaving both would feed Whisper stitched-up audio). nil = off.
+    /// Guarded by `bufferLock`.
+    private var probe: LanguageProbe?
+    /// Which engine each side uses (Parakeet on Auto-detect holds each side
+    /// until its check). Guarded by `bufferLock`.
+    private var router = LanguageRouter(parakeet: false, pinned: nil)
     private var languageChecks = 0
+    /// The mismatch banner looks at the first conclusive check only (0.24.2's
+    /// rule), so a bilingual call can't bounce it between two languages.
+    private var warningChecked = false
     /// Enough speech for Whisper to be sure: 10 s scored p ≥ 0.93 on 8 real
     /// tracks (Turkish and English, both sides), and warns twice as soon as 20.
     static let languageProbeSamples = 10 * 16000
@@ -509,19 +515,17 @@ final class TranscriptionEngine {
             }
         }
 
-        // Language check: gather the call's first voiced audio, then ask
-        // Whisper once what it hears. Runs for every backend, since the
-        // setting is shared and a wrong pin ruins all of them.
+        // Language check: gather each side's first voiced audio, then ask
+        // Whisper what it hears. Runs for every backend, since the setting is
+        // shared and a wrong pin ruins all of them; on Parakeet it also
+        // decides which engine transcribes that side.
         if isTranscribing, frameCount > 0 {
             let energy = samples.reduce(into: Float(0)) { $0 += abs($1) } / Float(frameCount)
             let full: [Float]? = bufferLock.withLock {
-                guard languageProbe != nil, energy > Segmenter.silenceFloor else { return nil }
-                languageProbe![source, default: []].append(contentsOf: samples)
-                guard let probe = languageProbe![source], probe.count >= Self.languageProbeSamples else { return nil }
-                languageProbe = nil
-                return probe
+                probe?.add(samples, voiced: energy > Segmenter.silenceFloor, from: source, at: Date(),
+                           holding: router.route(source) == .undecided)
             }
-            if let full { Task { await self.checkLanguage(full) } }
+            if let full { Task { await self.checkLanguage(full, source: source) } }
         }
 
         // Streaming backend: straight to the socket, no chunk buffering.
@@ -728,7 +732,7 @@ final class TranscriptionEngine {
             groqKey = APIKeyStore.load(account: TranscriptionBackend.groq.keychainAccount!)
             if groqKey?.isEmpty != false {
                 backend = .local
-                cloudNotice = "Groq key missing — using on-device Whisper"
+                cloudNotice = "Groq key missing — using on-device \(onDeviceName)"
             }
         }
 
@@ -736,10 +740,11 @@ final class TranscriptionEngine {
         let language = TranscriptionLanguage.selected
         languageMismatch = nil
         languageChecks = 0
+        warningChecked = false
         deepgramKey = nil
         bufferLock.withLock {
             sessionLanguage = language
-            languageProbe = [:]
+            probe = LanguageProbe()
         }
 
         if backend == .deepgram {
@@ -748,11 +753,21 @@ final class TranscriptionEngine {
                 startDeepgram(apiKey: key, language: language)
             } else {
                 backend = .local
-                cloudNotice = "Deepgram key missing — using on-device Whisper"
+                cloudNotice = "Deepgram key missing — using on-device \(onDeviceName)"
             }
         }
         let resolved = backend
-        bufferLock.withLock { sessionBackend = resolved }
+        let routesParakeet = parakeet != nil && resolved == .local
+        let holding: Bool = bufferLock.withLock {
+            sessionBackend = resolved
+            router = LanguageRouter(parakeet: routesParakeet, pinned: language)
+            return router.isHolding
+        }
+        if holding {
+            cloudNotice = Self.checkingNotice
+        } else if routesParakeet, let language, !LanguageRouter.parakeetLanguages.contains(language) {
+            cloudNotice = "\(TranscriptionLanguage.name(language)) isn't a Parakeet language: using Whisper"
+        }
         var decodeOptions = DecodingOptions(
             task: .transcribe,
             language: language,
@@ -1124,7 +1139,10 @@ final class TranscriptionEngine {
     func switchLanguage(to code: String) {
         UserDefaults.standard.set(code, forKey: TranscriptionLanguage.defaultsKey)
         languageMismatch = nil
-        bufferLock.withLock { sessionLanguage = code }
+        bufferLock.withLock {
+            sessionLanguage = code
+            router.switchLanguage(to: code)
+        }
         guard isTranscribing, let deepgramKey else { return }
         let offset = Date().timeIntervalSince(meetingStartTime)
         for source in AudioSource.allCases {
@@ -1143,29 +1161,65 @@ final class TranscriptionEngine {
         }
     }
 
-    /// Ask Whisper what language the probe is in; flag it when it isn't what
-    /// this session transcribes in. An inconclusive answer re-arms the probe
-    /// for another stretch, a few times at most.
-    private func checkLanguage(_ samples: [Float]) async {
-        guard let whisperKit,
-              let result = try? await whisperKit.detectLangauge(audioArray: Self.normalizedForDecode(samples))
-        else { return }  // English-only models can't detect; nothing to say
-        // WhisperKit reports the winner's log-probability.
-        let confidence = exp(result.langProbs[result.language] ?? -.infinity)
-        let (setting, backend) = bufferLock.withLock { (sessionLanguage, sessionBackend) }
-        AudioCaptureManager.oslog.info("Language check: heard \(result.language, privacy: .public) p=\(confidence, privacy: .public), set \(setting ?? "auto", privacy: .public)")
-        if let mismatch = Self.languageMismatch(setting: setting, backend: backend,
-                                                 heard: result.language, confidence: confidence) {
-            await MainActor.run { if self.isTranscribing { self.languageMismatch = mismatch } }
-        } else if confidence < 0.6 {
-            await MainActor.run {
+    /// Ask Whisper what language one side's probe is in. It routes that side
+    /// on Parakeet, and the first conclusive answer drives the mismatch
+    /// banner (an unsure one re-arms that side, a few times at most).
+    func checkLanguage(_ samples: [Float], source: AudioSource) async {
+        var detected: (language: String, confidence: Float)?
+        if let detector = languageDetector, !samples.isEmpty,
+           let result = try? await detector.detectLangauge(audioArray: Self.normalizedForDecode(samples)) {
+            // WhisperKit reports the winner's log-probability.
+            detected = (result.language, exp(result.langProbs[result.language] ?? -.infinity))
+        }
+        let heard = detected?.language
+        let confidence = detected?.confidence ?? 0
+        let (setting, backend, holding, change, stillHolding) = bufferLock.withLock {
+            let holding = router.route(source) == .undecided
+            let change = router.heard(source, language: heard, confidence: confidence)
+            return (sessionLanguage, sessionBackend, holding, change, router.isHolding)
+        }
+        AudioCaptureManager.oslog.info("Language check \(source.label, privacy: .public): heard \(heard ?? "-", privacy: .public) p=\(confidence, privacy: .public), set \(setting ?? "auto", privacy: .public)")
+        if let change, let notice = Self.noticeFor(change, heard: heard) {
+            await MainActor.run { if self.isTranscribing { self.cloudNotice = notice } }
+        } else if holding, !stillHolding {
+            await MainActor.run { if self.cloudNotice == Self.checkingNotice { self.cloudNotice = nil } }
+        }
+        // A routing check on Auto isn't a warning check: Auto on this Mac
+        // transcribes any language, so there's nothing to offer.
+        guard !holding, let heard else { return }
+        await MainActor.run {
+            guard self.isTranscribing, !self.warningChecked else { return }
+            if let mismatch = Self.languageMismatch(setting: setting, backend: backend,
+                                                     heard: heard, confidence: confidence) {
+                self.warningChecked = true
+                self.languageMismatch = mismatch
+            } else if confidence < 0.6 {
                 self.languageChecks += 1
-                if self.languageChecks < 3, self.isTranscribing {
-                    self.bufferLock.withLock { self.languageProbe = [:] }
-                }
+                if self.languageChecks < 3 { self.bufferLock.withLock { self.probe?.rearm(source) } }
+            } else {
+                self.warningChecked = true
             }
         }
     }
+
+    static let checkingNotice = "Checking the language\u{2026}"
+
+    /// The live bar's line when a side's engine is decided or switched.
+    static func noticeFor(_ change: LanguageRouter.Change, heard: String?) -> String? {
+        let name = heard.map(TranscriptionLanguage.name)
+        switch change {
+        case .decided(let source, .whisper):
+            let side = source == .me ? "you" : "them"
+            return name.map { "\($0) heard: using Whisper for \(side)" } ?? "Language unclear: using Whisper for \(side)"
+        case .switchedToWhisper(let source):
+            return "\(name ?? "Another language") heard: using Whisper for \(source == .me ? "you" : "them") from here"
+        default:
+            return nil
+        }
+    }
+
+    /// The on-device engine a cloud fallback lands on, for the live bar.
+    private var onDeviceName: String { parakeet != nil ? "Parakeet" : "Whisper" }
 
     /// Which language to offer switching to, or nil to stay quiet.
     /// - setting: the session's language (nil = auto-detect)
@@ -1322,12 +1376,12 @@ final class TranscriptionEngine {
         }
 
         languageMismatch = nil
-        bufferLock.withLock { languageProbe = nil }
         isTranscribing = false          // flips the loop into drain mode
         await transcriptionTask?.value  // deliberately not cancel(): let it finish
         transcriptionTask = nil
         // On Parakeet, a Whisper loaded for this call goes again: memory back.
         if parakeet != nil { whisperKit = nil }
+        bufferLock.withLock { probe = nil }
 
         bufferLock.withLock {
             audioBuffers = [.me: [], .them: []]
