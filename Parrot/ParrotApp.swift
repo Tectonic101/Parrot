@@ -43,6 +43,11 @@ struct ParrotMain {
             TranscribeTest.run(audioPath: args[i + 1], modelFolder: modelFolder)
             return
         }
+        if let i = args.firstIndex(of: "--language-test"), i + 1 < args.count {
+            let modelFolder = (i + 2 < args.count) ? args[i + 2] : ""
+            TranscribeTest.detectLanguage(audioPath: args[i + 1], modelFolder: modelFolder)
+            return
+        }
         if let i = args.firstIndex(of: "--diarize-test"), i + 1 < args.count {
             DiarizeTest.run(audioPath: args[i + 1])
             return

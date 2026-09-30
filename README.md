@@ -131,7 +131,7 @@ Cloud engines fall back to on-device automatically if anything fails mid-call. A
 
 ### 🌍 Your language, too
 
-Whisper auto-detects the language of the call, or you can pin one of 14 (English, Turkish, Spanish, German, French, Italian, Portuguese, Dutch, Russian, Arabic, Hindi, Chinese, Japanese, Korean). The copilot and the report answer in the language of the call. Documents work in most major languages, including Turkish, Dutch, Polish, Russian, Arabic, Hindi, Chinese, Japanese and Korean, and an English question can find the answer in a Turkish or Spanish document. For anything but English, pick Large V3 Turbo or Groq. A **custom vocabulary** list teaches Whisper your product and people names.
+Whisper auto-detects the language of the call, or you can pin one of 14 (English, Turkish, Spanish, German, French, Italian, Portuguese, Dutch, Russian, Arabic, Hindi, Chinese, Japanese, Korean). The copilot and the report answer in the language of the call. Documents work in most major languages, including Turkish, Dutch, Polish, Russian, Arabic, Hindi, Chinese, Japanese and Korean, and an English question can find the answer in a Turkish or Spanish document. For anything but English, pick Large V3 Turbo or Groq. If a call doesn't sound like the language you picked, Parrot notices in the first few seconds and offers a one-click switch. With Deepgram, pick Turkish, Arabic, Chinese or Korean by name: its auto-detect covers ten languages and skips those. A **custom vocabulary** list teaches Whisper your product and people names.
 
 ### 🧰 And all the everyday stuff
 

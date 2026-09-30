@@ -38,6 +38,34 @@ enum TranscriptionBackend: String, CaseIterable {
     }
 }
 
+/// The languages the Settings picker offers, and the live mismatch check's
+/// vocabulary: it only suggests a language the user could also pick by hand.
+enum TranscriptionLanguage {
+    static let defaultsKey = "transcriptionLanguage"
+
+    static let options: [(code: String, name: String)] = [
+        ("en", "English"), ("tr", "Turkish"), ("es", "Spanish"), ("de", "German"),
+        ("fr", "French"), ("it", "Italian"), ("pt", "Portuguese"), ("nl", "Dutch"),
+        ("ru", "Russian"), ("ar", "Arabic"), ("zh", "Chinese"), ("ja", "Japanese"),
+        ("ko", "Korean"), ("hi", "Hindi"),
+    ]
+
+    /// Nova-3 `language=multi` code-switches across these ten only. Anything
+    /// else on Auto-detect comes back as English-shaped nonsense (the Turkish
+    /// call of 2026-09-30), so it must be picked by name.
+    static let deepgramMulti: Set<String> = ["en", "es", "fr", "de", "hi", "ru", "pt", "ja", "it", "nl"]
+
+    /// nil = auto-detect.
+    static var selected: String? {
+        let setting = UserDefaults.standard.string(forKey: defaultsKey)
+        return (setting == nil || setting == "auto") ? nil : setting
+    }
+
+    static func name(_ code: String) -> String {
+        options.first { $0.code == code }?.name ?? code
+    }
+}
+
 enum CloudTranscriptionError: LocalizedError {
     case missingKey
     case badResponse(String)

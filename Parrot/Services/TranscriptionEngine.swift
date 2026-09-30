@@ -58,6 +58,25 @@ final class TranscriptionEngine {
     private var consumedSamples: [AudioSource: Int] = [:]
     private var meetingStartTime = Date()
 
+    /// The language this call sounds like, when it isn't what the session is
+    /// transcribing in (nil = no mismatch, or not checked yet). The live bar
+    /// offers a one-click switch. A pinned English setting on a Turkish call
+    /// turned 46 minutes into English-shaped nonsense on 2026-09-30.
+    private(set) var languageMismatch: String?
+    /// The session's language (nil = auto). Read per decode by the local loop
+    /// and swapped by `switchLanguage`. Guarded by `bufferLock`.
+    private var sessionLanguage: String?
+    private var sessionBackend: TranscriptionBackend = .local
+    private var deepgramKey: String?
+    /// Voiced audio gathered per source for the one-shot language check (one
+    /// track each: interleaving both would feed Whisper stitched-up audio).
+    /// nil once the first track fills and the check fires. Guarded by `bufferLock`.
+    private var languageProbe: [AudioSource: [Float]]?
+    private var languageChecks = 0
+    /// Enough speech for Whisper to be sure: 10 s scored p ≥ 0.93 on 8 real
+    /// tracks (Turkish and English, both sides), and warns twice as soon as 20.
+    static let languageProbeSamples = 10 * 16000
+
     /// PARROT_LOOP_TRACE=1: print every raw decode piece before filtering —
     /// the tell for "the loop decoded it but a filter ate it" class of drops.
     static let loopTrace = ProcessInfo.processInfo.environment["PARROT_LOOP_TRACE"] != nil
@@ -417,6 +436,21 @@ final class TranscriptionEngine {
             }
         }
 
+        // Language check: gather the call's first voiced audio, then ask
+        // Whisper once what it hears. Runs for every backend, since the
+        // setting is shared and a wrong pin ruins all of them.
+        if isTranscribing, frameCount > 0 {
+            let energy = samples.reduce(into: Float(0)) { $0 += abs($1) } / Float(frameCount)
+            let full: [Float]? = bufferLock.withLock {
+                guard languageProbe != nil, energy > Segmenter.silenceFloor else { return nil }
+                languageProbe![source, default: []].append(contentsOf: samples)
+                guard let probe = languageProbe![source], probe.count >= Self.languageProbeSamples else { return nil }
+                languageProbe = nil
+                return probe
+            }
+            if let full { Task { await self.checkLanguage(full) } }
+        }
+
         // Streaming backend: straight to the socket, no chunk buffering.
         let streamer: DeepgramStreamer? = bufferLock.withLock {
             deepgramFailedSources.contains(source) ? nil : deepgramStreamers[source]
@@ -626,17 +660,26 @@ final class TranscriptionEngine {
         }
 
         // Resolve the user's transcription language ("auto"/nil = auto-detect).
-        let setting = UserDefaults.standard.string(forKey: "transcriptionLanguage")
-        let language = (setting == nil || setting == "auto") ? nil : setting
+        let language = TranscriptionLanguage.selected
+        languageMismatch = nil
+        languageChecks = 0
+        deepgramKey = nil
+        bufferLock.withLock {
+            sessionLanguage = language
+            languageProbe = [:]
+        }
 
         if backend == .deepgram {
             if let key = APIKeyStore.load(account: TranscriptionBackend.deepgram.keychainAccount!), !key.isEmpty {
+                deepgramKey = key
                 startDeepgram(apiKey: key, language: language)
             } else {
                 backend = .local
                 cloudNotice = "Deepgram key missing — using on-device Whisper"
             }
         }
+        let resolved = backend
+        bufferLock.withLock { sessionBackend = resolved }
         var decodeOptions = DecodingOptions(
             task: .transcribe,
             language: language,
@@ -681,6 +724,12 @@ final class TranscriptionEngine {
             var nextPreviewAt: [AudioSource: Date] = [:]
 
             while !Task.isCancelled {
+                // Re-read per pass: `switchLanguage` can change it mid-call.
+                let language = self.bufferLock.withLock { self.sessionLanguage }
+                var decodeOptions = decodeOptions
+                decodeOptions.language = language
+                decodeOptions.detectLanguage = language == nil
+
                 // isTranscribing == false flips the loop into drain mode: keep
                 // consuming the backlog (whole utterances, down to the final
                 // sub-frame tail) and exit once the buffers are empty. Capture
@@ -942,48 +991,121 @@ final class TranscriptionEngine {
     /// flips the session to the local buffer/loop path.
     private func startDeepgram(apiKey: String, language: String?) {
         for source in AudioSource.allCases {
-            let streamer = DeepgramStreamer()
-            streamer.onInterim = { [weak self] text in
-                let partial = Self.cleaned(text)
-                guard !partial.isEmpty else { return }
-                Task { @MainActor in
-                    self?.currentText = partial
-                    self?.currentSpeaker = source
-                }
-            }
-            streamer.onFinal = { [weak self] text, start, end in
-                guard let self else { return }
-                let cleanedText = Self.cleaned(text)
-                // energy 1.0: Deepgram runs its own voice-activity detection,
-                // so only punctuation-only junk is filtered here.
-                guard !cleanedText.isEmpty,
-                      !Self.isLikelyHallucination(cleanedText, energy: 1.0) else { return }
-                Task { @MainActor in
-                    // Same as the Whisper path: the final belongs to the committed
-                    // segment; the interim line must clear or it duplicates.
-                    self.currentText = ""
-                    self.currentSpeaker = nil
-                    self.onSegment?(TranscriptionResult(
-                        text: cleanedText, source: source,
-                        startTime: start, endTime: end, confidence: nil))
-                }
-            }
-            streamer.onError = { [weak self] message in
-                guard let self else { return }
-                // Public on purpose: NSLog is redacted in `log show`, and this
-                // is the only place the real Deepgram failure reason exists.
-                AudioCaptureManager.oslog.error("Deepgram stream failed (\(source.label, privacy: .public)): \(message, privacy: .public)")
-                // Only this stream falls back to local; the other socket keeps
-                // streaming. Re-anchor before the first fallback sample lands.
-                self.bufferLock.withLock { _ = self.deepgramFailedSources.insert(source) }
-                self.reanchorLocalClock(source: source)
-                Task { @MainActor in
-                    self.cloudNotice = "Deepgram error — \(source.label) stream now on on-device Whisper"
-                }
-            }
-            streamer.connect(apiKey: apiKey, language: language)
-            deepgramStreamers[source] = streamer
+            deepgramStreamers[source] = makeDeepgramStreamer(
+                source: source, apiKey: apiKey, language: language, offset: 0)
         }
+    }
+
+    /// One connected socket for `source`. `offset` is the meeting time the
+    /// socket opens at: Deepgram's timestamps restart at 0 on every stream.
+    private func makeDeepgramStreamer(source: AudioSource, apiKey: String,
+                                      language: String?, offset: TimeInterval) -> DeepgramStreamer {
+        let streamer = DeepgramStreamer()
+        streamer.onInterim = { [weak self] text in
+            let partial = Self.cleaned(text)
+            guard !partial.isEmpty else { return }
+            Task { @MainActor in
+                self?.currentText = partial
+                self?.currentSpeaker = source
+            }
+        }
+        streamer.onFinal = { [weak self] text, start, end in
+            guard let self else { return }
+            let cleanedText = Self.cleaned(text)
+            // energy 1.0: Deepgram runs its own voice-activity detection,
+            // so only punctuation-only junk is filtered here.
+            guard !cleanedText.isEmpty,
+                  !Self.isLikelyHallucination(cleanedText, energy: 1.0) else { return }
+            Task { @MainActor in
+                // Same as the Whisper path: the final belongs to the committed
+                // segment; the interim line must clear or it duplicates.
+                self.currentText = ""
+                self.currentSpeaker = nil
+                self.onSegment?(TranscriptionResult(
+                    text: cleanedText, source: source,
+                    startTime: start + offset, endTime: end + offset, confidence: nil))
+            }
+        }
+        streamer.onError = { [weak self] message in
+            guard let self else { return }
+            // Public on purpose: NSLog is redacted in `log show`, and this
+            // is the only place the real Deepgram failure reason exists.
+            AudioCaptureManager.oslog.error("Deepgram stream failed (\(source.label, privacy: .public)): \(message, privacy: .public)")
+            // Only this stream falls back to local; the other socket keeps
+            // streaming. Re-anchor before the first fallback sample lands.
+            self.bufferLock.withLock { _ = self.deepgramFailedSources.insert(source) }
+            self.reanchorLocalClock(source: source)
+            Task { @MainActor in
+                self.cloudNotice = "Deepgram error — \(source.label) stream now on on-device Whisper"
+            }
+        }
+        streamer.connect(apiKey: apiKey, language: language)
+        return streamer
+    }
+
+    /// Switch the running call to `code` and remember it for the next one.
+    /// Deepgram sockets are pinned to a language at connect, so each healthy
+    /// one is replaced; the old socket flushes its finals, then closes. The
+    /// local and Groq paths pick the new language up on their next pass.
+    @MainActor
+    func switchLanguage(to code: String) {
+        UserDefaults.standard.set(code, forKey: TranscriptionLanguage.defaultsKey)
+        languageMismatch = nil
+        bufferLock.withLock { sessionLanguage = code }
+        guard isTranscribing, let deepgramKey else { return }
+        let offset = Date().timeIntervalSince(meetingStartTime)
+        for source in AudioSource.allCases {
+            let fresh = makeDeepgramStreamer(source: source, apiKey: deepgramKey, language: code, offset: offset)
+            let old: DeepgramStreamer? = bufferLock.withLock {
+                guard !deepgramFailedSources.contains(source) else { return nil }
+                defer { deepgramStreamers[source] = fresh }
+                return deepgramStreamers[source]
+            }
+            guard let old else { fresh.close(); continue }
+            old.finish()
+            Task {
+                try? await Task.sleep(for: .seconds(1.2))  // same grace as stop
+                old.close()
+            }
+        }
+    }
+
+    /// Ask Whisper what language the probe is in; flag it when it isn't what
+    /// this session transcribes in. An inconclusive answer re-arms the probe
+    /// for another stretch, a few times at most.
+    private func checkLanguage(_ samples: [Float]) async {
+        guard let whisperKit,
+              let result = try? await whisperKit.detectLangauge(audioArray: Self.normalizedForDecode(samples))
+        else { return }  // English-only models can't detect; nothing to say
+        // WhisperKit reports the winner's log-probability.
+        let confidence = exp(result.langProbs[result.language] ?? -.infinity)
+        let (setting, backend) = bufferLock.withLock { (sessionLanguage, sessionBackend) }
+        AudioCaptureManager.oslog.info("Language check: heard \(result.language, privacy: .public) p=\(confidence, privacy: .public), set \(setting ?? "auto", privacy: .public)")
+        if let mismatch = Self.languageMismatch(setting: setting, backend: backend,
+                                                 heard: result.language, confidence: confidence) {
+            await MainActor.run { if self.isTranscribing { self.languageMismatch = mismatch } }
+        } else if confidence < 0.6 {
+            await MainActor.run {
+                self.languageChecks += 1
+                if self.languageChecks < 3, self.isTranscribing {
+                    self.bufferLock.withLock { self.languageProbe = [:] }
+                }
+            }
+        }
+    }
+
+    /// Which language to offer switching to, or nil to stay quiet.
+    /// - setting: the session's language (nil = auto-detect)
+    /// - heard: Whisper's language code for the call's first ~10 s of speech
+    /// - confidence: Whisper's probability for `heard`, 0...1
+    static func languageMismatch(setting: String?, backend: TranscriptionBackend,
+                                 heard: String, confidence: Float) -> String? {
+        // 0.8: real calls score 1.00; an unsure guess must not nag.
+        guard confidence >= 0.8, heard != setting,
+              TranscriptionLanguage.options.contains(where: { $0.code == heard }) else { return nil }
+        if setting != nil { return heard }
+        // Auto: Whisper and Groq detect anything; Deepgram only its ten.
+        return backend == .deepgram && !TranscriptionLanguage.deepgramMulti.contains(heard) ? heard : nil
     }
 
     /// Re-anchor a stream's locally-derived timestamps to "now" in meeting time.
@@ -1126,6 +1248,8 @@ final class TranscriptionEngine {
             deepgramStreamers = [:]
         }
 
+        languageMismatch = nil
+        bufferLock.withLock { languageProbe = nil }
         isTranscribing = false          // flips the loop into drain mode
         await transcriptionTask?.value  // deliberately not cancel(): let it finish
         transcriptionTask = nil

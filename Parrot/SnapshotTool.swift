@@ -87,6 +87,42 @@ enum TranscribeTest {
     }
 }
 
+extension TranscribeTest {
+    /// `--language-test <audio> [modelFolder]`: the live language check on a
+    /// saved track. Gathers voiced buffers the way `appendAudio` does, then
+    /// prints what Whisper hears and what the live bar would offer for an
+    /// English pin and for Deepgram on auto.
+    static func detectLanguage(audioPath: String, modelFolder: String) {
+        let sem = DispatchSemaphore(value: 0)
+        Task {
+            do {
+                let whisperKit = try await WhisperKit(WhisperKitConfig(
+                    modelFolder: modelFolder.isEmpty ? nil : modelFolder,
+                    verbose: false, logLevel: .none, load: true, download: modelFolder.isEmpty))
+                let audio = AudioProcessor.convertBufferToArray(
+                    buffer: try AudioProcessor.loadAudio(fromPath: audioPath))
+                var probe: [Float] = []
+                for start in stride(from: 0, to: audio.count, by: 1600) where probe.count < TranscriptionEngine.languageProbeSamples {
+                    let buffer = audio[start ..< min(start + 1600, audio.count)]
+                    let energy = buffer.reduce(into: Float(0)) { $0 += abs($1) } / Float(buffer.count)
+                    if energy > TranscriptionEngine.Segmenter.silenceFloor { probe.append(contentsOf: buffer) }
+                }
+                let result = try await whisperKit.detectLangauge(
+                    audioArray: TranscriptionEngine.normalizedForDecode(probe))
+                let confidence = exp(result.langProbs[result.language] ?? -.infinity)
+                print("heard \(result.language) p=\(String(format: "%.2f", confidence)) from \(probe.count / 16000) s of speech")
+                print("pinned en, local → \(TranscriptionEngine.languageMismatch(setting: "en", backend: .local, heard: result.language, confidence: confidence) ?? "quiet")")
+                print("auto, deepgram   → \(TranscriptionEngine.languageMismatch(setting: nil, backend: .deepgram, heard: result.language, confidence: confidence) ?? "quiet")")
+            } catch {
+                print("language-test error: \(error)")
+            }
+            sem.signal()
+        }
+        sem.wait()
+        exit(0)
+    }
+}
+
 /// `--capture-test [seconds]`: real end-to-end system-audio capture through the
 /// production AudioCaptureManager (process tap on macOS 15+, ScreenCaptureKit on
 /// 14.x / as rescue), while the caller plays audio through the speakers, e.g.:
@@ -418,7 +454,8 @@ enum HelpShots {
 ///   Parrot --liveloop-test /path/audio.aiff [model]
 /// Set LIVELOOP_REALTIME=1 to feed at recording pace (slow, but reproduces
 /// live polling interleave); default feeds everything and drains.
-/// LIVELOOP_IMPORT=1 runs the audio-file import path instead. For idle-noise
+/// LIVELOOP_IMPORT=1 runs the audio-file import path instead. LIVELOOP_LANG=en
+/// pins the language (with REALTIME: watch the mismatch switch fire). For idle-noise
 /// work: PARROT_LOOP_TRACE=1 prints each clip's voice score, and
 /// PARROT_VAD_THRESHOLD=0 turns the voice gate off for an A/B.
 /// Born from a real drop: the middle sentence of a three-sentence test never
@@ -434,6 +471,11 @@ enum LiveLoopTest {
             // register(defaults:) trick the snapshot harnesses use.
             if let vocab = ProcessInfo.processInfo.environment["LIVELOOP_VOCAB"] {
                 UserDefaults.standard.register(defaults: ["customVocabulary": vocab])
+            }
+            // LIVELOOP_LANG=en pins the language, to watch the live mismatch
+            // check fire and the switch take effect mid-feed (use REALTIME).
+            if let lang = ProcessInfo.processInfo.environment["LIVELOOP_LANG"] {
+                UserDefaults.standard.register(defaults: [TranscriptionLanguage.defaultsKey: lang])
             }
             let engine = TranscriptionEngine()
             await engine.loadModel(model.isEmpty ? "base" : model)
@@ -465,6 +507,10 @@ enum LiveLoopTest {
             while i < samples.count {
                 let end = min(i + slice, samples.count)
                 engine.appendAudio(pcmBuffer(Array(samples[i..<end])), source: .them)
+                if let heard = engine.languageMismatch {
+                    print(String(format: "liveloop-test: at %.1fs heard %@, switching", Double(end) / 16000, heard))
+                    engine.switchLanguage(to: heard)
+                }
                 if realtime { try? await Task.sleep(for: .milliseconds(200)) }
                 i = end
             }
