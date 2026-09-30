@@ -62,8 +62,17 @@ struct LanguageRouter: Equatable {
         let sure = confidence >= Self.sure
         switch route(source) {
         case .undecided:
-            // An answer that isn't sure gets one more look before Whisper;
-            // no answer at all (no detector) has nothing to retry.
+            // Unsure, but it guesses the language the other side was sure
+            // of: take it. A mic that mostly hears the speakers (p=0.62 in a
+            // real run) is hearing the same call.
+            if let language, !sure, supported,
+               routes.contains(where: { $0.key != source && $0.value == .parakeet(language: language) }) {
+                routes[source] = .parakeet(language: language)
+                sinceCheck[source] = 0
+                return .decided(source, .parakeet(language: language))
+            }
+            // Otherwise an answer that isn't sure gets one more look before
+            // Whisper; no answer at all (no detector) has nothing to retry.
             if language != nil, !sure, !retried.contains(source) {
                 retried.insert(source)
                 return .retry(source)

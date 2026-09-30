@@ -17,6 +17,18 @@ extension ProfileTest {
         var second = R(parakeet: true, pinned: nil)
         _ = second.heard(.me, language: "en", confidence: 0.52)
         check("router: sure on the second look → Parakeet", second.heard(.me, language: "en", confidence: 0.95) == .decided(.me, .parakeet(language: "en")))
+        var mic = R(parakeet: true, pinned: nil)
+        _ = mic.heard(.them, language: "en", confidence: 0.96)
+        check("router: an unsure mic that agrees with the other side follows it",
+              mic.heard(.me, language: "en", confidence: 0.62) == .decided(.me, .parakeet(language: "en")) && !mic.isHolding)
+        var disagree = R(parakeet: true, pinned: nil)
+        _ = disagree.heard(.them, language: "en", confidence: 0.96)
+        check("router: an unsure mic guessing another language still looks again",
+              disagree.heard(.me, language: "tr", confidence: 0.62) == .retry(.me))
+        check("dashboard: the engine a picked language gets",
+              DashboardView.engineHint(model: "parakeet-v3", language: "de") == "Parakeet from the first word"
+              && DashboardView.engineHint(model: "parakeet-v3", language: "tr")?.hasPrefix("Whisper from the first word") == true
+              && DashboardView.engineHint(model: "large-v3-turbo", language: "tr") == nil)
         var turkish = R(parakeet: true, pinned: nil)
         check("router: sure Turkish needs no retry", turkish.heard(.them, language: "tr", confidence: 0.99) == .decided(.them, .whisper))
 

@@ -16,6 +16,10 @@ struct DashboardView: View {
     @State private var errorMessage: String?
     @State private var showImporter = false
     @AppStorage("copilotEnabled") private var copilotEnabled = false
+    /// The same setting as Settings → Transcription → Language and the live
+    /// "switch to Turkish" banner, shown where a recording starts.
+    @AppStorage(TranscriptionLanguage.defaultsKey) private var callLanguage = "auto"
+    @AppStorage("whisperModel") private var speechModel = "base"
 
     var body: some View {
         ScrollView {
@@ -86,6 +90,8 @@ struct DashboardView: View {
                 .font(Theme.Typography.secondary)
                 .foregroundStyle(Theme.Colors.ink2)
 
+            languagePicker
+
             importButton
                 .padding(.top, 4)
 
@@ -147,6 +153,44 @@ struct DashboardView: View {
             .padding(.horizontal, 2)
         }
         .frame(maxWidth: 460)
+    }
+
+    /// Picking the call's language up front means nothing to detect: the
+    /// right engine from the first word.
+    private var languagePicker: some View {
+        VStack(spacing: 4) {
+            HStack(spacing: 6) {
+                Image(systemName: "globe")
+                    .font(.appCaption)
+                    .foregroundStyle(Theme.Colors.ink2)
+                Text("Call language")
+                    .font(Theme.Typography.secondary)
+                    .foregroundStyle(Theme.Colors.ink2)
+                Picker("", selection: $callLanguage) {
+                    Text("Auto-detect").tag("auto")
+                    ForEach(TranscriptionLanguage.options, id: \.code) { Text($0.name).tag($0.code) }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .fixedSize()
+            }
+            if let hint = Self.engineHint(model: speechModel, language: callLanguage) {
+                Text(hint)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Colors.ink3)
+            }
+        }
+        .padding(.top, 2)
+    }
+
+    /// Which engine the picked language gets, on Parakeet (Whisper does
+    /// every language, so it needs no line).
+    static func engineHint(model: String, language: String) -> String? {
+        guard TranscriptionEngine.isParakeet(model) else { return nil }
+        if language == "auto" { return "Parakeet or Whisper, after a few seconds' language check" }
+        return LanguageRouter.parakeetLanguages.contains(language)
+            ? "Parakeet from the first word"
+            : "Whisper from the first word (Parakeet can't do \(TranscriptionLanguage.name(language)))"
     }
 
     /// Everything the copilot knows from second one: the profile, your brief,

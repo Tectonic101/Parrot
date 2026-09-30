@@ -259,12 +259,16 @@ final class TranscriptionEngine {
     // ponytail: only the transcription loop and imports call this, never both at once.
     func ensureWhisper() async -> WhisperKit? {
         if let whisperKit { return whisperKit }
-        if let whisperLoad { return await whisperLoad.value }
-        let load = Task { try? await Self.makeWhisperKit(Self.fallbackWhisper) }
-        whisperLoad = load
+        // One load however many callers (the loop, an import, the preload).
+        let load: Task<WhisperKit?, Never> = bufferLock.withLock {
+            if let whisperLoad { return whisperLoad }
+            let fresh = Task { try? await Self.makeWhisperKit(Self.fallbackWhisper) }
+            whisperLoad = fresh
+            return fresh
+        }
         let kit = await load.value
         whisperKit = kit
-        whisperLoad = nil
+        bufferLock.withLock { whisperLoad = nil }
         return kit
     }
 
@@ -766,6 +770,8 @@ final class TranscriptionEngine {
             cloudNotice = Self.checkingNotice
         } else if routesParakeet, let language, !LanguageRouter.parakeetLanguages.contains(language) {
             cloudNotice = "\(TranscriptionLanguage.name(language)) isn't a Parakeet language: using Whisper"
+            // Picked before the call: load it now, so the first line isn't late.
+            Task.detached(priority: .userInitiated) { [weak self] in _ = await self?.ensureWhisper() }
         }
         var decodeOptions = DecodingOptions(
             task: .transcribe,
@@ -1228,12 +1234,12 @@ final class TranscriptionEngine {
         }
         let heard = detected?.language
         let confidence = detected?.confidence ?? 0
-        let (setting, backend, holding, change, stillHolding) = bufferLock.withLock {
+        let (setting, backend, holding, change, themHeld) = bufferLock.withLock {
             let holding = router.route(source) == .undecided
             let change = router.heard(source, language: heard, confidence: confidence)
             // Unsure while holding: this side gets one more stretch.
             if case .retry = change { probe?.rearm(source) }
-            return (sessionLanguage, sessionBackend, holding, change, router.isHolding)
+            return (sessionLanguage, sessionBackend, holding, change, router.route(.them) == .undecided)
         }
         if Self.loopTrace {
             print(String(format: "TRACE %@ language check: heard %@ p=%.2f from %.1f s → %@", source.label,
@@ -1242,7 +1248,9 @@ final class TranscriptionEngine {
         AudioCaptureManager.oslog.info("Language check \(source.label, privacy: .public): heard \(heard ?? "-", privacy: .public) p=\(confidence, privacy: .public), set \(setting ?? "auto", privacy: .public)")
         if let change, let notice = Self.noticeFor(change, heard: heard) {
             await MainActor.run { if self.isTranscribing { self.cloudNotice = notice } }
-        } else if holding, !stillHolding {
+        } else if holding, !themHeld {
+            // The notice is about the other side's lines. Yours rarely wait
+            // (you're mostly listening), so they don't keep it up.
             await MainActor.run { if self.cloudNotice == Self.checkingNotice { self.cloudNotice = nil } }
         }
         // A routing check on Auto isn't a warning check: Auto on this Mac
