@@ -8,8 +8,9 @@ tree. Line counts are rough — they flag which files are worth reading whole.
 | File | L | Purpose |
 |---|---|---|
 | `Parrot/ParrotApp.swift` | 178 | `@main`; parses CLI harness flags before the SwiftUI `App` starts |
-| `Parrot/ProfileTest.swift` | 3930 | `--profile-test`: headless logic harness, ~1260 checks |
-| `Parrot/SnapshotTool.swift` | 1110 | Offscreen PNG renderers + transcribe/analyze/capture harnesses; `ANALYZE_REPORT=all --analyze-test ollama <model>` writes every built-in report on a model and checks the sections came back; `--store-upgrade-test <file>` upgrades an older store copy (read-only like MCP, then with the Profiles 2.0 migration); `--ask-chat-test, --ask-real` runs a real multi-turn Ask Parrot chat against Claude or Ollama |
+| `Parrot/ProfileTest.swift` | 3930 | `--profile-test`: headless logic harness, ~1330 checks |
+| `Parrot/ProfileTest+Parakeet.swift` | 130 | `--profile-test` checks for Parakeet: language router, per-side probe, recommendation, rewind, imports |
+| `Parrot/SnapshotTool.swift` | 1150 | Offscreen PNG renderers + transcribe/analyze/capture harnesses; `--language-test <audio> [model] [seconds]` runs the live language check on a saved track; `ANALYZE_REPORT=all --analyze-test ollama <model>` writes every built-in report on a model and checks the sections came back; `--store-upgrade-test <file>` upgrades an older store copy (read-only like MCP, then with the Profiles 2.0 migration); `--ask-chat-test, --ask-real` runs a real multi-turn Ask Parrot chat against Claude or Ollama |
 | `Parrot/CopilotHarness.swift` | 326 | `--kb-add`, `--doc-answer-eval` (Jev precision/recall), `--copilot-replay` (question-to-card latency) |
 | `Parrot/ToneHarness.swift` | 148 | `--nudge-replay [id] [--store path]` (a saved call through the live nudge rules, on a copy of the store), `--tone-snapshot <png>` (report card, pill, banner; light + dark) |
 | `Parrot/ProfileTest+Nudges.swift` | 298 | `--profile-test` checks for live nudges, the tone timeline and seconds-based talk share |
@@ -39,7 +40,10 @@ tree. Line counts are rough — they flag which files are worth reading whole.
 | `Services/AudioCaptureManager.swift` | 700 | System audio (tap on 15+, SCK on 14.x/rescue) + mic tap, buffer conversion |
 | `Services/SystemAudioTap.swift` | 250 | Core Audio process tap: audio-only capture, no Screen Recording (macOS 15+) |
 | `Services/EchoCanceller.swift` | 138 | Swift wrapper over vendored SpeexDSP AEC |
-| `Services/TranscriptionEngine.swift` | 1157 | On-device WhisperKit; `AudioSource` routing; live preview decode; Silero voice gate before every decode |
+| `Services/TranscriptionEngine.swift` | 1656 | On-device WhisperKit or Parakeet; `AudioSource` routing; per-side language check (holds a Parakeet side until known, recheck + rewind); lazy fallback Whisper; live preview decode; Silero voice gate before every decode |
+| `Services/LanguageRouter.swift` | 142 | Pure: which engine each side of a Parakeet call uses (held, Parakeet, Whisper), recheck schedule; `LanguageProbe` gathers each side's first 10 s of speech |
+| `Services/ParakeetTranscriber.swift` | 38 | Parakeet TDT 0.6B v3 via FluidAudio (25 European languages, ~0.5 GB): load, transcribe with a script hint |
+| `Services/EngineRecommendation.swift` | 25 | The model a new install starts on: Parakeet only when every Mac language and past call fits its 25 |
 | `Services/CloudTranscription.swift` | 392 | Opt-in Groq (batch) and Deepgram (streaming) backends + WAV encode |
 | `Services/DiarizationEngine.swift` | 156 | FluidAudio pyannote diarization (CoreML): labels + per-speaker embeddings; whole file or a live 60 s tail |
 | `Services/AnalysisProvider.swift` | 605 | `AnalysisProvider` protocol, request/result types, prompt building, **Keychain helpers** (~L575) |
@@ -119,7 +123,7 @@ tree. Line counts are rough — they flag which files are worth reading whole.
 | `Views/Onboarding/PermissionsStep.swift` | 120 | Permissions step |
 | `Views/Onboarding/MeetCopilotStep.swift` | 111 | Meet Copilot step: example call + benefits |
 | `Views/Onboarding/CopilotPathStep.swift` | 86 | Private / Balanced / Cloud / Decide later choice |
-| `Views/Onboarding/SpeechModelStep.swift` | 74 | Speech model step (memory-based pick, starts download) |
+| `Views/Onboarding/SpeechModelStep.swift` | 82 | Speech model step (pick from languages, past calls and memory; starts download) |
 | `Views/Onboarding/CopilotSetupStep.swift` | 164 | Copilot path setup: Ollama install/pull, Claude/Deepgram key fields |
 | `Views/Onboarding/KeyCheckField.swift` | 83 | One provider key field + Check key button and result |
 | `Views/Onboarding/AutomaticStep.swift` | 104 | In-progress step while a path finishes on its own |

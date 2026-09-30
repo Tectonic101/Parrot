@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		0109711A3BA5D408DD1A7A82 /* ParrotLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53CCAD24CC45467637AE5CE2 /* ParrotLink.swift */; };
+		024873A56A7C7C5F1820762A /* ParakeetTranscriber.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4509B0166A0E3555A7B75966 /* ParakeetTranscriber.swift */; };
 		03810414C6AE91E815AE1C20 /* CallDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6DF588F3CCAE25214950B40 /* CallDetector.swift */; };
 		0506993ADB0C4B894A80C604 /* MeetingMemory.swift in Sources */ = {isa = PBXBuildFile; fileRef = F72346DBC9103811D2497410 /* MeetingMemory.swift */; };
 		060AB5AF5A76B5D7285CDCC4 /* RewriteReportSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE04F5B216357C19A479AB11 /* RewriteReportSheet.swift */; };
@@ -71,6 +72,7 @@
 		7E45BC2343899B8764509B6F /* AIAppsStep.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6ED404D6FFB6CCCF5624F95 /* AIAppsStep.swift */; };
 		816CAF1570ED8E92CD25254E /* MeetCopilotStep.swift in Sources */ = {isa = PBXBuildFile; fileRef = F26AA01AE45DE4C398AD7E7C /* MeetCopilotStep.swift */; };
 		81E0F3E53AA25CB928F901B4 /* Meeting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DE0CCC714BADC67C8D26E20 /* Meeting.swift */; };
+		824EEF5B8CC32F067F6772D5 /* EngineRecommendation.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF45FC06CCD2DF27612EA1CA /* EngineRecommendation.swift */; };
 		83B320AE88C486EBF06C3744 /* ProfileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E421570CA8E3B9BFF8E223CC /* ProfileStore.swift */; };
 		85CA1373AFA3114E41376176 /* ExportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F0AD1CD85BAA4D58B50B569 /* ExportService.swift */; };
 		8621F6CAAFEBE70FE7A7A26A /* ProfileReportCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B504F6AB0A566ABD11D64CD0 /* ProfileReportCard.swift */; };
@@ -79,6 +81,7 @@
 		8AAACAF56889973D2964DE9A /* ModelDownloadProgressView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C67B422ED0942D15799C271 /* ModelDownloadProgressView.swift */; };
 		8B131BE512D811DC7F495E0A /* CopilotPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09FD0006B2D617872DB79534 /* CopilotPanelView.swift */; };
 		8C9908EAB5C8E97DD2049A57 /* Integrations.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AF0CF3DDD29671D01A7B278 /* Integrations.swift */; };
+		90A51DF838AD3375A71EC1A3 /* ProfileTest+Parakeet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51A6E3A243B9A2B9B6D0AE4E /* ProfileTest+Parakeet.swift */; };
 		90FF5B7F37A67CF74739979D /* OnboardingFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 978D302BD258EFD5D138CF06 /* OnboardingFlow.swift */; };
 		923C2C8116661967A654EB75 /* Retention.swift in Sources */ = {isa = PBXBuildFile; fileRef = 686FBA4D042AA829CA0B3E63 /* Retention.swift */; };
 		96269434557C1DFB7D82B5D2 /* RecordingManager+Integrations.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFFB9CBF591F87805C054DF0 /* RecordingManager+Integrations.swift */; };
@@ -87,6 +90,7 @@
 		988B661DADB5FCF1857EDA1F /* ProfileShareViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 176368DAE6DF0C018FF9BE39 /* ProfileShareViews.swift */; };
 		99DDA637CF7F36D74F60368E /* ProfilesSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63F02B79494708569ED403B9 /* ProfilesSettingsView.swift */; };
 		9B5BE960A0F8C2CF1E101547 /* Outfit-Bold.otf in Resources */ = {isa = PBXBuildFile; fileRef = 7F71A2A26265934A2AD986A4 /* Outfit-Bold.otf */; };
+		9B9FE3793FF517277E038D41 /* LanguageRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F56F8BB3EE467BFFAFD75A6 /* LanguageRouter.swift */; };
 		9C2F35CD148C5A6CECBE502D /* ReadyStep.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2233990E41202D1B2B352E2 /* ReadyStep.swift */; };
 		A42CB252B2F40505EC9D9B49 /* CloudGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96F136E1DB893707F06515AB /* CloudGate.swift */; };
 		A7FC2A3BA5566B313EB0FD2F /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 8AEB81DFD69FDFB417908498 /* Sparkle */; };
@@ -165,13 +169,16 @@
 		376EE5FD5450F8E658578B09 /* ProfileReviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileReviewView.swift; sourceTree = "<group>"; };
 		37F04EA6D7B41CE261416199 /* TranscriptionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionEngine.swift; sourceTree = "<group>"; };
 		400998D53C4E3491D0D3F3DD /* CopilotHarness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CopilotHarness.swift; sourceTree = "<group>"; };
+		4509B0166A0E3555A7B75966 /* ParakeetTranscriber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParakeetTranscriber.swift; sourceTree = "<group>"; };
 		4675137B0A475113EC15141E /* MCPServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPServer.swift; sourceTree = "<group>"; };
 		480C71FBB84A286AEFFB9068 /* FollowUpEmail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowUpEmail.swift; sourceTree = "<group>"; };
 		4900FECF8681A0D9E1BBBB7C /* MCPPrompts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPPrompts.swift; sourceTree = "<group>"; };
 		4A60565D06DBC8D3E7302B6E /* ToneTimelineCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToneTimelineCard.swift; sourceTree = "<group>"; };
 		4A8F9DA46AE949694DB45BC9 /* OpenAICompatibleProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAICompatibleProvider.swift; sourceTree = "<group>"; };
 		4DFEF53506253A5F3525BE76 /* ProfilePresets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfilePresets.swift; sourceTree = "<group>"; };
+		4F56F8BB3EE467BFFAFD75A6 /* LanguageRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LanguageRouter.swift; sourceTree = "<group>"; };
 		502634CC39A7DD25D87D68A0 /* AudioImport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioImport.swift; sourceTree = "<group>"; };
+		51A6E3A243B9A2B9B6D0AE4E /* ProfileTest+Parakeet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ProfileTest+Parakeet.swift"; sourceTree = "<group>"; };
 		531A69C106428442DDDF25EF /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		53CCAD24CC45467637AE5CE2 /* ParrotLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParrotLink.swift; sourceTree = "<group>"; };
 		59587E1F3FF92A07FD404042 /* EchoCanceller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EchoCanceller.swift; sourceTree = "<group>"; };
@@ -262,6 +269,7 @@
 		F72A118B3116F40C4BA68FCB /* ReportContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportContentView.swift; sourceTree = "<group>"; };
 		F778ACCC175C1E526BD4A8D8 /* AudioCaptureManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioCaptureManager.swift; sourceTree = "<group>"; };
 		F809F56CFD185363A40708BF /* WelcomeStep.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeStep.swift; sourceTree = "<group>"; };
+		FF45FC06CCD2DF27612EA1CA /* EngineRecommendation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EngineRecommendation.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -330,6 +338,7 @@
 				200FE5120F42A3BB47933EB7 /* ParrotApp.swift */,
 				174EB3CD17618DB5EDD3FB75 /* ProfileTest.swift */,
 				D92A6B8CEB61EA2B3903CB3F /* ProfileTest+Nudges.swift */,
+				51A6E3A243B9A2B9B6D0AE4E /* ProfileTest+Parakeet.swift */,
 				2CE74071DA1946404F9FD84C /* SnapshotTool.swift */,
 				604C468031E1D070D97B0AFA /* ToneHarness.swift */,
 				2669E4B05CF7143D2D0619E6 /* Fonts */,
@@ -414,12 +423,14 @@
 				9117B9FE2C0AA0369A2B0F46 /* CopilotSetupState.swift */,
 				9F5C78AFBC3F48C895B6A0F9 /* DiarizationEngine.swift */,
 				59587E1F3FF92A07FD404042 /* EchoCanceller.swift */,
+				FF45FC06CCD2DF27612EA1CA /* EngineRecommendation.swift */,
 				7F0AD1CD85BAA4D58B50B569 /* ExportService.swift */,
 				480C71FBB84A286AEFFB9068 /* FollowUpEmail.swift */,
 				C3F8D3E56477F91775B043E3 /* GlobalHotKey.swift */,
 				7AF0CF3DDD29671D01A7B278 /* Integrations.swift */,
 				CCC82466B849344A907AC419 /* JevDocMatcher.swift */,
 				94A6B590044A90A31AD495C0 /* KnowledgeBaseService.swift */,
+				4F56F8BB3EE467BFFAFD75A6 /* LanguageRouter.swift */,
 				849C0FD9488BF2E19F6EC1B2 /* LiveNudgeSession.swift */,
 				E0A6FC1140705E8D8C90BF5E /* LoginItem.swift */,
 				92E4110250F90A3C6B94294D /* MCPAccess.swift */,
@@ -432,6 +443,7 @@
 				28DD99BAACABF3D605D8A39D /* OllamaInstaller.swift */,
 				1ECEAE3F6FB574CA5A82C1E6 /* OllamaService.swift */,
 				4A8F9DA46AE949694DB45BC9 /* OpenAICompatibleProvider.swift */,
+				4509B0166A0E3555A7B75966 /* ParakeetTranscriber.swift */,
 				53CCAD24CC45467637AE5CE2 /* ParrotLink.swift */,
 				5D13412C1D598A52A25FED08 /* PermissionFlow.swift */,
 				00A832C673EC418D31C8E054 /* ProfileFile.swift */,
@@ -599,6 +611,7 @@
 				FE86BA35CE14B2DD8BEF3E6A /* DashboardView.swift in Sources */,
 				C0558FD92CC63B08D0434047 /* DiarizationEngine.swift in Sources */,
 				670465176804DAB6090CD626 /* EchoCanceller.swift in Sources */,
+				824EEF5B8CC32F067F6772D5 /* EngineRecommendation.swift in Sources */,
 				85CA1373AFA3114E41376176 /* ExportService.swift in Sources */,
 				09CA6C39B3150648B4AEB4F4 /* FollowUpEmail.swift in Sources */,
 				0C5BBE5AB6555A827BAF8B5D /* GlobalHotKey.swift in Sources */,
@@ -609,6 +622,7 @@
 				526821B12602359B826C7347 /* KindStyle.swift in Sources */,
 				28B471FA2550C26972D86C1E /* KnowledgeBase.swift in Sources */,
 				F8CA7DA639E64F49A7FC3601 /* KnowledgeBaseService.swift in Sources */,
+				9B9FE3793FF517277E038D41 /* LanguageRouter.swift in Sources */,
 				57E31BA8B084C9DE80DDB64E /* LiveNudgeSession.swift in Sources */,
 				C8804B03958954B9D8BEA6FA /* LiveRecordingView.swift in Sources */,
 				60B05424F31B7D6E48D8140A /* LoginItem.swift in Sources */,
@@ -634,6 +648,7 @@
 				51E7E38B53A6F2838E431302 /* OnboardingParts.swift in Sources */,
 				40C8A49A749AC3C631BFD47C /* OnboardingView.swift in Sources */,
 				A820C2BE7362DD0032CD10E0 /* OpenAICompatibleProvider.swift in Sources */,
+				024873A56A7C7C5F1820762A /* ParakeetTranscriber.swift in Sources */,
 				2D78F88F85C6B10D387F5B45 /* ParrotApp.swift in Sources */,
 				0109711A3BA5D408DD1A7A82 /* ParrotLink.swift in Sources */,
 				71178416D25A2F6E9A36FE94 /* PermissionFlow.swift in Sources */,
@@ -647,6 +662,7 @@
 				988B661DADB5FCF1857EDA1F /* ProfileShareViews.swift in Sources */,
 				83B320AE88C486EBF06C3744 /* ProfileStore.swift in Sources */,
 				5B6728C0498B8E0991999D4E /* ProfileTest+Nudges.swift in Sources */,
+				90A51DF838AD3375A71EC1A3 /* ProfileTest+Parakeet.swift in Sources */,
 				1AEA1A4776F92CB299E1D551 /* ProfileTest.swift in Sources */,
 				99DDA637CF7F36D74F60368E /* ProfilesSettingsView.swift in Sources */,
 				D99860D66056753CC7AE5395 /* ProviderKeyCheck.swift in Sources */,

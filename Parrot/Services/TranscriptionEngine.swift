@@ -27,6 +27,14 @@ final class TranscriptionEngine {
     /// Set per recording: the call is on-device only (see CloudGate).
     var forceLocal = false
     private var whisperKit: WhisperKit?
+    /// The model the user picked (a Whisper tag or `ParakeetTranscriber.modelID`).
+    @ObservationIgnored private(set) var currentModel = ""
+    /// Loaded when Parakeet is the model; `whisperKit` then stays nil until a
+    /// side of a call needs Whisper (see `ensureWhisper`).
+    @ObservationIgnored private var parakeet: ParakeetTranscriber?
+    /// Whisper Tiny, only for "which language is this?" while on Parakeet.
+    @ObservationIgnored private var tinyDetector: WhisperKit?
+    @ObservationIgnored private var whisperLoad: Task<WhisperKit?, Never>?
     /// Silero voice-activity model (FluidAudio, on-device), the last gate
     /// before every decode. Whisper narrates noise ("so", "What can I do?"
     /// from an idle room), and no loudness rule tells quiet speech from room
@@ -57,6 +65,29 @@ final class TranscriptionEngine {
     /// Guarded by `bufferLock` (the loop and `reanchorLocalClock` both touch it).
     private var consumedSamples: [AudioSource: Int] = [:]
     private var meetingStartTime = Date()
+
+    /// The language this call sounds like, when it isn't what the session is
+    /// transcribing in (nil = no mismatch, or not checked yet). The live bar
+    /// offers a one-click switch. A pinned English setting on a Turkish call
+    /// turned 46 minutes into English-shaped nonsense on 2026-09-30.
+    private(set) var languageMismatch: String?
+    /// The session's language (nil = auto). Read per decode by the local loop
+    /// and swapped by `switchLanguage`. Guarded by `bufferLock`.
+    private var sessionLanguage: String?
+    private var sessionBackend: TranscriptionBackend = .local
+    private var deepgramKey: String?
+    /// Voiced audio gathered per side for the language check (one side each:
+    /// interleaving both would feed Whisper stitched-up audio). nil = off.
+    /// Guarded by `bufferLock`.
+    private var probe: LanguageProbe?
+    /// Which engine each side uses (Parakeet on Auto-detect holds each side
+    /// until its check). Guarded by `bufferLock`.
+    private var router = LanguageRouter(parakeet: false, pinned: nil)
+    /// The mismatch banner, kept up all call (see `MismatchWatch`). Main actor.
+    @ObservationIgnored private var watch = MismatchWatch(setting: nil)
+    /// Enough speech for Whisper to be sure: 10 s scored p ≥ 0.93 on 8 real
+    /// tracks (Turkish and English, both sides), and warns twice as soon as 20.
+    static let languageProbeSamples = 10 * 16000
 
     /// PARROT_LOOP_TRACE=1: print every raw decode piece before filtering —
     /// the tell for "the loop decoded it but a filter ate it" class of drops.
@@ -148,39 +179,38 @@ final class TranscriptionEngine {
     private func performLoad(_ modelName: String, generation: Int) async {
         isReady = false
         loadingModelName = Self.displayName(for: modelName)
-        do {
-            let resolvedModelName = Self.hubVariant(for: modelName)
-            let modelFolder: URL
-            if let localFolder = Self.localModelFolder(for: modelName) {
-                modelFolder = localFolder
-            } else {
-                modelState = .downloading(progress: 0)
-                modelFolder = try await Self.withStallTimeout(seconds: 60) { tick in
-                    try await WhisperKit.download(variant: resolvedModelName) { progress in
-                        let fraction = min(max(progress.fractionCompleted, 0), 1)
-                        tick(fraction)
-                        Task { @MainActor [weak self] in
-                            guard let self, self.loadGeneration == generation,
-                                  case .downloading(let current) = self.modelState else { return }
-                            self.modelState = .downloading(progress: max(current, fraction))
-                        }
-                    }
-                }
+        currentModel = modelName
+        // Download progress lands on the main actor, for this load only.
+        let progress: @Sendable (Double) -> Void = { [weak self] fraction in
+            Task { @MainActor [weak self] in
+                guard let self, self.loadGeneration == generation,
+                      case .downloading(let current) = self.modelState else { return }
+                self.modelState = .downloading(progress: max(current, fraction))
             }
-
+        }
+        do {
+            if Self.isParakeet(modelName) {
+                modelState = ParakeetTranscriber.isDownloaded ? .loading : .downloading(progress: 0)
+                let parakeet = try await ParakeetTranscriber.load(progress: progress)
+                // No detector just means every side goes to Whisper: safe.
+                let detector = try? await Self.makeWhisperKit(Self.detectorModel)
+                guard loadGeneration == generation else { return }
+                self.parakeet = parakeet
+                tinyDetector = detector
+                whisperKit = nil   // loaded again only when a call needs it
+                modelState = .ready
+                isReady = true
+                Task { await self.loadSpeechDetector() }
+                Task.detached(priority: .utility) { await Self.prepareFallback() }
+                return
+            }
+            if Self.localModelFolder(for: modelName) == nil { modelState = .downloading(progress: 0) }
+            let kit = try await Self.makeWhisperKit(modelName, loading: { @MainActor [weak self] in
+                if let self, self.loadGeneration == generation { self.modelState = .loading }
+            }, progress: progress)
             guard loadGeneration == generation else { return }
-            modelState = .loading
-            let config = WhisperKitConfig(
-                model: resolvedModelName,
-                modelFolder: modelFolder.path,
-                verbose: false,
-                logLevel: .none,
-                prewarm: true,
-                load: true,
-                download: false
-            )
-            let kit = try await Self.withTimeout(seconds: 300) { try await WhisperKit(config) }
-            guard loadGeneration == generation else { return }
+            parakeet = nil
+            tinyDetector = nil
             whisperKit = kit
             modelState = .ready
             isReady = true
@@ -191,6 +221,69 @@ final class TranscriptionEngine {
             modelState = .error(error.localizedDescription)
             isReady = false
         }
+    }
+
+    /// Download (if missing) and load one WhisperKit model. `loading` runs
+    /// once the files are there, before the (possibly long) Core ML load.
+    nonisolated static func makeWhisperKit(_ modelName: String,
+                                           loading: (@Sendable () async -> Void)? = nil,
+                                           progress: (@Sendable (Double) -> Void)? = nil) async throws -> WhisperKit {
+        let resolvedModelName = hubVariant(for: modelName)
+        let modelFolder: URL
+        if let localFolder = localModelFolder(for: modelName) {
+            modelFolder = localFolder
+        } else {
+            modelFolder = try await withStallTimeout(seconds: 60) { tick in
+                try await WhisperKit.download(variant: resolvedModelName) { download in
+                    let fraction = min(max(download.fractionCompleted, 0), 1)
+                    tick(fraction)
+                    progress?(fraction)
+                }
+            }
+        }
+        await loading?()
+        let config = WhisperKitConfig(
+            model: resolvedModelName,
+            modelFolder: modelFolder.path,
+            verbose: false,
+            logLevel: .none,
+            prewarm: true,
+            load: true,
+            download: false
+        )
+        return try await withTimeout(seconds: 300) { try await WhisperKit(config) }
+    }
+
+    /// What answers "which language is this?": Tiny while Parakeet is the
+    /// model, else the loaded Whisper (English-only models can't tell).
+    private var languageDetector: WhisperKit? { parakeet != nil ? tinyDetector : whisperKit }
+
+    /// The Whisper to decode with. On Parakeet it's the fallback, loaded the
+    /// first time a side of a call needs it (seconds, thanks to
+    /// `prepareFallback`); that side's audio waits in its buffer meanwhile.
+    // ponytail: only the transcription loop and imports call this, never both at once.
+    func ensureWhisper() async -> WhisperKit? {
+        if let whisperKit { return whisperKit }
+        // One load however many callers (the loop, an import, the preload).
+        let load: Task<WhisperKit?, Never> = bufferLock.withLock {
+            if let whisperLoad { return whisperLoad }
+            let fresh = Task { try? await Self.makeWhisperKit(Self.fallbackWhisper) }
+            whisperLoad = fresh
+            return fresh
+        }
+        let kit = await load.value
+        whisperKit = kit
+        bufferLock.withLock { whisperLoad = nil }
+        return kit
+    }
+
+    /// Download the fallback and load it once, so macOS prepares it for the
+    /// Neural Engine now (the first load can take minutes) instead of mid-call.
+    nonisolated static func prepareFallback() async {
+        let key = "parakeetFallbackPrepared"
+        guard UserDefaults.standard.string(forKey: key) != fallbackWhisper else { return }
+        guard (try? await makeWhisperKit(fallbackWhisper)) != nil else { return }
+        UserDefaults.standard.set(fallbackWhisper, forKey: key)
     }
 
     /// Loads the voice-activity model (~1 MB from Hugging Face the first
@@ -272,9 +365,16 @@ final class TranscriptionEngine {
         case "large-v3-turbo": "Large V3 Turbo"
         case "large-v3-v20240930_626MB": "Large V3 Turbo Compressed"
         case "tiny", "base", "small", "medium": modelName.capitalized
+        case ParakeetTranscriber.modelID: ParakeetTranscriber.displayName
         default: modelName
         }
     }
+
+    nonisolated static func isParakeet(_ modelName: String) -> Bool { modelName == ParakeetTranscriber.modelID }
+    /// The Whisper a Parakeet call switches to for other languages.
+    nonisolated static let fallbackWhisper = "large-v3-v20240930_626MB"
+    /// Whisper's language check while Parakeet is the model.
+    nonisolated static let detectorModel = "tiny"
 
     /// The on-disk folder for a model, if already downloaded. WhisperKit's repo
     /// spells variants inconsistently ('_' vs '-' between segments), hence the
@@ -425,6 +525,19 @@ final class TranscriptionEngine {
             if hearing != isHearingSpeech {
                 Task { @MainActor in self.isHearingSpeech = hearing }
             }
+        }
+
+        // Language check: gather each side's first voiced audio, then ask
+        // Whisper what it hears. Runs for every backend, since the setting is
+        // shared and a wrong pin ruins all of them; on Parakeet it also
+        // decides which engine transcribes that side.
+        if isTranscribing, frameCount > 0 {
+            let energy = samples.reduce(into: Float(0)) { $0 += abs($1) } / Float(frameCount)
+            let full: [Float]? = bufferLock.withLock {
+                probe?.add(samples, voiced: energy > Segmenter.silenceFloor, from: source, at: Date(),
+                           holding: router.route(source) == .undecided)
+            }
+            if let full { Task { await self.checkLanguage(full, source: source) } }
         }
 
         // Streaming backend: straight to the socket, no chunk buffering.
@@ -650,21 +763,44 @@ final class TranscriptionEngine {
             groqKey = APIKeyStore.load(account: TranscriptionBackend.groq.keychainAccount!)
             if groqKey?.isEmpty != false {
                 backend = .local
-                cloudNotice = "Groq key missing — using on-device Whisper"
+                cloudNotice = "Groq key missing — using on-device \(onDeviceName)"
             }
         }
 
         // Resolve the user's transcription language ("auto"/nil = auto-detect).
-        let setting = UserDefaults.standard.string(forKey: "transcriptionLanguage")
-        let language = (setting == nil || setting == "auto") ? nil : setting
+        let language = TranscriptionLanguage.selected
+        languageMismatch = nil
+        watch = MismatchWatch(setting: language)
+        deepgramKey = nil
+        bufferLock.withLock {
+            sessionLanguage = language
+            probe = LanguageProbe()
+        }
+        kept = [:]
+        pendingRecheck = [:]
 
         if backend == .deepgram {
             if let key = APIKeyStore.load(account: TranscriptionBackend.deepgram.keychainAccount!), !key.isEmpty {
+                deepgramKey = key
                 startDeepgram(apiKey: key, language: language)
             } else {
                 backend = .local
-                cloudNotice = "Deepgram key missing — using on-device Whisper"
+                cloudNotice = "Deepgram key missing — using on-device \(onDeviceName)"
             }
+        }
+        let resolved = backend
+        let routesParakeet = parakeet != nil && resolved == .local
+        let holding: Bool = bufferLock.withLock {
+            sessionBackend = resolved
+            router = LanguageRouter(parakeet: routesParakeet, pinned: language)
+            return router.isHolding
+        }
+        if holding {
+            cloudNotice = Self.checkingNotice
+        } else if routesParakeet, let language, !LanguageRouter.parakeetLanguages.contains(language) {
+            cloudNotice = "\(TranscriptionLanguage.name(language)) isn't a Parakeet language: using Whisper"
+            // Picked before the call: load it now, so the first line isn't late.
+            Task.detached(priority: .userInitiated) { [weak self] in _ = await self?.ensureWhisper() }
         }
         var decodeOptions = DecodingOptions(
             task: .transcribe,
@@ -710,6 +846,12 @@ final class TranscriptionEngine {
             var nextPreviewAt: [AudioSource: Date] = [:]
 
             while !Task.isCancelled {
+                // Re-read per pass: `switchLanguage` can change it mid-call.
+                let language = self.bufferLock.withLock { self.sessionLanguage }
+                var decodeOptions = decodeOptions
+                decodeOptions.language = language
+                decodeOptions.detectLanguage = language == nil
+
                 // isTranscribing == false flips the loop into drain mode: keep
                 // consuming the backlog (whole utterances, down to the final
                 // sub-frame tail) and exit once the buffers are empty. Capture
@@ -719,6 +861,31 @@ final class TranscriptionEngine {
                 var didWork = false
 
                 for source in AudioSource.allCases {
+                    // Parakeet on Auto-detect: this side's language isn't known
+                    // yet, so its audio waits in the buffer (Whisper needs ~10 s
+                    // of speech to be sure). Past 30 s of waiting it's checked
+                    // with what there is; while stopping, right away. Once
+                    // decided, the backlog below catches up in bounded cuts.
+                    if self.bufferLock.withLock({ self.router.route(source) }) == .undecided {
+                        let due = self.bufferLock.withLock {
+                            self.probe?.take(source, at: Date(), force: draining, holding: true)
+                        }
+                        if let due {
+                            await self.checkLanguage(due, source: source)
+                        }
+                        if self.bufferLock.withLock({ self.router.route(source) }) == .undecided {
+                            // Nothing to take while stopping means this side's
+                            // check is already running (the probe filled): wait
+                            // for its answer rather than guess. Draining never
+                            // sleeps on its own, so pace the wait here.
+                            if draining { try? await Task.sleep(for: .milliseconds(50)) }
+                            continue
+                        }
+                    }
+                    if let seconds = self.pendingRecheck.removeValue(forKey: source) {
+                        await self.recheck(source, seconds: seconds, options: decodeOptions)
+                    }
+
                     // Pull at most one utterance for this stream under the lock.
                     // The segmenter decides the cut: leading silence is discarded
                     // (the consumed counter still advances, keeping timestamps
@@ -769,21 +936,39 @@ final class TranscriptionEngine {
                                 voiced = false
                                 nextPreviewAt[source] = Date().addingTimeInterval(previewBase)
                             }
-                            if voiced, let whisperKit = self.whisperKit {
-                                // No interim callback here on purpose: each preview
-                                // re-decodes from the utterance's start, so streaming
-                                // its words made the bubble restart the same sentence
-                                // every cycle (dry-run feedback, 2026-08-01). The
-                                // bubble now updates once per preview with the fuller
-                                // text; word-by-word streaming stays on the commit
-                                // decode where it reads forward, not in circles.
-                                let decodeStarted = Date()
-                                let result = (try? await whisperKit.transcribe(
-                                    audioArray: Self.normalizedForDecode(pending),
-                                    decodeOptions: decodeOptions)) ?? []
+                            // No interim callback here on purpose: each preview
+                            // re-decodes from the utterance's start, so streaming
+                            // its words made the bubble restart the same sentence
+                            // every cycle (dry-run feedback, 2026-08-01). The
+                            // bubble now updates once per preview with the fuller
+                            // text; word-by-word streaming stays on the commit
+                            // decode where it reads forward, not in circles.
+                            // The side's own engine; a preview never triggers the
+                            // lazy Whisper load, only a commit decode does.
+                            let decodeStarted = Date()
+                            var previewText: String?
+                            if voiced {
+                                switch self.bufferLock.withLock({ self.router.route(source) }) {
+                                case .parakeet(let language):
+                                    if let parakeet = self.parakeet {
+                                        previewText = (try? await parakeet.transcribe(
+                                            Self.normalizedForDecode(pending), language: language)) ?? ""
+                                    }
+                                case .whisper:
+                                    if let whisperKit = self.whisperKit {
+                                        let result = (try? await whisperKit.transcribe(
+                                            audioArray: Self.normalizedForDecode(pending),
+                                            decodeOptions: decodeOptions)) ?? []
+                                        previewText = result.map(\.text).joined(separator: " ")
+                                    }
+                                case .undecided:
+                                    break
+                                }
+                            }
+                            if let previewText {
                                 nextPreviewAt[source] = Date().addingTimeInterval(
                                     max(previewBase, Date().timeIntervalSince(decodeStarted) * 2))
-                                let raw = Self.cleaned(result.map(\.text).joined(separator: " "))
+                                let raw = Self.cleaned(previewText)
                                 let display = self.glossaryActive ? (Self.strippingGlossaryEcho(raw) ?? "") : raw
                                 if Self.loopTrace {
                                     // Printed even when empty: "gate never passed"
@@ -842,7 +1027,19 @@ final class TranscriptionEngine {
                     // On-device decode — the default path, and the per-chunk
                     // fallback when a cloud backend hiccups (never lose a chunk).
                     func decodeLocally() async throws -> [(text: String, confidence: Float?)] {
-                        guard let whisperKit = self.whisperKit else { return [] }
+                        if case .parakeet(let language) = self.bufferLock.withLock({ self.router.route(source) }),
+                           let parakeet = self.parakeet {
+                            let (text, score) = try await parakeet.transcribeScored(decodeSamples, language: language)
+                            if Self.loopTrace { print(String(format: "TRACE %@ parakeet[%@] conf=%.3f: %@", source.label, language ?? "-", score, text)) }
+                            self.keepForRecheck(chunk, source: source, start: startTime, end: endTime,
+                                                doubtful: Self.parakeetDoubts(score, seconds: endTime - startTime))
+                            // Parakeet's 0-1 score isn't Whisper's log-prob: don't mix them.
+                            return [(text, nil)]
+                        }
+                        // Whisper: on Parakeet, loaded the first time a side needs it.
+                        if Self.loopTrace, self.whisperKit == nil { print("TRACE \(source.label) loading Whisper \(Self.fallbackWhisper)") }
+                        guard let whisperKit = await self.ensureWhisper() else { return [] }
+                        if Self.loopTrace, self.parakeet != nil { print("TRACE \(source.label) whisper decode") }
                         // No interim streaming here anymore: the rolling preview is
                         // the live text, and re-streaming the same sentence from
                         // word one during the commit decode made its tail appear
@@ -971,48 +1168,242 @@ final class TranscriptionEngine {
     /// flips the session to the local buffer/loop path.
     private func startDeepgram(apiKey: String, language: String?) {
         for source in AudioSource.allCases {
-            let streamer = DeepgramStreamer()
-            streamer.onInterim = { [weak self] text in
-                let partial = Self.cleaned(text)
-                guard !partial.isEmpty else { return }
-                Task { @MainActor in
-                    self?.currentText = partial
-                    self?.currentSpeaker = source
-                }
-            }
-            streamer.onFinal = { [weak self] text, start, end in
-                guard let self else { return }
-                let cleanedText = Self.cleaned(text)
-                // energy 1.0: Deepgram runs its own voice-activity detection,
-                // so only punctuation-only junk is filtered here.
-                guard !cleanedText.isEmpty,
-                      !Self.isLikelyHallucination(cleanedText, energy: 1.0) else { return }
-                Task { @MainActor in
-                    // Same as the Whisper path: the final belongs to the committed
-                    // segment; the interim line must clear or it duplicates.
-                    self.currentText = ""
-                    self.currentSpeaker = nil
-                    self.onSegment?(TranscriptionResult(
-                        text: cleanedText, source: source,
-                        startTime: start, endTime: end, confidence: nil))
-                }
-            }
-            streamer.onError = { [weak self] message in
-                guard let self else { return }
-                // Public on purpose: NSLog is redacted in `log show`, and this
-                // is the only place the real Deepgram failure reason exists.
-                AudioCaptureManager.oslog.error("Deepgram stream failed (\(source.label, privacy: .public)): \(message, privacy: .public)")
-                // Only this stream falls back to local; the other socket keeps
-                // streaming. Re-anchor before the first fallback sample lands.
-                self.bufferLock.withLock { _ = self.deepgramFailedSources.insert(source) }
-                self.reanchorLocalClock(source: source)
-                Task { @MainActor in
-                    self.cloudNotice = "Deepgram error — \(source.label) stream now on on-device Whisper"
-                }
-            }
-            streamer.connect(apiKey: apiKey, language: language)
-            deepgramStreamers[source] = streamer
+            deepgramStreamers[source] = makeDeepgramStreamer(
+                source: source, apiKey: apiKey, language: language, offset: 0)
         }
+    }
+
+    /// One connected socket for `source`. `offset` is the meeting time the
+    /// socket opens at: Deepgram's timestamps restart at 0 on every stream.
+    private func makeDeepgramStreamer(source: AudioSource, apiKey: String,
+                                      language: String?, offset: TimeInterval) -> DeepgramStreamer {
+        let streamer = DeepgramStreamer()
+        streamer.onInterim = { [weak self] text in
+            let partial = Self.cleaned(text)
+            guard !partial.isEmpty else { return }
+            Task { @MainActor in
+                self?.currentText = partial
+                self?.currentSpeaker = source
+            }
+        }
+        streamer.onFinal = { [weak self] text, start, end in
+            guard let self else { return }
+            let cleanedText = Self.cleaned(text)
+            // energy 1.0: Deepgram runs its own voice-activity detection,
+            // so only punctuation-only junk is filtered here.
+            guard !cleanedText.isEmpty,
+                  !Self.isLikelyHallucination(cleanedText, energy: 1.0) else { return }
+            Task { @MainActor in
+                // Same as the Whisper path: the final belongs to the committed
+                // segment; the interim line must clear or it duplicates.
+                self.currentText = ""
+                self.currentSpeaker = nil
+                self.onSegment?(TranscriptionResult(
+                    text: cleanedText, source: source,
+                    startTime: start + offset, endTime: end + offset, confidence: nil))
+            }
+        }
+        streamer.onError = { [weak self] message in
+            guard let self else { return }
+            // Public on purpose: NSLog is redacted in `log show`, and this
+            // is the only place the real Deepgram failure reason exists.
+            AudioCaptureManager.oslog.error("Deepgram stream failed (\(source.label, privacy: .public)): \(message, privacy: .public)")
+            // Only this stream falls back to local; the other socket keeps
+            // streaming. Re-anchor before the first fallback sample lands.
+            self.bufferLock.withLock { _ = self.deepgramFailedSources.insert(source) }
+            self.reanchorLocalClock(source: source)
+            Task { @MainActor in
+                self.cloudNotice = "Deepgram error — \(source.label) stream now on on-device Whisper"
+            }
+        }
+        streamer.connect(apiKey: apiKey, language: language)
+        return streamer
+    }
+
+    /// "Keep English": the banner goes, and the watch has already marked
+    /// that language as offered, so it won't come back this call.
+    @MainActor
+    func dismissLanguageMismatch() {
+        languageMismatch = nil
+    }
+
+    /// Switch the running call to `code` and remember it for the next one.
+    /// Deepgram sockets are pinned to a language at connect, so each healthy
+    /// one is replaced; the old socket flushes its finals, then closes. The
+    /// local and Groq paths pick the new language up on their next pass.
+    @MainActor
+    func switchLanguage(to code: String) {
+        UserDefaults.standard.set(code, forKey: TranscriptionLanguage.defaultsKey)
+        languageMismatch = nil
+        watch.switched(to: code)
+        bufferLock.withLock {
+            sessionLanguage = code
+            router.switchLanguage(to: code)
+        }
+        guard isTranscribing, let deepgramKey else { return }
+        let offset = Date().timeIntervalSince(meetingStartTime)
+        for source in AudioSource.allCases {
+            let fresh = makeDeepgramStreamer(source: source, apiKey: deepgramKey, language: code, offset: offset)
+            let old: DeepgramStreamer? = bufferLock.withLock {
+                guard !deepgramFailedSources.contains(source) else { return nil }
+                defer { deepgramStreamers[source] = fresh }
+                return deepgramStreamers[source]
+            }
+            guard let old else { fresh.close(); continue }
+            old.finish()
+            Task {
+                try? await Task.sleep(for: .seconds(1.2))  // same grace as stop
+                old.close()
+            }
+        }
+    }
+
+    /// Ask Whisper what language one side's probe is in. It routes that side
+    /// on Parakeet, and the first conclusive answer drives the mismatch
+    /// banner (an unsure one re-arms that side, a few times at most).
+    func checkLanguage(_ samples: [Float], source: AudioSource) async {
+        var detected: (language: String, confidence: Float)?
+        if let detector = languageDetector, !samples.isEmpty,
+           let result = try? await detector.detectLangauge(audioArray: Self.normalizedForDecode(samples)) {
+            // WhisperKit reports the winner's log-probability.
+            detected = (result.language, exp(result.langProbs[result.language] ?? -.infinity))
+        }
+        let heard = detected?.language
+        let confidence = detected?.confidence ?? 0
+        let (setting, backend, holding, change, themHeld) = bufferLock.withLock {
+            let holding = router.route(source) == .undecided
+            let change = router.heard(source, language: heard, confidence: confidence)
+            // Unsure while holding: this side gets one more stretch.
+            if case .retry = change { probe?.rearm(source) }
+            return (sessionLanguage, sessionBackend, holding, change, router.route(.them) == .undecided)
+        }
+        if Self.loopTrace {
+            print(String(format: "TRACE %@ language check: heard %@ p=%.2f from %.1f s → %@", source.label,
+                         heard ?? "-", confidence, Double(samples.count) / 16000, String(describing: change)))
+        }
+        AudioCaptureManager.oslog.info("Language check \(source.label, privacy: .public): heard \(heard ?? "-", privacy: .public) p=\(confidence, privacy: .public), set \(setting ?? "auto", privacy: .public)")
+        if let change, let notice = Self.noticeFor(change, heard: heard) {
+            await MainActor.run { if self.isTranscribing { self.cloudNotice = notice } }
+        } else if holding, !themHeld {
+            // The notice is about the other side's lines. Yours rarely wait
+            // (you're mostly listening), so they don't keep it up.
+            await MainActor.run { if self.cloudNotice == Self.checkingNotice { self.cloudNotice = nil } }
+        }
+        // A routing check on Auto isn't a warning check: Auto on this Mac
+        // transcribes any language, so there's nothing to offer. The banner
+        // can only fire on a pinned language, or Deepgram on auto; only
+        // those keep checking every side all call.
+        guard !holding, let heard, setting != nil || backend == .deepgram else { return }
+        let mismatch = Self.languageMismatch(setting: setting, backend: backend, heard: heard, confidence: confidence)
+        await MainActor.run {
+            guard self.isTranscribing else { return }
+            let (offer, recheckAfter) = self.watch.heard(source, mismatch: mismatch, confidence: confidence)
+            if let offer { self.languageMismatch = offer }
+            self.bufferLock.withLock { self.probe?.rearm(source, skipping: recheckAfter) }
+        }
+    }
+
+    static let checkingNotice = "Checking the language\u{2026}"
+
+    /// A Parakeet side's lines since its last clean language check, with
+    /// their audio, so a late switch to Whisper can re-do them. Loop-only.
+    @ObservationIgnored private var kept: [AudioSource: [(start: TimeInterval, end: TimeInterval, audio: [Float])]] = [:]
+    /// Sides due a language recheck, and how many seconds of their latest
+    /// audio to check; the loop runs it before that side's next cut, so a
+    /// recheck never races the decode it might redo.
+    @ObservationIgnored private var pendingRecheck: [AudioSource: Int] = [:]
+
+    /// Parakeet was unsure of a line it wrote: on English its lines scored
+    /// 0.98-1.00, on Turkish (which it can't do) 0.10-0.71. That only asks
+    /// for a language check on the spot. It never drops or hides a line.
+    nonisolated static let parakeetDoubt: Float = 0.9
+    nonisolated static func parakeetDoubts(_ score: Float, seconds: TimeInterval) -> Bool {
+        score < parakeetDoubt && seconds >= 1.5
+    }
+    /// Replace one side's lines in a time range (a rewind), same hop as onSegment.
+    var onReplace: ((AudioSource, ClosedRange<TimeInterval>, [TranscriptionResult]) -> Void)?
+
+    /// The latest `seconds` of a side's kept audio, for its recheck.
+    nonisolated static func recheckAudio(_ clips: [[Float]], seconds: Int) -> [Float] {
+        Array(clips.joined().suffix(seconds * 16000))
+    }
+
+    /// Keeps a Parakeet side's decoded audio for its language recheck: every
+    /// 30 s of speech on its latest 10 s, or at once on the latest 5 s when
+    /// Parakeet doubted the line (a side switching to Turkish, most likely).
+    private func keepForRecheck(_ samples: [Float], source: AudioSource, start: TimeInterval, end: TimeInterval,
+                                doubtful: Bool = false) {
+        kept[source, default: []].append((start, end, samples))
+        // ponytail: 90 s cap per side, so failed checks can't grow memory.
+        while (kept[source]?.reduce(0) { $0 + $1.audio.count } ?? 0) > 90 * 16000 { kept[source]?.removeFirst() }
+        let due = bufferLock.withLock { router.decoded(source, seconds: end - start) }
+        if doubtful {
+            pendingRecheck[source] = 5
+        } else if due, pendingRecheck[source] == nil {
+            pendingRecheck[source] = 10
+        }
+    }
+
+    /// Ask again what language a Parakeet side speaks. Still one of
+    /// Parakeet's: those lines are verified. Something else (Turkish mid-call):
+    /// the side is on Whisper from now on, and its lines since the last clean
+    /// check are re-done with Whisper and replaced.
+    private func recheck(_ source: AudioSource, seconds: Int, options: DecodingOptions) async {
+        let clips = kept[source] ?? []
+        await checkLanguage(Self.recheckAudio(clips.map(\.audio), seconds: seconds), source: source)
+        guard bufferLock.withLock({ router.route(source) }) == .whisper else {
+            kept[source] = []
+            return
+        }
+        kept[source] = nil
+        guard let first = clips.first, let last = clips.last, let whisper = await ensureWhisper() else { return }
+        var bare = options
+        bare.promptTokens = nil
+        bare.usePrefillPrompt = false
+        var redone: [TranscriptionResult] = []
+        for clip in clips {
+            let pieces = (try? await whisper.transcribe(audioArray: Self.normalizedForDecode(clip.audio),
+                                                        decodeOptions: bare)) ?? []
+            let text = Self.cleaned(pieces.map(\.text).joined(separator: " "))
+            if !text.isEmpty {
+                redone.append(TranscriptionResult(text: text, source: source, startTime: clip.start,
+                                                  endTime: clip.end, confidence: nil))
+            }
+        }
+        if Self.loopTrace { print("TRACE \(source.label) rewind \(clips.count) line(s), \(first.start)-\(last.end) s") }
+        let replacement = redone
+        await MainActor.run { self.onReplace?(source, first.start...last.end, replacement) }
+    }
+
+    /// The live bar's line when a side's engine is decided or switched.
+    static func noticeFor(_ change: LanguageRouter.Change, heard: String?) -> String? {
+        let name = heard.map(TranscriptionLanguage.name)
+        switch change {
+        case .decided(let source, .whisper):
+            let side = source == .me ? "you" : "them"
+            return name.map { "\($0) heard: using Whisper for \(side)" } ?? "Language unclear: using Whisper for \(side)"
+        case .switchedToWhisper(let source):
+            return "\(name ?? "Another language") heard: using Whisper for \(source == .me ? "you" : "them") from here"
+        default:
+            return nil
+        }
+    }
+
+    /// The on-device engine a cloud fallback lands on, for the live bar.
+    private var onDeviceName: String { parakeet != nil ? "Parakeet" : "Whisper" }
+
+    /// Which language to offer switching to, or nil to stay quiet.
+    /// - setting: the session's language (nil = auto-detect)
+    /// - heard: Whisper's language code for the call's first ~10 s of speech
+    /// - confidence: Whisper's probability for `heard`, 0...1
+    static func languageMismatch(setting: String?, backend: TranscriptionBackend,
+                                 heard: String, confidence: Float) -> String? {
+        // 0.8: real calls score 1.00; an unsure guess must not nag.
+        guard confidence >= 0.8, heard != setting,
+              TranscriptionLanguage.options.contains(where: { $0.code == heard }) else { return nil }
+        if setting != nil { return heard }
+        // Auto: Whisper and Groq detect anything; Deepgram only its ten.
+        return backend == .deepgram && !TranscriptionLanguage.deepgramMulti.contains(heard) ? heard : nil
     }
 
     /// Re-anchor a stream's locally-derived timestamps to "now" in meeting time.
@@ -1083,7 +1474,9 @@ final class TranscriptionEngine {
     /// Whisper's per-utterance boundaries are exactly what we want.
     /// WhisperKit loads + resamples any format (m4a/mp3/wav/aac/caf) to 16 kHz mono.
     func transcribeFile(url: URL) async throws -> [TranscriptionResult] {
-        guard let whisperKit else { throw RecordingError.modelNotReady }
+        if let parakeet, let lines = try await parakeetImport(url: url, parakeet: parakeet) { return lines }
+        // Whisper: on Parakeet, loaded for this file only when it needs it.
+        guard let whisperKit = await ensureWhisper() else { throw RecordingError.modelNotReady }
 
         let setting = UserDefaults.standard.string(forKey: "transcriptionLanguage")
         let language = (setting == nil || setting == "auto") ? nil : setting
@@ -1131,6 +1524,84 @@ final class TranscriptionEngine {
         }
     }
 
+    /// Parakeet's share of imports. nil = this file goes to Whisper: a pinned
+    /// language Parakeet lacks, or on Auto any of three 30 s windows that
+    /// isn't confidently one of its 25 (one mixed track, so the whole file
+    /// goes one way).
+    private func parakeetImport(url: URL, parakeet: ParakeetTranscriber) async throws -> [TranscriptionResult]? {
+        let pinned = TranscriptionLanguage.selected
+        if let pinned, !LanguageRouter.parakeetLanguages.contains(pinned) { return nil }
+        let samples = AudioProcessor.convertBufferToArray(buffer: try AudioProcessor.loadAudio(fromPath: url.path))
+        var hint = pinned
+        if pinned == nil {
+            var verdicts: [(language: String?, confidence: Float)] = []
+            for window in Self.importWindows(sampleCount: samples.count) {
+                if let detector = languageDetector,
+                   let result = try? await detector.detectLangauge(audioArray: Self.normalizedForDecode(Array(samples[window]))) {
+                    verdicts.append((result.language, exp(result.langProbs[result.language] ?? -.infinity)))
+                } else {
+                    verdicts.append((nil, 0))
+                }
+            }
+            if Self.loopTrace { print("TRACE import language: \(verdicts.map { "\($0.language ?? "-") \(String(format: "%.2f", $0.confidence))" })") }
+            guard Self.importUsesParakeet(verdicts) else { return nil }
+            let heard = Set(verdicts.compactMap(\.language))
+            hint = heard.count == 1 ? heard.first : nil
+        }
+        let timeline = await speechTimeline(samples: samples)
+        var lines: [TranscriptionResult] = []
+        for piece in Self.utterances(in: samples) {
+            let start = Double(piece.start) / 16000, end = Double(piece.start + piece.audio.count) / 16000
+            // Lines over a stretch with no voice would be invented.
+            if let timeline, !Self.hasVoice(timeline, from: start, to: end) { continue }
+            let text = Self.cleaned(try await parakeet.transcribe(Self.normalizedForDecode(piece.audio), language: hint))
+            guard !text.isEmpty else { continue }
+            // One mixed track, so every line is "Them"; diarization splits it later.
+            lines.append(TranscriptionResult(text: text, source: .them, startTime: start, endTime: end, confidence: nil))
+        }
+        return lines
+    }
+
+    /// Start, middle and end: 30 s each (one window for short files).
+    nonisolated static func importWindows(sampleCount: Int) -> [Range<Int>] {
+        let window = 30 * 16000
+        guard sampleCount > window * 3 else { return [0 ..< sampleCount] }
+        let mid = sampleCount / 2 - window / 2
+        return [0 ..< window, mid ..< mid + window, sampleCount - window ..< sampleCount]
+    }
+
+    nonisolated static func importUsesParakeet(_ verdicts: [(language: String?, confidence: Float)]) -> Bool {
+        !verdicts.isEmpty && verdicts.allSatisfy { verdict in
+            verdict.language.map(LanguageRouter.parakeetLanguages.contains) == true && verdict.confidence >= LanguageRouter.sure
+        }
+    }
+
+    /// The live loop's cutter over a whole file, so imported lines get the
+    /// same sample-offset timestamps as live ones. A window of twice the
+    /// segment cap always holds a cut, and slicing it keeps a long file linear.
+    nonisolated static func utterances(in samples: [Float]) -> [(start: Int, audio: [Float])] {
+        var pieces: [(start: Int, audio: [Float])] = []
+        var offset = 0
+        let window = Segmenter.maxSegmentSamples * 2
+        while offset < samples.count {
+            let end = min(offset + window, samples.count)
+            let buffer = Array(samples[offset ..< end])
+            let floor = Segmenter.adaptiveFloor(for: buffer)
+            var cut = Segmenter.nextCut(in: buffer, draining: end == samples.count, floor: floor)
+            if cut.dropLeading == 0, cut.take == nil {
+                cut = Segmenter.nextCut(in: buffer, draining: true, floor: floor)
+            }
+            let take = cut.take ?? 0
+            if take > 0 {
+                pieces.append((offset + cut.dropLeading, Array(buffer[cut.dropLeading ..< cut.dropLeading + take])))
+            }
+            let consumed = cut.dropLeading + take
+            guard consumed > 0 else { break }
+            offset += consumed
+        }
+        return pieces
+    }
+
     /// Stop transcription, draining the buffered backlog first so the final words
     /// of the call (previously always dropped — the loop needed ≥2 s buffered)
     /// make it into the transcript. Await this before assembling the transcript.
@@ -1155,9 +1626,15 @@ final class TranscriptionEngine {
             deepgramStreamers = [:]
         }
 
+        languageMismatch = nil
         isTranscribing = false          // flips the loop into drain mode
         await transcriptionTask?.value  // deliberately not cancel(): let it finish
         transcriptionTask = nil
+        // On Parakeet, a Whisper loaded for this call goes again: memory back.
+        if parakeet != nil { whisperKit = nil }
+        bufferLock.withLock { probe = nil }
+        kept = [:]
+        pendingRecheck = [:]
 
         bufferLock.withLock {
             audioBuffers = [.me: [], .them: []]

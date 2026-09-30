@@ -63,13 +63,18 @@ Mac</a>.</p>
 <img src="img/settings-transcription.png" alt="The Transcription settings page">
 <p>Everything about how speech becomes text:</p>
 <ul>
-  <li><strong>Model</strong>: which on-device Whisper does the work.
-  <code>base</code> is quick, <code>large-v3-turbo</code> is the accuracy
-  pick on Apple Silicon, and its compressed 626 MB variant is nearly as
-  accurate while using far less memory. Switching downloads the new model
-  once.</li>
+  <li><strong>Model</strong>: which on-device model does the work.
+  <strong>Parakeet v3</strong> is the fastest but knows only 25 European
+  languages (no Turkish); other languages switch to Whisper on their own
+  (see <a href="transcript.html#parakeet">Parakeet and other languages</a>).
+  Of the Whisper models, <code>base</code> is quick, <code>large-v3-turbo</code>
+  is the accuracy pick on Apple Silicon, and its compressed 626 MB variant is
+  nearly as accurate while using far less memory. Switching downloads the new
+  model once.</li>
   <li><strong>Language</strong>: auto-detect by default. If your calls are
-  always one language, set it; wrong-language surprises disappear.</li>
+  always one language, set it; wrong-language surprises disappear. Parrot
+  warns you during a call if it hears a different one. With Deepgram, pick
+  Turkish, Arabic, Chinese or Korean by name: its auto-detect skips them.</li>
   <li><strong>Custom vocabulary</strong>: your names and jargon, comma
   separated, so they stop getting creatively misspelled. See
   <a href="transcript.html">The live transcript</a>.</li>

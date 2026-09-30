@@ -1,30 +1,38 @@
 import SwiftUI
+import SwiftData
 
-/// Picks the Whisper model, preselecting what fits this Mac's memory, and
-/// starts the download right away. The engine owns the download, so it
+/// Picks the speech model, preselecting what fits this Mac (its languages,
+/// past calls and memory), and starts the download right away. The engine owns the download, so it
 /// keeps going after this step or the whole sheet goes away.
 struct SpeechModelStep: View {
     @Environment(RecordingManager.self) private var recordingManager
     @AppStorage("whisperModel") private var selectedModel = "base"
     @State private var showAll = false
+    /// Past calls, when the tour is shown again: a Turkish call means Whisper.
+    @Query(sort: \Meeting.date, order: .reverse) private var meetings: [Meeting]
     private let memoryGB = MachineFit.memoryGB()
 
-    /// Same five the Settings picker offers, same order. Sizes are what the
+    /// Same six the Settings picker offers, same order. Sizes are what the
     /// hub actually serves, not what the folder is called.
     static let modelChoices: [(tag: String, size: String, blurb: String)] = [
+        (ParakeetTranscriber.modelID, "~0.5 GB", "Fastest, 25 European languages (no Turkish)"),
         ("tiny", "~40 MB", "Fastest, basic accuracy"),
         ("base", "~140 MB", "Good balance of speed and accuracy"),
         ("small", "~460 MB", "Better accuracy, moderate speed"),
         ("large-v3-v20240930_626MB", "~626 MB", "Near-best accuracy, light on memory"),
         ("large-v3-turbo", "~1.6 GB", "Best accuracy, needs more RAM"),
     ]
-    private static let shortList: Set<String> = ["base", "large-v3-v20240930_626MB", "large-v3-turbo"]
+    private static let shortList: Set<String> = [ParakeetTranscriber.modelID, "base", "large-v3-v20240930_626MB", "large-v3-turbo"]
 
     var body: some View {
-        let recommended = MachineFit.whisperModel(memoryGB: memoryGB)
+        let recommended = EngineRecommendation.recommend(
+            preferredLanguages: Locale.preferredLanguages,
+            pastCallLanguages: EngineRecommendation.pastCallLanguages(
+                meetings.prefix(20).map { $0.sortedSegments.prefix(40).map(\.text).joined(separator: " ") }),
+            memoryGB: memoryGB)
         VStack(spacing: 14) {
             StepHeader(title: "Speech to text",
-                       subtitle: "Turns what's said into text, right on this Mac.\nYour Mac has \(memoryGB) GB of memory, so we picked:")
+                       subtitle: "Turns what's said into text, right on this Mac.\nPicked for your Mac's languages and \(memoryGB) GB of memory:")
             VStack(spacing: 8) {
                 ForEach(Self.modelChoices.filter { showAll || Self.shortList.contains($0.tag) || $0.tag == selectedModel },
                         id: \.tag) { choice in
@@ -36,7 +44,7 @@ struct SpeechModelStep: View {
             }
             .frame(maxWidth: 460)
             if !showAll {
-                Button("Show all 5 models") { showAll = true }
+                Button("Show all \(Self.modelChoices.count) models") { showAll = true }
                     .buttonStyle(.link)
             }
             SpeechDownloadRow()

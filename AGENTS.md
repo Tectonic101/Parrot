@@ -49,7 +49,7 @@ bundle time by the Makefile, not by Xcode.
 - Cloud calls need an explicit user opt-in path; on-device stays the default.
 - Test via the CLI harnesses in `SnapshotTool.swift` / `ProfileTest.swift` /
   `CopilotHarness.swift` (`--profile-test`, `--snapshot`, `--copilot-snapshot`,
-  `--sidebar-snapshot`, `--transcribe-test`, `--analyze-test`, `--capture-test`,
+  `--sidebar-snapshot`, `--transcribe-test`, `--language-test`, `--analyze-test`, `--capture-test`,
   `--kb-add`, `--doc-answer-eval`, `--copilot-replay`, `--ask-chat-test`,
   `--store-upgrade-test <copy of an old .store>`, `--nudge-replay`,
   `--tone-snapshot`). There is no

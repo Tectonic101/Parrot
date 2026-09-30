@@ -87,6 +87,43 @@ enum TranscribeTest {
     }
 }
 
+extension TranscribeTest {
+    /// `--language-test <audio> [modelFolder] [seconds]`: the live language check on a
+    /// saved track. Gathers voiced buffers the way `appendAudio` does, then
+    /// prints what Whisper hears and what the live bar would offer for an
+    /// English pin and for Deepgram on auto.
+    static func detectLanguage(audioPath: String, modelFolder: String, seconds: Int? = nil) {
+        let sem = DispatchSemaphore(value: 0)
+        Task {
+            do {
+                let whisperKit = try await WhisperKit(WhisperKitConfig(
+                    modelFolder: modelFolder.isEmpty ? nil : modelFolder,
+                    verbose: false, logLevel: .none, load: true, download: modelFolder.isEmpty))
+                let audio = AudioProcessor.convertBufferToArray(
+                    buffer: try AudioProcessor.loadAudio(fromPath: audioPath))
+                var probe: [Float] = []
+                let wanted = seconds.map { $0 * 16000 } ?? TranscriptionEngine.languageProbeSamples
+                for start in stride(from: 0, to: audio.count, by: 1600) where probe.count < wanted {
+                    let buffer = audio[start ..< min(start + 1600, audio.count)]
+                    let energy = buffer.reduce(into: Float(0)) { $0 += abs($1) } / Float(buffer.count)
+                    if energy > TranscriptionEngine.Segmenter.silenceFloor { probe.append(contentsOf: buffer) }
+                }
+                let result = try await whisperKit.detectLangauge(
+                    audioArray: TranscriptionEngine.normalizedForDecode(probe))
+                let confidence = exp(result.langProbs[result.language] ?? -.infinity)
+                print("heard \(result.language) p=\(String(format: "%.2f", confidence)) from \(probe.count / 16000) s of speech")
+                print("pinned en, local → \(TranscriptionEngine.languageMismatch(setting: "en", backend: .local, heard: result.language, confidence: confidence) ?? "quiet")")
+                print("auto, deepgram   → \(TranscriptionEngine.languageMismatch(setting: nil, backend: .deepgram, heard: result.language, confidence: confidence) ?? "quiet")")
+            } catch {
+                print("language-test error: \(error)")
+            }
+            sem.signal()
+        }
+        sem.wait()
+        exit(0)
+    }
+}
+
 /// `--capture-test [seconds]`: real end-to-end system-audio capture through the
 /// production AudioCaptureManager (process tap on macOS 15+, ScreenCaptureKit on
 /// 14.x / as rescue), while the caller plays audio through the speakers, e.g.:
@@ -183,15 +220,18 @@ enum CaptureTest {
               let ch = buffer.floatChannelData?[0] else { return ("unreadable", 0) }
         var peak: Float = 0
         var sumSquares: Double = 0
+        var firstSound = -1  // first sample above the harness's "real audio" bar
         for i in 0..<Int(buffer.frameLength) {
             let a = abs(ch[i])
             peak = max(peak, a)
             sumSquares += Double(a) * Double(a)
+            if firstSound < 0, a > 0.01 { firstSound = i }
         }
         let rms = (sumSquares / Double(max(1, Int(buffer.frameLength)))).squareRoot()
-        let text = String(format: "%.1f s @ %.0f Hz, peak %.4f, rms %.5f",
-                          Double(file.length) / file.processingFormat.sampleRate,
-                          file.processingFormat.sampleRate, peak, rms)
+        let rate = file.processingFormat.sampleRate
+        let text = String(format: "%.1f s @ %.0f Hz, peak %.4f, rms %.5f, first sound at %.2f s",
+                          Double(file.length) / rate, rate, peak, rms,
+                          firstSound < 0 ? -1 : Double(firstSound) / rate)
         return (text, peak)
     }
 }
@@ -336,6 +376,8 @@ enum HelpShots {
                 .environment(rm).environment(rm.profileStore).environment(AppSession())
                 .modelContainer(container))
 
+        shot("language-banner.png", size: .init(width: 1160, height: 64),
+             LanguageMismatchBanner(heard: "tr", current: "en").background(Theme.Colors.canvas))
         shot("live-screen.png", size: .init(width: 1160, height: 720),
              LiveRecordingView()
                 .environment(rm).environment(rm.profileStore).environment(AppSession())
@@ -488,7 +530,8 @@ enum HelpShots {
 ///   Parrot --liveloop-test /path/audio.aiff [model]
 /// Set LIVELOOP_REALTIME=1 to feed at recording pace (slow, but reproduces
 /// live polling interleave); default feeds everything and drains.
-/// LIVELOOP_IMPORT=1 runs the audio-file import path instead. For idle-noise
+/// LIVELOOP_IMPORT=1 runs the audio-file import path instead. LIVELOOP_LANG=en
+/// pins the language (with REALTIME: watch the mismatch switch fire). For idle-noise
 /// work: PARROT_LOOP_TRACE=1 prints each clip's voice score, and
 /// PARROT_VAD_THRESHOLD=0 turns the voice gate off for an A/B.
 /// Born from a real drop: the middle sentence of a three-sentence test never
@@ -504,6 +547,11 @@ enum LiveLoopTest {
             // register(defaults:) trick the snapshot harnesses use.
             if let vocab = ProcessInfo.processInfo.environment["LIVELOOP_VOCAB"] {
                 UserDefaults.standard.register(defaults: ["customVocabulary": vocab])
+            }
+            // LIVELOOP_LANG=en pins the language, to watch the live mismatch
+            // check fire and the switch take effect mid-feed (use REALTIME).
+            if let lang = ProcessInfo.processInfo.environment["LIVELOOP_LANG"] {
+                UserDefaults.standard.register(defaults: [TranscriptionLanguage.defaultsKey: lang])
             }
             let engine = TranscriptionEngine()
             await engine.loadModel(model.isEmpty ? "base" : model)
@@ -521,6 +569,13 @@ enum LiveLoopTest {
 
             var emitted: [(text: String, start: TimeInterval, end: TimeInterval)] = []
             engine.onSegment = { r in emitted.append((r.text, r.startTime, r.endTime)) }
+            // A Parakeet rewind replaces lines, as RecordingManager does in the app.
+            // ponytail: the harness feeds one side only, so the range alone decides.
+            engine.onReplace = { _, range, results in
+                emitted.removeAll { range.contains($0.start) }
+                emitted += results.map { ($0.text, $0.startTime, $0.endTime) }
+                emitted.sort { $0.start < $1.start }
+            }
 
             let samples: [Float]
             do { samples = try loadSamples16k(path: audioPath) } catch {
@@ -535,6 +590,11 @@ enum LiveLoopTest {
             while i < samples.count {
                 let end = min(i + slice, samples.count)
                 engine.appendAudio(pcmBuffer(Array(samples[i..<end])), source: .them)
+                // LIVELOOP_NOSWITCH=1 leaves the banner unanswered (keeps a pin).
+                if let heard = engine.languageMismatch, ProcessInfo.processInfo.environment["LIVELOOP_NOSWITCH"] == nil {
+                    print(String(format: "liveloop-test: at %.1fs heard %@, switching", Double(end) / 16000, heard))
+                    engine.switchLanguage(to: heard)
+                }
                 if realtime { try? await Task.sleep(for: .milliseconds(200)) }
                 i = end
             }

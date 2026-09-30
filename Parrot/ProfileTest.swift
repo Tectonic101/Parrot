@@ -40,6 +40,7 @@ enum ProfileTest {
         testQuietMic()
         testIdleReminder()
         testCopilotBudget()
+        testLanguageMismatch()
         testJevMatcher()
         testBriefCard()
         testDocExcerpt()
@@ -115,6 +116,14 @@ enum ProfileTest {
         testCopilotFlags()
         testNudgeSession()
         testNudgeReplay()
+        testLanguageRouter()
+        testLanguageProbe()
+        testMismatchWatch()
+        testEngineRecommendation()
+        testRouteNotices()
+        testParakeetDoubt()
+        testRewindRange()
+        testImportRoute()
         print(failures == 0 ? "ALL PASS" : "FAILURES: \(failures)")
         exit(failures == 0 ? 0 : 1)
     }
@@ -1600,6 +1609,20 @@ enum ProfileTest {
               RecordingManager.diarizedLabel(for: (0, 1), turns: []) == nil)
     }
 
+    /// The live "sounds like Turkish — switch" offer (2026-09-30: a Turkish
+    /// call pinned to English came out as 46 minutes of nonsense).
+    static func testLanguageMismatch() {
+        let m = TranscriptionEngine.languageMismatch
+        check("lang: Turkish call pinned to English → offer Turkish",
+              m("en", .deepgram, "tr", 0.99) == "tr")
+        check("lang: same language → quiet", m("tr", .deepgram, "tr", 0.99) == nil)
+        check("lang: unsure guess → quiet", m("en", .local, "tr", 0.3) == nil)
+        check("lang: Deepgram auto can't do Turkish → offer Turkish", m(nil, .deepgram, "tr", 0.99) == "tr")
+        check("lang: Deepgram auto covers Spanish → quiet", m(nil, .deepgram, "es", 0.99) == nil)
+        check("lang: Whisper auto handles Turkish → quiet", m(nil, .local, "tr", 0.99) == nil)
+        check("lang: never offer a language the picker lacks", m("en", .local, "sw", 0.99) == nil)
+    }
+
     // The #20 budget controls: pace presets, the live context window, pause.
     @MainActor
     static func testCopilotBudget() {
@@ -2267,13 +2290,13 @@ enum ProfileTest {
 
     static func event(_ id: String, _ title: String, start: TimeInterval, minutes: Double,
                       people: Int = 0, link: Bool = false, allDay: Bool = false,
-                      declined: Bool = false, notes: String = "") -> CalendarEventInfo {
+                      declined: Bool = false, notes: String = "", mine: Bool = true) -> CalendarEventInfo {
         let t0 = Date(timeIntervalSince1970: 3_000_000)
         return CalendarEventInfo(
             id: id, title: title, start: t0 + start, end: t0 + start + minutes * 60,
             isAllDay: allDay, notes: notes,
             attendees: (0..<people).map { Attendee(name: "Person \($0)", email: "p\($0)@acme.com") },
-            declined: declined, hasCallLink: link)
+            declined: declined, hasCallLink: link, isMine: mine)
     }
 
     @MainActor
@@ -2291,6 +2314,12 @@ enum ProfileTest {
               C.pickCurrent([event("ooo", "Offsite", start: -3600, minutes: 1440, allDay: true)], now: now) == nil)
         check("declined events never match",
               C.pickCurrent([event("no", "Declined", start: 0, minutes: 30, people: 2, declined: true)], now: now) == nil)
+        let booking = event("booking", "15 Minutes Meeting - Someone and Launchese Ltd", start: 0, minutes: 15, people: 2, link: true, mine: false)
+        check("an invite you haven't answered never names a recording", C.pickCurrent([booking], now: now) == nil)
+        check("…and never reminds you", C.dueReminders([event("b2", "Booking", start: 30, minutes: 15, people: 2, link: true, mine: false)],
+                                                       now: now, alreadyReminded: []).isEmpty)
+        check("calendar picker: untick adds, tick removes",
+              C.excluding([], "work", reads: false) == ["work"] && C.excluding(["work", "home"], "work", reads: true) == ["home"])
         let a = event("a", "A", start: -600, minutes: 60, people: 3)
         let b = event("b", "B", start: -60, minutes: 60, people: 3)
         check("nearest start wins among equals", C.pickCurrent([a, b], now: now)?.id == "b")

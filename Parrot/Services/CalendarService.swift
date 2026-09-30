@@ -29,6 +29,10 @@ struct CalendarEventInfo: Equatable {
     /// The event carries a video link (Zoom/Meet/Teams URL) — a call, not a
     /// focus block or a lunch.
     var hasCallLink: Bool = false
+    /// You organise it, it has no organiser (a plain event you made), or you
+    /// answered yes or maybe. An invite you haven't answered, or someone
+    /// else's event on a shared calendar, never names a recording.
+    var isMine: Bool = true
 
     /// One occurrence of an event: every occurrence of a recurring event
     /// shares `id`, so a daily standup needs its start time too.
@@ -49,6 +53,17 @@ final class CalendarService {
     nonisolated static let enabledKey = "calendarEnabled"
     nonisolated static let useDetailsKey = "calendarUseDetails"
     nonisolated static let remindersKey = "calendarReminders"
+    /// Calendars the user unticked in Settings → Connections (identifiers).
+    /// A list of what to skip, so a calendar added later is read by default.
+    nonisolated static let excludedKey = "calendarExcluded"
+
+    /// One calendar on this Mac, for the picker.
+    struct Choice: Identifiable, Equatable {
+        var id: String
+        var title: String
+        var account: String
+        var color: CGColor?
+    }
 
     private(set) var access: Access = CalendarService.currentAccess()
     @ObservationIgnored private let store = EKEventStore()
@@ -87,11 +102,36 @@ final class CalendarService {
         access = Self.currentAccess()
     }
 
-    /// Events overlapping [from, to], reduced to `CalendarEventInfo`.
+    /// Events overlapping [from, to] on the calendars the user reads,
+    /// reduced to `CalendarEventInfo`.
     func events(from: Date, to: Date) -> [CalendarEventInfo] {
         guard isConnected else { return [] }
-        let predicate = store.predicateForEvents(withStart: from, end: to, calendars: nil)
+        let skipped = excluded
+        let chosen = store.calendars(for: .event).filter { !skipped.contains($0.calendarIdentifier) }
+        // An empty list would mean "every calendar" to EventKit.
+        guard !chosen.isEmpty else { return [] }
+        let predicate = store.predicateForEvents(withStart: from, end: to, calendars: chosen)
         return store.events(matching: predicate).map(Self.info(from:))
+    }
+
+    /// Every calendar on this Mac, grouped by account, for the picker.
+    func calendarChoices() -> [Choice] {
+        guard access == .granted else { return [] }
+        return store.calendars(for: .event)
+            .map { Choice(id: $0.calendarIdentifier, title: $0.title, account: $0.source?.title ?? "", color: $0.cgColor) }
+            .sorted { ($0.account, $0.title) < ($1.account, $1.title) }
+    }
+
+    var excluded: Set<String> {
+        Set(UserDefaults.standard.stringArray(forKey: Self.excludedKey) ?? [])
+    }
+
+    func setReads(_ id: String, _ reads: Bool) {
+        UserDefaults.standard.set(Array(Self.excluding(excluded, id, reads: reads)).sorted(), forKey: Self.excludedKey)
+    }
+
+    nonisolated static func excluding(_ excluded: Set<String>, _ id: String, reads: Bool) -> Set<String> {
+        reads ? excluded.subtracting([id]) : excluded.union([id])
     }
 
     /// The event this call most likely belongs to (see `pickCurrent`).
@@ -108,6 +148,9 @@ final class CalendarService {
         let declined = (event.attendees ?? []).contains {
             $0.isCurrentUser && $0.participantStatus == .declined
         }
+        let me = (event.attendees ?? []).first { $0.isCurrentUser }
+        let answered = me.map { $0.participantStatus == .accepted || $0.participantStatus == .tentative } ?? false
+        let isMine = event.organizer == nil || event.organizer?.isCurrentUser == true || answered
         let text = [event.location, event.notes, event.url?.absoluteString]
             .compactMap { $0 }.joined(separator: "\n")
         return CalendarEventInfo(
@@ -119,7 +162,8 @@ final class CalendarService {
             notes: event.notes ?? "",
             attendees: people.map { Attendee(name: $0.name ?? "", email: Self.email(from: $0.url)) },
             declined: declined,
-            hasCallLink: Self.containsCallLink(text)
+            hasCallLink: Self.containsCallLink(text),
+            isMine: isMine
         )
     }
 
@@ -130,12 +174,12 @@ final class CalendarService {
     nonisolated static let matchLead: TimeInterval = 10 * 60
 
     /// The event a call starting at `now` belongs to: timed (not all-day),
-    /// not declined, running now or starting within `matchLead`. Among
+    /// yours (see `isMine`), running now or starting within `matchLead`. Among
     /// several, prefer one with a video link, then one with attendees, then
     /// the one whose start is nearest.
     nonisolated static func pickCurrent(_ events: [CalendarEventInfo], now: Date) -> CalendarEventInfo? {
         let candidates = events.filter {
-            !$0.isAllDay && !$0.declined
+            !$0.isAllDay && !$0.declined && $0.isMine
                 && $0.start.addingTimeInterval(-matchLead) <= now && now < $0.end
         }
         return candidates.min { a, b in
@@ -150,7 +194,7 @@ final class CalendarService {
     nonisolated static func dueReminders(_ events: [CalendarEventInfo], now: Date, window: TimeInterval = 60,
                              alreadyReminded: Set<String>) -> [CalendarEventInfo] {
         events.filter {
-            !$0.isAllDay && !$0.declined
+            !$0.isAllDay && !$0.declined && $0.isMine
                 && !alreadyReminded.contains($0.reminderKey)
                 && $0.start > now && $0.start.timeIntervalSince(now) <= window
                 && ($0.hasCallLink || !$0.attendees.isEmpty)
