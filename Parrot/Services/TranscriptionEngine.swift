@@ -1414,7 +1414,9 @@ final class TranscriptionEngine {
     /// Whisper's per-utterance boundaries are exactly what we want.
     /// WhisperKit loads + resamples any format (m4a/mp3/wav/aac/caf) to 16 kHz mono.
     func transcribeFile(url: URL) async throws -> [TranscriptionResult] {
-        guard let whisperKit else { throw RecordingError.modelNotReady }
+        if let parakeet, let lines = try await parakeetImport(url: url, parakeet: parakeet) { return lines }
+        // Whisper: on Parakeet, loaded for this file only when it needs it.
+        guard let whisperKit = await ensureWhisper() else { throw RecordingError.modelNotReady }
 
         let setting = UserDefaults.standard.string(forKey: "transcriptionLanguage")
         let language = (setting == nil || setting == "auto") ? nil : setting
@@ -1460,6 +1462,84 @@ final class TranscriptionEngine {
                 confidence: segment.avgLogprob
             )
         }
+    }
+
+    /// Parakeet's share of imports. nil = this file goes to Whisper: a pinned
+    /// language Parakeet lacks, or on Auto any of three 30 s windows that
+    /// isn't confidently one of its 25 (one mixed track, so the whole file
+    /// goes one way).
+    private func parakeetImport(url: URL, parakeet: ParakeetTranscriber) async throws -> [TranscriptionResult]? {
+        let pinned = TranscriptionLanguage.selected
+        if let pinned, !LanguageRouter.parakeetLanguages.contains(pinned) { return nil }
+        let samples = AudioProcessor.convertBufferToArray(buffer: try AudioProcessor.loadAudio(fromPath: url.path))
+        var hint = pinned
+        if pinned == nil {
+            var verdicts: [(language: String?, confidence: Float)] = []
+            for window in Self.importWindows(sampleCount: samples.count) {
+                if let detector = languageDetector,
+                   let result = try? await detector.detectLangauge(audioArray: Self.normalizedForDecode(Array(samples[window]))) {
+                    verdicts.append((result.language, exp(result.langProbs[result.language] ?? -.infinity)))
+                } else {
+                    verdicts.append((nil, 0))
+                }
+            }
+            if Self.loopTrace { print("TRACE import language: \(verdicts.map { "\($0.language ?? "-") \(String(format: "%.2f", $0.confidence))" })") }
+            guard Self.importUsesParakeet(verdicts) else { return nil }
+            let heard = Set(verdicts.compactMap(\.language))
+            hint = heard.count == 1 ? heard.first : nil
+        }
+        let timeline = await speechTimeline(samples: samples)
+        var lines: [TranscriptionResult] = []
+        for piece in Self.utterances(in: samples) {
+            let start = Double(piece.start) / 16000, end = Double(piece.start + piece.audio.count) / 16000
+            // Lines over a stretch with no voice would be invented.
+            if let timeline, !Self.hasVoice(timeline, from: start, to: end) { continue }
+            let text = Self.cleaned(try await parakeet.transcribe(Self.normalizedForDecode(piece.audio), language: hint))
+            guard !text.isEmpty else { continue }
+            // One mixed track, so every line is "Them"; diarization splits it later.
+            lines.append(TranscriptionResult(text: text, source: .them, startTime: start, endTime: end, confidence: nil))
+        }
+        return lines
+    }
+
+    /// Start, middle and end: 30 s each (one window for short files).
+    nonisolated static func importWindows(sampleCount: Int) -> [Range<Int>] {
+        let window = 30 * 16000
+        guard sampleCount > window * 3 else { return [0 ..< sampleCount] }
+        let mid = sampleCount / 2 - window / 2
+        return [0 ..< window, mid ..< mid + window, sampleCount - window ..< sampleCount]
+    }
+
+    nonisolated static func importUsesParakeet(_ verdicts: [(language: String?, confidence: Float)]) -> Bool {
+        !verdicts.isEmpty && verdicts.allSatisfy { verdict in
+            verdict.language.map(LanguageRouter.parakeetLanguages.contains) == true && verdict.confidence >= LanguageRouter.sure
+        }
+    }
+
+    /// The live loop's cutter over a whole file, so imported lines get the
+    /// same sample-offset timestamps as live ones. A window of twice the
+    /// segment cap always holds a cut, and slicing it keeps a long file linear.
+    nonisolated static func utterances(in samples: [Float]) -> [(start: Int, audio: [Float])] {
+        var pieces: [(start: Int, audio: [Float])] = []
+        var offset = 0
+        let window = Segmenter.maxSegmentSamples * 2
+        while offset < samples.count {
+            let end = min(offset + window, samples.count)
+            let buffer = Array(samples[offset ..< end])
+            let floor = Segmenter.adaptiveFloor(for: buffer)
+            var cut = Segmenter.nextCut(in: buffer, draining: end == samples.count, floor: floor)
+            if cut.dropLeading == 0, cut.take == nil {
+                cut = Segmenter.nextCut(in: buffer, draining: true, floor: floor)
+            }
+            let take = cut.take ?? 0
+            if take > 0 {
+                pieces.append((offset + cut.dropLeading, Array(buffer[cut.dropLeading ..< cut.dropLeading + take])))
+            }
+            let consumed = cut.dropLeading + take
+            guard consumed > 0 else { break }
+            offset += consumed
+        }
+        return pieces
     }
 
     /// Stop transcription, draining the buffered backlog first so the final words

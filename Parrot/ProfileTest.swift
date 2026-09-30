@@ -106,6 +106,7 @@ enum ProfileTest {
         testEngineRecommendation()
         testRouteNotices()
         testRewindRange()
+        testImportRoute()
         print(failures == 0 ? "ALL PASS" : "FAILURES: \(failures)")
         exit(failures == 0 ? 0 : 1)
     }

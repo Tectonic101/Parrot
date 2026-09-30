@@ -108,4 +108,23 @@ extension ProfileTest {
         let audio = TranscriptionEngine.recheckAudio(clips, seconds: 10)
         check("rewind: recheck uses the latest 10 s", audio.count == 16000 * 10 && audio.last == 2 && audio.first == 1)
     }
+
+    static func testImportRoute() {
+        typealias T = TranscriptionEngine
+        check("import: three windows", T.importWindows(sampleCount: 16000 * 600).count == 3)
+        check("import: a short file is one window", T.importWindows(sampleCount: 16000 * 20).count == 1)
+        check("import: all English → Parakeet", T.importUsesParakeet([("en", 0.99), ("en", 0.95), ("en", 0.97)]))
+        check("import: any Turkish → Whisper", !T.importUsesParakeet([("en", 0.99), ("tr", 0.99), ("en", 0.97)]))
+        check("import: any unsure → Whisper", !T.importUsesParakeet([("en", 0.99), ("en", 0.5)]))
+        check("import: nothing heard → Whisper", !T.importUsesParakeet([]))
+        let frame = T.Segmenter.frame
+        func speech(_ n: Int) -> [Float] { Array(repeating: 0.02, count: n * frame) }
+        func silence(_ n: Int) -> [Float] { Array(repeating: 0.0001, count: n * frame) }
+        let pieces = T.utterances(in: speech(10) + silence(10) + speech(10) + silence(10))
+        check("import: the live cutter finds both lines", pieces.count == 2)
+        check("import: the second line starts where it was spoken", pieces.count == 2 && abs(pieces[1].start - 20 * frame) <= frame)
+        let long = T.utterances(in: speech(600))
+        check("import: a minute without a pause is cut at the cap, all kept",
+              long.count >= 5 && long.reduce(0) { $0 + $1.audio.count } == 600 * frame)
+    }
 }
