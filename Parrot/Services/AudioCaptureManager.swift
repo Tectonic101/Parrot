@@ -252,7 +252,9 @@ final class AudioCaptureManager: NSObject {
 
         filesClosed = false  // fresh URLs above; queues are idle, so no race
 
+        let t0 = ProcessInfo.processInfo.systemUptime
         try await startSystemAudioCapture()
+        let t1 = ProcessInfo.processInfo.systemUptime
         dbgSck = DebugAccumulator(label: captureBackend.rawValue)
 
         // The microphone is optional. System audio ("Them") is the core capture;
@@ -275,6 +277,7 @@ final class AudioCaptureManager: NSObject {
         micFramesOut = 0
         captureOrigin = ProcessInfo.processInfo.systemUptime
         isCapturing = true
+        Self.oslog.log("capture live — \(self.captureBackend.rawValue, privacy: .public) up in \(Int((t1 - t0) * 1000), privacy: .public) ms, mic in \(Int((self.captureOrigin - t1) * 1000), privacy: .public) ms")
     }
 
     // MARK: - Stop Capture
@@ -406,6 +409,7 @@ final class AudioCaptureManager: NSObject {
     // MARK: - System Audio (ScreenCaptureKit)
 
     private func startSCKCapture() async throws {
+        let t0 = ProcessInfo.processInfo.systemUptime
         // Pre-check screen capture permission
         let content: SCShareableContent
         do {
@@ -435,11 +439,14 @@ final class AudioCaptureManager: NSObject {
         // The system audio file is created lazily from the first buffer's format
         // (see the SCStreamOutput handler), so it always matches what we write.
 
+        let t1 = ProcessInfo.processInfo.systemUptime
         let stream = SCStream(filter: filter, configuration: config, delegate: nil)
         try stream.addStreamOutput(self, type: .audio, sampleHandlerQueue: .global(qos: .userInteractive))
         try await stream.startCapture()
         self.stream = stream
         captureBackend = .sck
+        let now = ProcessInfo.processInfo.systemUptime
+        Self.oslog.log("SCK up in \(Int((now - t0) * 1000), privacy: .public) ms (shareable content \(Int((t1 - t0) * 1000), privacy: .public), stream start \(Int((now - t1) * 1000), privacy: .public))")
     }
 
     // MARK: - System audio ingest (shared by both backends)
@@ -685,10 +692,14 @@ final class AudioCaptureManager: NSObject {
         let source: AudioSource = stream == .system ? .them : .me
         let rate = buffer.format.sampleRate
         var out = stream == .system ? systemFramesOut : micFramesOut
-        var owed = Self.silenceOwed(elapsed: ProcessInfo.processInfo.systemUptime - captureOrigin,
+        let elapsed = ProcessInfo.processInfo.systemUptime - captureOrigin
+        var owed = Self.silenceOwed(elapsed: elapsed,
                                     written: out, incoming: Int(buffer.frameLength), sampleRate: rate)
+        let name = stream == .system ? "system" : "mic"
+        if out == 0 {
+            Self.oslog.log("first \(name, privacy: .public) buffer \(elapsed, format: .fixed(precision: 3), privacy: .public) s into the recording")
+        }
         if owed >= Int(rate / 4) {
-            let name = stream == .system ? "system" : "mic"
             Self.oslog.log("\(name, privacy: .public) audio \(Double(owed) / rate, format: .fixed(precision: 2), privacy: .public) s behind the recording clock — padding silence")
         }
         // One-second pieces: a streaming transcriber gets socket-sized frames.

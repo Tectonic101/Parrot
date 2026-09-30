@@ -29,6 +29,9 @@ final class SystemAudioTap {
     /// converter/sourceFormat pair is never read while being rebuilt.
     private let queue = DispatchQueue(label: "com.uygar.parrot.audio.tap", qos: .userInteractive)
     private var formatListener: AudioObjectPropertyListenerBlock?
+    /// Uptime when start() began; the first IO callback logs its delay from
+    /// here once, then zeroes it. IO queue only after start() returns.
+    private var startedAt: TimeInterval = 0
 
     init(targetFormat: AVAudioFormat) {
         self.targetFormat = targetFormat
@@ -47,6 +50,9 @@ final class SystemAudioTap {
     }
 
     func start() throws {
+        let t0 = ProcessInfo.processInfo.systemUptime
+        func ms(_ since: TimeInterval) -> Int { Int((ProcessInfo.processInfo.systemUptime - since) * 1000) }
+        startedAt = t0
         // Mirror ScreenCaptureKit's excludesCurrentProcessAudio: leave our own
         // output out of the mix. Failure to translate just means no exclusion.
         var excluded: [AudioObjectID] = []
@@ -64,6 +70,7 @@ final class SystemAudioTap {
             throw TapError.coreAudio(stage: "creation", status: err)
         }
         tapID = newTapID
+        let tapMs = ms(t0)
 
         do {
             // The tap's format follows the output hardware (typically 48 kHz
@@ -73,20 +80,28 @@ final class SystemAudioTap {
 
             // A private aggregate device whose only member is the tap gives us a
             // clock to run an IOProc against. It never appears in Audio MIDI Setup.
+            // No tap auto-start: with it, IO waits until some other app starts
+            // playing ("Starting tap after waiting for writers" in coreaudiod),
+            // 8-12 s on recordings started before the call audio, and then
+            // lags that app's output by 20-100 ms. Without it the tap delivers
+            // (silent) buffers from the first instant, ~50 ms after start.
             let aggregateDescription: [String: Any] = [
                 kAudioAggregateDeviceNameKey: "Parrot System Audio",
                 kAudioAggregateDeviceUIDKey: UUID().uuidString,
                 kAudioAggregateDeviceIsPrivateKey: true,
-                kAudioAggregateDeviceTapAutoStartKey: true,
+                kAudioAggregateDeviceTapAutoStartKey: false,
                 kAudioAggregateDeviceTapListKey: [
                     [kAudioSubTapUIDKey: description.uuid.uuidString,
                      kAudioSubTapDriftCompensationKey: true]
                 ],
             ]
+            let t1 = ProcessInfo.processInfo.systemUptime
             err = AudioHardwareCreateAggregateDevice(aggregateDescription as CFDictionary, &aggregateID)
             guard err == noErr, aggregateID != kAudioObjectUnknown else {
                 throw TapError.coreAudio(stage: "aggregate device", status: err)
             }
+            let aggregateMs = ms(t1)
+            let t2 = ProcessInfo.processInfo.systemUptime
 
             err = AudioDeviceCreateIOProcIDWithBlock(&ioProcID, aggregateID, queue) { [weak self] _, inInputData, _, _, _ in
                 self?.deliver(inInputData)
@@ -99,6 +114,7 @@ final class SystemAudioTap {
             guard err == noErr else {
                 throw TapError.coreAudio(stage: "device start", status: err)
             }
+            AudioCaptureManager.oslog.log("system tap up in \(ms(t0), privacy: .public) ms (tap \(tapMs, privacy: .public), aggregate \(aggregateMs, privacy: .public), IO start \(ms(t2), privacy: .public))")
 
             // Output-device switches (speakers → AirPods) can change the tap's
             // rate mid-recording; rebuilding just the converter keeps the
@@ -160,6 +176,11 @@ final class SystemAudioTap {
     /// IO-queue only. Wraps the raw buffer list, resamples to the target
     /// format, and hands the result to `onBuffer`.
     private func deliver(_ bufferList: UnsafePointer<AudioBufferList>) {
+        if startedAt > 0 {
+            let delay = ProcessInfo.processInfo.systemUptime - startedAt
+            startedAt = 0
+            AudioCaptureManager.oslog.log("system tap first IO callback \(delay, format: .fixed(precision: 3), privacy: .public) s after start")
+        }
         guard let sourceFormat, let converter,
               let source = AVAudioPCMBuffer(
                 pcmFormat: sourceFormat,

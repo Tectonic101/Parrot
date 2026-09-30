@@ -219,15 +219,18 @@ enum CaptureTest {
               let ch = buffer.floatChannelData?[0] else { return ("unreadable", 0) }
         var peak: Float = 0
         var sumSquares: Double = 0
+        var firstSound = -1  // first sample above the harness's "real audio" bar
         for i in 0..<Int(buffer.frameLength) {
             let a = abs(ch[i])
             peak = max(peak, a)
             sumSquares += Double(a) * Double(a)
+            if firstSound < 0, a > 0.01 { firstSound = i }
         }
         let rms = (sumSquares / Double(max(1, Int(buffer.frameLength)))).squareRoot()
-        let text = String(format: "%.1f s @ %.0f Hz, peak %.4f, rms %.5f",
-                          Double(file.length) / file.processingFormat.sampleRate,
-                          file.processingFormat.sampleRate, peak, rms)
+        let rate = file.processingFormat.sampleRate
+        let text = String(format: "%.1f s @ %.0f Hz, peak %.4f, rms %.5f, first sound at %.2f s",
+                          Double(file.length) / rate, rate, peak, rms,
+                          firstSound < 0 ? -1 : Double(firstSound) / rate)
         return (text, peak)
     }
 }
