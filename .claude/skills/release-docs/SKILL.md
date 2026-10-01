@@ -131,4 +131,6 @@ scripts/publish.sh X.Y.Z dist/notes-X.Y.Z.md dist/site-plan-X.Y.Z.md
 
 Run it from master (or the same steps by hand from a worktree). It starts the
 site's help sync and, with the plan, the site draft; both end as PRs in
-parrot-site for the user to merge.
+parrot-site for the user to merge. It also fires the site's Vercel deploy hook
+(Keychain item `parrot-site-deploy-hook`), so openparrot.app shows the new
+version right away instead of after its hour-long cache.
