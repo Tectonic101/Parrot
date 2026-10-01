@@ -411,13 +411,28 @@ enum ProfileTest {
                 "Okay sure.",
                 "Can you send me the retention report before Tuesday?"))
         // After a live sweep the other side is "Speaker N", not "Them".
-        let line = "Bu dashboardda çalışıyorum, yarın sana gösteririm."
+        let line = "Raporu yarın sabah sana gönderirim, tamam mı?"
+        let echo: RecordingManager.BleedLine = (10, 13, line), twin: RecordingManager.BleedLine = (10.1, 13, line)
         check("bleed: echo of a swept Speaker 1 line still drops",
-              RecordingManager.isBleed(meText: line, otherLabel: "Speaker 1", otherText: line))
+              RecordingManager.isBleed(me: echo, other: twin, otherLabel: "Speaker 1"))
         check("bleed: echo of an unswept Them line still drops",
-              RecordingManager.isBleed(meText: line, otherLabel: "Them", otherText: line))
+              RecordingManager.isBleed(me: echo, other: twin, otherLabel: "Them"))
         check("bleed: a Me line never dedupes against Me",
-              !RecordingManager.isBleed(meText: line, otherLabel: "Me", otherText: line))
+              !RecordingManager.isBleed(me: echo, other: twin, otherLabel: "Me"))
+        // The mic decodes only a piece of a long line, starting past 2.5 s.
+        let long: RecordingManager.BleedLine =
+            (100, 108.6, "Bu hafta çok yoğundum abi, raporu bitiremedim. Cuma gününe kadar sana gönderirim.")
+        check("bleed: piece inside a longer line drops",
+              RecordingManager.isBleed(me: (105.4, 108.5, "Cuma gününe kadar sana gönderirim."),
+                                       other: long, otherLabel: "Speaker 2"))
+        check("bleed: same piece outside the line's span is kept",
+              !RecordingManager.isBleed(me: (110, 113, "Cuma gününe kadar sana gönderirim."),
+                                        other: long, otherLabel: "Speaker 2"))
+        check("bleed: one-word reply inside a long line is kept",
+              !RecordingManager.isBleed(me: (103, 103.6, "Abi."), other: long, otherLabel: "Speaker 2"))
+        check("bleed: long Me line around a short line is kept",
+              !RecordingManager.isBleed(me: (95, 110, "Tamam, cuma gününe kadar dedin ama geçen hafta da öyle demiştin."),
+                                        other: (104, 105, "Cuma gününe kadar."), otherLabel: "Speaker 2"))
     }
 
     static func testWAVEncoder() {
