@@ -53,6 +53,7 @@ enum ProfileTest {
         testSpeakerNames()
         testVoiceProfiles()
         testTranscriptTruncate()
+        testPlaybackMix()
         testReceiptStamps()
         testReceiptIndex()
         testReportReceipts()
@@ -946,6 +947,30 @@ enum ProfileTest {
               m.truncationNote?.contains("after 00:00") == true)
         check("note singularizes one line",
               Meeting.noteLines(1) == "1 line" && Meeting.noteLines(2) == "2 lines")
+    }
+
+    // Playback on speakers: the mic's leftover echo of the other side is
+    // ducked while only they talk (HN, 2026-09-30: "2 audio streams").
+    static func testPlaybackMix() {
+        let segs = [
+            TranscriptSegment(startTime: 0, endTime: 10, text: "x", speakerLabel: "Them"),
+            TranscriptSegment(startTime: 10, endTime: 15, text: "x", speakerLabel: "Me"),
+            TranscriptSegment(startTime: 13, endTime: 20, text: "x", speakerLabel: "Them"),
+            TranscriptSegment(startTime: 30, endTime: 35, text: "x", speakerLabel: "Speaker 2"),
+        ]
+        let duck = PlaybackMix.ducked
+        let v = { PlaybackMix.micVolume(segments: segs, at: $0) }
+        check("mix: them only ducks the mic", v(2) == duck)
+        check("mix: me only is full", v(11.5) == 1)
+        check("mix: both talking is full", v(14) == 1)
+        check("mix: a gap is full", v(25) == 1)
+        check("mix: past the last line is full", v(99) == 1)
+        check("mix: no lines is full", PlaybackMix.micVolume(segments: [], at: 2) == 1)
+        check("mix: a diarized voice counts as them", v(32) == duck)
+        check("mix: holds through a short pause after them", v(20.5) == duck)
+        check("mix: comes up just before my line", v(9.8) == 1)
+        check("mix: stays down until then", v(9.5) == duck)
+        check("mix: ducked level is quiet but not silent", duck > 0 && duck <= 0.2)
     }
 
     static func testLiveLabelStability() {
