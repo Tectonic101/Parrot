@@ -766,19 +766,19 @@ final class RecordingManager {
         // the same sentence then lands twice, "Them" from system audio and
         // "Me" from the mic (and inflates diarization/talk-ratio). The system
         // copy is authoritative for anything both streams heard, so a Me
-        // segment that near-duplicates a Them segment within a beat is echo,
+        // segment that near-duplicates an other-side segment close by is echo,
         // whichever order they decoded in. (Surfaced by the speakers-playback
         // live test 2026-08-01; previously masked by the glossary decode bug.)
-        let bleedWindow: TimeInterval = 2.5
-        let neighbors = meeting.segments.filter { abs($0.startTime - result.startTime) <= bleedWindow }
+        let incoming: BleedLine = (result.startTime, result.endTime, result.text)
         if result.source == .me,
-           neighbors.contains(where: { $0.speakerLabel == AudioSource.them.label
-               && Self.isEchoDuplicate($0.text, result.text) }) {
+           meeting.segments.contains(where: {
+               Self.isBleed(me: incoming, other: ($0.startTime, $0.endTime, $0.text), otherLabel: $0.speakerLabel) }) {
             return
         }
         if result.source == .them {
-            for stored in neighbors where stored.speakerLabel == AudioSource.me.label
-                && Self.isEchoDuplicate(stored.text, result.text) {
+            for stored in meeting.segments where stored.speakerLabel == AudioSource.me.label
+                && Self.isBleed(me: (stored.startTime, stored.endTime, stored.text), other: incoming,
+                                otherLabel: result.source.label) {
                 modelContext.delete(stored)
             }
         }
@@ -796,19 +796,38 @@ final class RecordingManager {
         try? modelContext.save()
     }
 
+    typealias BleedLine = (start: TimeInterval, end: TimeInterval, text: String)
+
+    /// A Me line that near-duplicates an other-side line close by is bleed.
+    /// The other side is anything but Me: from 45 s in, live sweeps relabel
+    /// "Them" to "Speaker N", so matching on "Them" let late echoes through.
+    /// Close by: both start within 2.5 s, or the mic decoded only a piece of a
+    /// longer line, so the Me line sits inside it. That needs 3+ words: short
+    /// replies ("Okay", "Tabii") are what people say while the other side
+    /// talks. A plain overlap test, without these limits, dropped real Me
+    /// lines on the owner's store (a long Me line around a short "Okay. So").
+    nonisolated static func isBleed(me: BleedLine, other: BleedLine, otherLabel: String?) -> Bool {
+        guard otherLabel != AudioSource.me.label else { return false }
+        let startsTogether = abs(me.start - other.start) <= 2.5
+        let inside = me.start >= other.start - 0.5 && me.end <= other.end + 0.5
+        guard startsTogether || inside, isEchoDuplicate(other.text, me.text) else { return false }
+        return startsTogether || echoTokens(me.text).count >= 3
+    }
+
     /// Near-verbatim match for the echo-dedup above: Whisper decodes the bleed
     /// with small variances ("I am" vs "I'm"), so exact equality is too strict.
     /// High token overlap + the tight time window keeps a human genuinely
     /// echoing the other side (rare inside 2.5s) from being eaten.
     nonisolated static func isEchoDuplicate(_ a: String, _ b: String) -> Bool {
-        func tokens(_ s: String) -> Set<String> {
-            Set(s.lowercased()
-                .components(separatedBy: CharacterSet.alphanumerics.inverted)
-                .filter { $0.count > 1 })
-        }
-        let ta = tokens(a), tb = tokens(b)
+        let ta = echoTokens(a), tb = echoTokens(b)
         guard !ta.isEmpty, !tb.isEmpty else { return false }
         return Double(ta.intersection(tb).count) / Double(min(ta.count, tb.count)) >= 0.8
+    }
+
+    private nonisolated static func echoTokens(_ s: String) -> Set<String> {
+        Set(s.lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { $0.count > 1 })
     }
 
     // MARK: - Post-Call Summary
