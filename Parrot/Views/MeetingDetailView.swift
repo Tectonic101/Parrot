@@ -44,6 +44,9 @@ struct MeetingDetailView: View {
     @State private var showCostBreakdown = false
     @State private var cardNamingLabel: String?
     @State private var clipStopTask: Task<Void, Never>?
+    @State private var playingClip = false
+    /// The mic track's volume right now: 1, `PlaybackMix.ducked`, or 0 in a voice clip.
+    @State private var micLevel: Float = 1
     /// The line a pending "delete everything after this" is anchored to.
     @State private var truncateAnchor: TranscriptSegment?
     /// Share-menu actions: one at a time, with an outcome message.
@@ -1041,21 +1044,37 @@ struct MeetingDetailView: View {
         // Every voice named here is the other side, and they live on the
         // system track alone. The mic under the clip is only the user (often
         // the louder track), which made a clip sound like two people at once.
-        micPlayer?.volume = 0
+        playingClip = true
         seekTo(start)
         if !isPlaying { togglePlayback() }
         clipStopTask = Task {
             try? await Task.sleep(for: .seconds(max(1, end - start)))
             guard !Task.isCancelled else { return }
             if isPlaying { togglePlayback() }
-            micPlayer?.volume = 1
+            playingClip = false
+            updateMicLevel()
         }
     }
 
     /// Back to the whole conversation: any other play ends a voice clip.
     private func endClip() {
         clipStopTask?.cancel()
-        micPlayer?.volume = 1
+        playingClip = false
+        updateMicLevel()
+    }
+
+    /// Mutes the mic in a voice clip, ducks it while only the other side
+    /// talks (see `PlaybackMix`), full volume otherwise.
+    private func updateMicLevel() {
+        // No system track: the mic's copy of their voice is the only one left.
+        let level: Float = playingClip ? 0
+            : audioPlayer == nil ? 1
+            : PlaybackMix.micVolume(segments: meeting.segments, at: playbackTime)
+        guard level != micLevel else { return }
+        // A clip mutes at once; otherwise down gently (no click), back up
+        // fast so your first word isn't faded in.
+        micPlayer?.setVolume(level, fadeDuration: playingClip ? 0 : level < micLevel ? 0.25 : 0.08)
+        micLevel = level
     }
 
     // MARK: - Audio Playback
@@ -1075,6 +1094,7 @@ struct MeetingDetailView: View {
             micPlayer = try? AVAudioPlayer(contentsOf: URL(fileURLWithPath: micPath))
             micPlayer?.enableRate = true
             micPlayer?.prepareToPlay()
+            micLevel = 1
         }
     }
 
@@ -1105,11 +1125,11 @@ struct MeetingDetailView: View {
                 if audioPlayer?.isPlaying != true && micPlayer?.isPlaying != true {
                     stopPlayback()
                     playbackTime = 0
-                    updateActiveSegment()
+                    followPlayhead()
                     return
                 }
                 playbackTime = audioPlayer?.currentTime ?? micPlayer?.currentTime ?? 0
-                updateActiveSegment()
+                followPlayhead()
             }
         }
         isPlaying.toggle()
@@ -1132,12 +1152,14 @@ struct MeetingDetailView: View {
         // draw a >100% progress bar.
         let duration = max(audioPlayer?.duration ?? 0, micPlayer?.duration ?? 0)
         playbackTime = duration > 0 ? min(time, duration) : time
-        updateActiveSegment()
+        followPlayhead()
         if wasPlaying { startSynced() }
     }
 
-    private func updateActiveSegment() {
+    /// Highlights the line under the playhead and sets the mic level for it.
+    private func followPlayhead() {
         activeSegmentID = meeting.sortedSegments.last { $0.startTime <= playbackTime }?.id
+        updateMicLevel()
     }
 
     private func formatTime(_ seconds: TimeInterval) -> String {
@@ -1146,6 +1168,39 @@ struct MeetingDetailView: View {
         return String(format: "%02d:%02d", m, s)
     }
 
+}
+
+/// Playback mix for a call recorded on speakers. The mic track ("Me") also
+/// heard the other side through the speakers; the echo canceller shrinks that
+/// copy but can't erase it, so at full volume it lands a beat after the clean
+/// system track and the call sounds like two streams. While only the other
+/// side talks, the mic goes down to `ducked`.
+enum PlaybackMix {
+    /// -20 dB: the leftover copy sinks under the clean voice, while a laugh or
+    /// "mm-hm" the transcript never caught is still faintly there.
+    static let ducked: Float = 0.1
+    /// Their line keeps the mic down this long after it ends: covers the
+    /// echo's tail and the short pauses between their sentences, so the mic
+    /// doesn't pump up and down between lines.
+    static let hold: TimeInterval = 0.8
+    /// Your line brings the mic back this early: line starts run a little
+    /// late, and your first word must not be ducked.
+    static let lead: TimeInterval = 0.3
+
+    /// Any label but "Me" is the other side: "Them", or "Speaker N" and named
+    /// voices after diarization.
+    // ponytail: linear scan per 0.1 s tick, fine for thousands of lines; binary-search sorted lines if a call ever gets far longer.
+    static func micVolume(segments: [TranscriptSegment], at time: TimeInterval) -> Float {
+        var theirs = false
+        for s in segments {
+            if s.speakerLabel == AudioSource.me.label {
+                if s.startTime - lead <= time && time < s.endTime { return 1 }
+            } else if s.startTime <= time && time < s.endTime + hold {
+                theirs = true
+            }
+        }
+        return theirs ? ducked : 1
+    }
 }
 
 /// The confirm-first naming popover: play short clips of the voice, then type
