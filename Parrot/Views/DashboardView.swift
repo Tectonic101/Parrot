@@ -203,7 +203,7 @@ struct DashboardView: View {
                 Image(systemName: "sparkles")
                     .font(.appCaption)
                     .foregroundStyle(Theme.Colors.accent)
-                Text("Brief the copilot")
+                Text("Brief the Assistant")
                     .font(Theme.Typography.cardTitle)
                     .foregroundStyle(Theme.Colors.ink)
                 Spacer()

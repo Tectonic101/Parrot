@@ -17,9 +17,9 @@
 
 # 🦜 Parrot
 
-**A meeting recorder for your Mac with a live AI copilot built in. It records and transcribes every call on your machine, suggests answers from your own documents while you're still talking, and writes the report before you've hung up.**
+**A meeting recorder for your Mac with a live AI assistant built in. It records and transcribes every call on your machine, suggests answers from your own documents while you're still talking, and writes the report before you've hung up.**
 
-No bot joins your meeting. It works with Google Meet, Zoom, Teams, or anything else your Mac can hear. Transcription, speaker detection and your documents stay on your Mac. The copilot's brain is your choice: **Claude** with your own key, any OpenAI-compatible server, or a **local model through Ollama, which makes the whole thing free and offline**.
+No bot joins your meeting. It works with Google Meet, Zoom, Teams, or anything else your Mac can hear. Transcription, speaker detection and your documents stay on your Mac. The Assistant's brain is your choice: **Claude** with your own key, any OpenAI-compatible server, or a **local model through Ollama, which makes the whole thing free and offline**.
 
 https://github.com/user-attachments/assets/76dc07c7-6667-497e-b39f-8218e077c88c
 
@@ -47,7 +47,7 @@ If you find this useful or just think the idea is cool, give it a star. It'll ma
 
 ## What it does
 
-### 🎯 Live Copilot: help during the call
+### 🎯 Live Assistant: help during the call
 
 An always-on assistant that watches the conversation and puts the right thing on screen. No button pressing, the whole call.
 
@@ -55,33 +55,33 @@ An always-on assistant that watches the conversation and puts the right thing on
 - **Pinned cards** for objections and open questions. They stay on screen until you handle them, then resolve themselves.
 - **Next steps** captured the moment you promise them ("Promised by you").
 - **A live call score** from 0 to 100, a one-line coach, a mood read, and gauges like *Buying temp* or *You're talking*. Your talk share turns orange past 70%.
-- **Nudges when the call drifts.** A short tip over whatever app the call is in, for about ten seconds: *"They've gone quiet since you said 'the price goes up in January'."* It catches long silences, monologues, talking over them, short answers, speeding up and repeating yourself; with the Copilot on, also a mood shift, a question you didn't answer, and a call wrapping up with no next step. At most one every two minutes, and it's kept out of screen sharing. It reads timing and words, never emotion from anyone's voice. **Settings > Copilot > Live Nudges**.
+- **Nudges when the call drifts.** A short tip over whatever app the call is in, for about ten seconds: *"They've gone quiet since you said 'the price goes up in January'."* It catches long silences, monologues, talking over them, short answers, speeding up and repeating yourself; with the Assistant on, also a mood shift, a question you didn't answer, and a call wrapping up with no next step. At most one every two minutes, and it's kept out of screen sharing. It reads timing and words, never emotion from anyone's voice. **Settings > Assistant > Live Nudges**.
 - **Brief it before the call.** A line or two on the dashboard ("Renewal call, legal wants to know where the data is stored") and it knows who you're talking to from the first second. Edit the brief mid-call from the *Briefed* card.
 - **You control what it spends.** Pace (Fast, Balanced, Relaxed for free tiers), how much conversation each request carries (2, 5 or 10 minutes), and a pause button on the call screen: while paused, nothing is sent and nothing is spent.
 - **Answers from your docs in about half a second** (optional, Claude mode): add a TypeSafe AI key and the matching excerpt shows as a *From your docs* card while Claude is still writing.
 
 ### 📚 Knowledge base: brief it like a new teammate
 
-<p align="center"><img src=".github/readme/knowledge.png" alt="Knowledge settings with security-faq.pdf tagged for Sales discovery, and the copilot answering the SSO question from it" width="560"></p>
+<p align="center"><img src=".github/readme/knowledge.png" alt="Knowledge settings with security-faq.pdf tagged for Sales discovery, and the Assistant answering the SSO question from it" width="560"></p>
 
-- Drop in PDFs, text or Markdown: pricing sheets, FAQs, playbooks. They're chunked and embedded **on your Mac** with Apple's NaturalLanguage framework, plus an exact-word (BM25) index. Nothing is uploaded; only the few passages that match a question go to the copilot provider you picked.
+- Drop in PDFs, text or Markdown: pricing sheets, FAQs, playbooks. They're chunked and embedded **on your Mac** with Apple's NaturalLanguage framework, plus an exact-word (BM25) index. Nothing is uploaded; only the few passages that match a question go to the AI you picked for the Assistant.
 - Give each document a note ("use for pricing questions") and tag it into the profiles that should use it.
 - **Coaching instructions** for every call ("keep answers short, always offer three price options").
 - Choose whether it may answer from **general knowledge** when your documents don't cover it. Every card says where its answer came from.
 
 ### 🔎 Ask Parrot: a memory of every call
 
-Chat with all your calls (⌘K): *"What did I promise Acme?"*, then *"and what did we offer them?"*. Chats are saved, follow-ups work, and every fact in the answer is a chip that opens the meeting at that second. Counts like *"How many meetings did I have last week?"* are worked out exactly on your Mac. Ask Parrot has its own AI choice: search always runs on your Mac, and with Ollama the answer is written there too. It works in English and Turkish, and it's in beta. When a call starts with people you've met before, the Copilot's brief shows the open items from last time.
+Chat with all your calls (⌘K): *"What did I promise Acme?"*, then *"and what did we offer them?"*. Chats are saved, follow-ups work, and every fact in the answer is a chip that opens the meeting at that second. Counts like *"How many meetings did I have last week?"* are worked out exactly on your Mac. Ask Parrot has its own AI choice: search always runs on your Mac, and with Ollama the answer is written there too. It works in English and Turkish, and it's in beta. When a call starts with people you've met before, the live Assistant's brief shows the open items from last time.
 
 ### 🤝 Use your meetings in Claude
 
-Free, no meeting bot, no 30-day limit, and your meetings stay on your Mac until you ask. Connect Claude Desktop in one click (or Claude Code, Codex for ChatGPT plans, or Cursor) and your own plan does the thinking: *"What did I promise last week?"*, *"Brief me for my call with Acme"*, *"Draft the follow-up for this morning's call"*, *"Coach me across my last 10 calls"*. Claude gets real speaker names, long transcripts in pages, promises with their owners, talk time, and four ready-made actions in its **+** menu (weekly digest, follow-up email, prep for a call, PRD from calls). It's read-only: you choose what it sees (transcripts, reports, notes, Copilot cards, whole call types), on-device-only meetings are never shown, and Parrot tells you how often it was read. Open **Claude & AI Apps** in the sidebar. [How it works](https://openparrot.app/help/claude.html).
+Free, no meeting bot, no 30-day limit, and your meetings stay on your Mac until you ask. Connect Claude Desktop in one click (or Claude Code, Codex for ChatGPT plans, or Cursor) and your own plan does the thinking: *"What did I promise last week?"*, *"Brief me for my call with Acme"*, *"Draft the follow-up for this morning's call"*, *"Coach me across my last 10 calls"*. Claude gets real speaker names, long transcripts in pages, promises with their owners, talk time, and four ready-made actions in its **+** menu (weekly digest, follow-up email, prep for a call, PRD from calls). It's read-only: you choose what it sees (transcripts, reports, notes, Assistant cards, whole call types), on-device-only meetings are never shown, and Parrot tells you how often it was read. Open **Claude & AI Apps** in the sidebar. [How it works](https://openparrot.app/help/claude.html).
 
 ### 🎭 Call profiles: one app, every kind of call
 
 <p align="center"><img src=".github/readme/profiles.png" alt="A custom 'Investor update' profile: an Interest gauge, Concern, Metric asked and Follow-up cards, your rules, and a report line written about the investor" width="560"></p>
 
-Tell Parrot what kind of call it is, and the profile decides what the copilot watches for and how the report is written.
+Tell Parrot what kind of call it is, and the profile decides what the Assistant watches for and how the report is written.
 
 - **Seven built-ins:** Default, Sales discovery, 1:1 coaching, Interview, Customer support, Vendor call, Generic. Sales looks for objections and buying signals; Interview for follow-ups and red flags; a 1:1 gets reflections and open questions.
 - **Make your own:** name it, say who the other side is, write a persona and rules, pick its documents, add your own card types (with color, icon, "keep on screen until handled") and gauges.
@@ -113,9 +113,9 @@ Tell Parrot what kind of call it is, and the profile decides what the copilot wa
 
 ### 🧠 You pick the brain
 
-<p align="center"><img src=".github/readme/brain-ollama.png" alt="Copilot settings with Ollama (local) selected, running llama3.2:3b. What leaves your Mac: nothing, it works with the Wi-Fi off" width="560"></p>
+<p align="center"><img src=".github/readme/brain-ollama.png" alt="Assistant settings with Ollama (local) selected, running llama3.2:3b. What leaves your Mac: nothing, it works with the Wi-Fi off" width="560"></p>
 
-| Copilot and reports | What it is | What leaves your Mac |
+| Assistant and reports | What it is | What leaves your Mac |
 |---|---|---|
 | **Claude** (`claude-haiku-4-5`) | Sharpest cards. Your own key. About $0.07 per call hour. | Transcript text, to Anthropic. Never audio. |
 | **Ollama** (local) | `llama3.2:3b`, `gemma3:4b`, or any model you like. Parrot can install Ollama and pull the model for you. Free. | Nothing. Works with the Wi-Fi off. |
@@ -134,7 +134,7 @@ Cloud engines fall back to on-device automatically if anything fails mid-call. A
 
 ### 🌍 Your language, too
 
-Whisper auto-detects the language of the call, or you can pin one of 14 (English, Turkish, Spanish, German, French, Italian, Portuguese, Dutch, Russian, Arabic, Hindi, Chinese, Japanese, Korean). The copilot and the report answer in the language of the call. Documents work in most major languages, including Turkish, Dutch, Polish, Russian, Arabic, Hindi, Chinese, Japanese and Korean, and an English question can find the answer in a Turkish or Spanish document. For anything but English, pick Large V3 Turbo or Groq. Pick the call's language right under **Start recording**. If a call doesn't sound like the language you picked, a banner says so in the first few seconds with a one-click switch, and Parrot keeps listening every 30 seconds in case the call changes language. With Deepgram, pick Turkish, Arabic, Chinese or Korean by name: its auto-detect covers ten languages and skips those. A **custom vocabulary** list teaches Whisper your product and people names.
+Whisper auto-detects the language of the call, or you can pin one of 14 (English, Turkish, Spanish, German, French, Italian, Portuguese, Dutch, Russian, Arabic, Hindi, Chinese, Japanese, Korean). The Assistant and the report answer in the language of the call. Documents work in most major languages, including Turkish, Dutch, Polish, Russian, Arabic, Hindi, Chinese, Japanese and Korean, and an English question can find the answer in a Turkish or Spanish document. For anything but English, pick Large V3 Turbo or Groq. Pick the call's language right under **Start recording**. If a call doesn't sound like the language you picked, a banner says so in the first few seconds with a one-click switch, and Parrot keeps listening every 30 seconds in case the call changes language. With Deepgram, pick Turkish, Arabic, Chinese or Korean by name: its auto-detect covers ten languages and skips those. A **custom vocabulary** list teaches Whisper your product and people names.
 
 ### 🧰 And all the everyday stuff
 
@@ -147,7 +147,7 @@ Whisper auto-detects the language of the call, or you can pin one of 14 (English
 - **Never loses a meeting.** If Parrot crashes or gets force-quit mid-call, the recording is recovered with its transcript and report on next launch. ⌘Q mid-call finishes the recording first.
 - **Forgot to hit stop?** After 15 minutes with nobody talking, Parrot asks *Still recording?* An idle room isn't turned into words, and if you want the tail gone anyway, right-click a line and choose *Delete Everything After This Line*. The audio is kept in full.
 - **Import recordings.** Drop an audio file (m4a, mp3, wav, aac, aiff, caf) on the window and it's transcribed, split by speaker and summarised like a live call.
-- **Export** a meeting as Markdown, TXT (notes, report, copilot cards and transcript in one file) or SRT subtitles.
+- **Export** a meeting as Markdown, TXT (notes, report, Assistant cards and transcript in one file) or SRT subtitles.
 - **Searchable history.** Search titles and transcripts, meetings grouped by day, with a talk-ratio strip on each.
 - **Menu bar item** to start and stop from anywhere, and a dashboard with your meetings, hours and words.
 - **Keeps itself up to date** with signed Sparkle updates that install when you quit, never during a recording.
@@ -164,17 +164,17 @@ This is a microphone-and-system-audio app, so you shouldn't have to take my word
 | Recording, on-device transcription, speaker detection, voiceprints, document index | Nothing | No one | Always local |
 | Model downloads | A download request | Hugging Face (Whisper, Parakeet, voice-detection and speaker-detection models); Apple (language model for Arabic, Indic and some Cyrillic documents) | Once, first use |
 | Update check | The app's version | GitHub Pages (Sparkle feed) | Once a day; can switch off auto-install |
-| Copilot on Claude or a custom server | Transcript text, matched document passages, profile instructions | Anthropic, or the server you picked | Only if you turn Copilot on |
+| The Assistant on Claude or a custom server | Transcript text, matched document passages, profile instructions | Anthropic, or the server you picked | Only if you turn the Assistant on |
 | TypeSafe doc answers | The question, a couple of lines of context, candidate document snippets | TypeSafe AI | Only with a TypeSafe key, Claude mode |
 | Groq or Deepgram transcription, polish pass | Call audio | Groq or Deepgram | Only if you pick that engine |
 | Calendar | Nothing (read locally through macOS's calendar store) | No one | Only if you connect it |
-| Calendar invite for the Copilot | Event title, guest names, notes (dial-in details removed) | Anthropic, or the server you picked | Only if you turn on "Brief the copilot from the invite" |
+| Calendar invite for the Assistant | Event title, guest names, notes (dial-in details removed) | Anthropic, or the server you picked | Only if you turn on "Brief the Assistant from the invite" |
 | Call detection | Nothing (asks macOS which apps use the mic) | No one | Unless you turn it off |
 | Ask Parrot | The few best-matching excerpts and the chat's recent messages (never on-device-only meetings) | The AI you pick for Ask Parrot (your reports AI by default) | Only with a cloud AI; nothing with Ollama |
 | Follow-up email | The meeting's transcript | Your reports AI | Only when you draft one |
 | Webhook | Summary, next steps, notes (transcript if allowed) | The address you paste | Only if you set one; never for on-device-only meetings |
 | Claude and other AI apps (MCP) | What the app reads when you ask it, only the parts you share | That app's company (Anthropic for Claude, under your account) | Only if you turn it on; never on-device-only meetings, audio or keys |
-| Copilot on Ollama | Nothing | Your own Mac | Always local |
+| The Assistant on Ollama | Nothing | Your own Mac | Always local |
 
 - **On-device only, one switch** (or per profile, say for therapy or legal calls): Whisper and Ollama only, and the meeting stays out of every cloud path afterwards. Optional **redaction** hides emails, phone, card and bank numbers (and names, if you like) from cloud AI and restores them in the answer. A **consent** button records how people were told, and **automatic clean-up** deletes old audio or meetings. Each meeting shows exactly *what left this Mac*.
 - **No accounts, no telemetry, no analytics.** There's no Parrot server to phone home to.
@@ -193,11 +193,11 @@ Found something that contradicts any of this? That's a security issue, see [SECU
 2. **Allow two permissions.** The welcome tour shows live status for each and deep-links to the right Settings pane:
    - **System Audio Recording** for the other side of the call. On macOS 15+ this is the audio-only permission. On macOS 14 it's Screen Recording instead (that's how older macOS exposes system audio; Parrot only ever captures audio) and takes effect after you reopen Parrot.
    - **Microphone** for your side.
-3. **Choose how the Copilot works.** The tour shows what it does, then asks:
+3. **Choose how the Assistant works.** The tour shows what it does, then asks:
    - **Private**: everything on your Mac. Parrot installs [Ollama](https://ollama.com) for you and downloads the model. Free.
    - **Balanced** (recommended): audio stays on your Mac, only text goes to Claude. Paste a key from [console.anthropic.com](https://console.anthropic.com) and press **Check key**.
-   - **Cloud**: Deepgram writes the words live, Claude runs the Copilot. Both keys are checked before they're saved.
-   - Or **Decide later**: a card on Home and **Settings > Copilot > Set up Copilot** bring you back.
+   - **Cloud**: Deepgram writes the words live, Claude runs the Assistant. Both keys are checked before they're saved.
+   - Or **Decide later**: a card on Home and **Settings > Assistant > Set up the Assistant** bring you back.
 4. **Speech to text.** Parrot picks the model that fits your Mac's memory and the languages you use, and starts the download right away. It carries on after you close the tour:
 
    | Model | Size | Good for |
@@ -237,7 +237,7 @@ Want the tour again? **Help > Show Welcome Tour**.
 | Speech-to-text (optional, your key) | Groq `whisper-large-v3-turbo` (HTTP chunks) · Deepgram Nova-3 (websocket streaming) |
 | Voice detection | Silero VAD (MIT) via FluidAudio, on-device: only clips with a voice in them reach Whisper, so an idle room stays blank |
 | Speaker detection | [FluidAudio](https://github.com/FluidInference/FluidAudio) (Apache-2.0), on-device pyannote-derived models (CC-BY-4.0) |
-| Copilot and reports | Claude API (Haiku 4.5, structured outputs) · Ollama · any OpenAI-compatible server |
+| Assistant and reports | Claude API (Haiku 4.5, structured outputs) · Ollama · any OpenAI-compatible server |
 | Instant document answers (optional) | TypeSafe AI `jev-latest` |
 | Knowledge base | Apple NaturalLanguage contextual embeddings + BM25, all on-device |
 | System audio | Core Audio process taps (macOS 15+) · ScreenCaptureKit (macOS 14) |
@@ -265,7 +265,7 @@ make run
 ## What's next (my wishlist)
 
 - [x] **Real speaker diarization.** Done, on-device, with naming and remembered voices
-- [x] **Local LLM for summaries and copilot.** Done, through Ollama (an in-process MLX model may still come one day)
+- [x] **Local LLM for summaries and the Assistant.** Done, through Ollama (an in-process MLX model may still come one day)
 - [x] **Notarize and distribute.** Done, notarized DMG plus Sparkle auto-updates
 - [x] **Pre-call brief and per-call profiles.** Done
 - [x] **Live speaker names during the call.** Built as an experiment (Settings → Transcription → Live speaker labels), off by default until it has survived more real calls
@@ -303,7 +303,7 @@ Parrot isn't alone in the "no cloud, no bots, just transcribe my meeting" corner
 - [Hyprnote](https://github.com/fastrepl/hyprnote): privacy-first meeting notepad, mic + system audio, on-device models
 - [screenpipe](https://github.com/mediar-ai/screenpipe): continuous local screen and audio capture with local Whisper
 
-Parrot's angle: fully native SwiftUI + WhisperKit, and a *live* in-call copilot grounded in your own documents, rather than only post-call notes.
+Parrot's angle: fully native SwiftUI + WhisperKit, and a *live* in-call assistant grounded in your own documents, rather than only post-call notes.
 
 ## License
 

@@ -432,9 +432,12 @@ enum HelpShots {
     /// settles (Forms, Lists, async images), then cache the bitmap.
     @MainActor
     private static func windowRender(_ view: some View, size: NSSize, to path: String) -> Bool {
+        // The sharpest screen sets the bitmap scale, so a 1x main monitor
+        // doesn't halve the guide's pictures.
         let window = NSWindow(
             contentRect: NSRect(origin: .zero, size: size),
-            styleMask: [.borderless], backing: .buffered, defer: false)
+            styleMask: [.borderless], backing: .buffered, defer: false,
+            screen: NSScreen.screens.max { $0.backingScaleFactor < $1.backingScaleFactor })
         window.colorSpace = .sRGB
         // `--dark` renders the same shots in dark mode, for checking a PR; the
         // user guide ships the light set.
@@ -703,7 +706,7 @@ enum CopilotSnapshot {
     /// of the given profile, drawn with the app's real colors and icons.
     private static func legend(profile: CallProfile?) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Parrot Copilot — what each card means")
+            Text("Parrot Assistant: what each card means")
                 .font(Theme.Typography.title(20))
                 .foregroundStyle(Theme.Colors.ink)
 

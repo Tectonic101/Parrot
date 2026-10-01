@@ -2985,12 +2985,12 @@ enum ProfileTest {
         check("mcp: a voice that never spoke isn't in the table", silent.speakers.map(\.name) == ["Me"])
         check("mcp: shares always add up to 100", thirds.speakers.map(\.percent).reduce(0, +) == 100)
         check("mcp: stats without a transcript", tool("meeting_stats", ["id": old.uuidString]).hasPrefix("This meeting has no transcript"))
-        check("mcp: no cards unless shared", !tool("get_meeting", ["id": a.uuidString]).contains("Copilot cards"))
+        check("mcp: no cards unless shared", !tool("get_meeting", ["id": a.uuidString]).contains("Assistant cards"))
         source.cards = { $0 == a ? ["00:40 Objection: Price too high (open)"] : [] }
-        check("mcp: cards off by default", !tool("get_meeting", ["id": a.uuidString]).contains("Copilot cards"))
+        check("mcp: cards off by default", !tool("get_meeting", ["id": a.uuidString]).contains("Assistant cards"))
         source.access = MCPAccess(cards: true)
         check("mcp: cards when shared", tool("get_meeting", ["id": a.uuidString])
-              .contains("## Copilot cards from the live call\n- 00:40 Objection: Price too high (open)"))
+              .contains("## Assistant cards from the live call\n- 00:40 Objection: Price too high (open)"))
         source.cards = { _ in [] }
         source.access = MCPAccess()
         let profileList = tool("list_profiles", [:])
@@ -3614,8 +3614,8 @@ enum ProfileTest {
         check("card: a download can't be hidden",
               CopilotStatus.showsHomeCard(.waitingForModel(progress: nil), dismissed: true, justTurnedOn: false))
         check("ready: short tour says set up only when on or on its way",
-              ReadyStep.title(.on, mode: .copilot) == "Copilot is set up"
-              && ReadyStep.title(.waitingForModel(progress: nil), mode: .copilot) == "Copilot is set up"
+              ReadyStep.title(.on, mode: .copilot) == "The Assistant is set up"
+              && ReadyStep.title(.waitingForModel(progress: nil), mode: .copilot) == "The Assistant is set up"
               && ReadyStep.title(.needsClaudeKey, mode: .copilot) == "Almost there"
               && ReadyStep.title(.off, mode: .full) == "Ready to go")
         check("card: dismiss hides the nudge",

@@ -120,7 +120,7 @@ struct LiveRecordingView: View {
                         .foregroundStyle(showCopilot ? Theme.Colors.accent : Theme.Colors.ink2)
                 }
                 .buttonStyle(.plain)
-                .help(showCopilot ? "Hide Copilot" : "Show Copilot")
+                .help(showCopilot ? "Hide the Assistant" : "Show the Assistant")
                 .padding(.trailing, 12)
             }
 
