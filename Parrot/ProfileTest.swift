@@ -410,6 +410,14 @@ enum ProfileTest {
               !RecordingManager.isEchoDuplicate(
                 "Okay sure.",
                 "Can you send me the retention report before Tuesday?"))
+        // After a live sweep the other side is "Speaker N", not "Them".
+        let line = "Bu dashboardda çalışıyorum, yarın sana gösteririm."
+        check("bleed: echo of a swept Speaker 1 line still drops",
+              RecordingManager.isBleed(meText: line, otherLabel: "Speaker 1", otherText: line))
+        check("bleed: echo of an unswept Them line still drops",
+              RecordingManager.isBleed(meText: line, otherLabel: "Them", otherText: line))
+        check("bleed: a Me line never dedupes against Me",
+              !RecordingManager.isBleed(meText: line, otherLabel: "Me", otherText: line))
     }
 
     static func testWAVEncoder() {

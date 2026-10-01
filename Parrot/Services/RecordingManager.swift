@@ -766,14 +766,13 @@ final class RecordingManager {
         // the same sentence then lands twice, "Them" from system audio and
         // "Me" from the mic (and inflates diarization/talk-ratio). The system
         // copy is authoritative for anything both streams heard, so a Me
-        // segment that near-duplicates a Them segment within a beat is echo,
+        // segment that near-duplicates an other-side segment within a beat is echo,
         // whichever order they decoded in. (Surfaced by the speakers-playback
         // live test 2026-08-01; previously masked by the glossary decode bug.)
         let bleedWindow: TimeInterval = 2.5
         let neighbors = meeting.segments.filter { abs($0.startTime - result.startTime) <= bleedWindow }
         if result.source == .me,
-           neighbors.contains(where: { $0.speakerLabel == AudioSource.them.label
-               && Self.isEchoDuplicate($0.text, result.text) }) {
+           neighbors.contains(where: { Self.isBleed(meText: result.text, otherLabel: $0.speakerLabel, otherText: $0.text) }) {
             return
         }
         if result.source == .them {
@@ -794,6 +793,13 @@ final class RecordingManager {
         modelContext.insert(segment)
         segment.meeting = meeting
         try? modelContext.save()
+    }
+
+    /// A Me line that near-duplicates an other-side line is bleed. The other
+    /// side is anything but Me: from 45 s in, live sweeps relabel "Them" to
+    /// "Speaker N", so matching on "Them" let late echoes through.
+    nonisolated static func isBleed(meText: String, otherLabel: String?, otherText: String) -> Bool {
+        otherLabel != AudioSource.me.label && isEchoDuplicate(otherText, meText)
     }
 
     /// Near-verbatim match for the echo-dedup above: Whisper decodes the bleed
