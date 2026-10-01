@@ -15,7 +15,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .general: "General"
         case .recording: "Recording"
         case .transcription: "Transcription"
-        case .copilot: "Copilot"
+        case .copilot: "Assistant"
         case .apiKeys: "API Keys"
         case .knowledge: "Knowledge"
         case .profiles: "Profiles"
@@ -272,7 +272,7 @@ struct SettingsView: View {
                 SettingsLabeledRow(title: "User guide", detail: "Every screen explained, with setup and troubleshooting.") {
                     Button("Open User Guide") { NSApp.showHelp(nil) }
                 }
-                SettingsLabeledRow(title: "Welcome tour", detail: "The first-run tour: permissions, Copilot and speech model.") {
+                SettingsLabeledRow(title: "Welcome tour", detail: "The first-run tour: permissions, the Assistant and speech model.") {
                     Button("Show Welcome Tour") {
                         MeetingActions.showWelcomeTour()
                         // The tour is a sheet on the main window; get out of its way.
@@ -512,15 +512,15 @@ struct SettingsView: View {
     private var copilotPage: some View {
         let liveKind = CopilotProviderKind(rawValue: copilotProvider) ?? .claude
         return SettingsPage {
-            SettingsCard(title: "Live Call Copilot") {
+            SettingsCard(title: "Live Call Assistant") {
                 SettingsToggleRow(
-                    title: "Enable Copilot during recordings",
+                    title: "Enable the Assistant during recordings",
                     detail: "Suggests answers, flags blockers, and captures action items live. No button needed.",
                     first: true,
                     isOn: $copilotEnabled
                 )
-                SettingsLabeledRow(title: "Guided setup", detail: "Pick Private, Balanced or Cloud and get Copilot running.") {
-                    Button("Set up Copilot") {
+                SettingsLabeledRow(title: "Guided setup", detail: "Pick Private, Balanced or Cloud and get the Assistant running.") {
+                    Button("Set up the Assistant") {
                         MeetingActions.showCopilotSetup()
                         if !isEmbedded { NSApp.keyWindow?.performClose(nil) }
                     }
@@ -533,7 +533,7 @@ struct SettingsView: View {
             SettingsCard(title: "Live Nudges") {
                 SettingsToggleRow(
                     title: "Show live nudges",
-                    detail: "Short tips during a call, like when they've gone quiet after something you said. Works without Copilot too.",
+                    detail: "Short tips during a call, like when they've gone quiet after something you said. Works without the Assistant too.",
                     first: true,
                     isOn: $liveNudges
                 )
@@ -544,7 +544,7 @@ struct SettingsView: View {
             // live, mid-call. Fast + Standard = the original behavior.
             SettingsCard(title: "Pace") {
                 SettingsBlockRow(
-                    title: "How often Copilot asks the model",
+                    title: "How often the Assistant asks the model",
                     detail: (CopilotPace(rawValue: copilotPace) ?? .fast).caption,
                     first: true
                 ) {
@@ -558,7 +558,7 @@ struct SettingsView: View {
                 }
                 SettingsLabeledRow(
                     title: "Conversation sent per request",
-                    detail: "Only recent talk is sent. Insight cards always go along, so Copilot still remembers the whole call. Smaller is cheaper and faster, especially on free or local models."
+                    detail: "Only recent talk is sent. Insight cards always go along, so the Assistant still remembers the whole call. Smaller is cheaper and faster, especially on free or local models."
                 ) {
                     Picker("", selection: $copilotWindow) {
                         ForEach(CopilotWindow.allCases) { window in
@@ -720,7 +720,7 @@ struct SettingsView: View {
 
     private var apiKeysPage: some View {
         SettingsPage {
-            SettingsCard(title: "Claude", blurb: "Powers the copilot. Only transcript text is sent; audio never leaves your Mac.") {
+            SettingsCard(title: "Claude", blurb: "Powers the Assistant. Only transcript text is sent; audio never leaves your Mac.") {
                 SettingsRow(first: true) {
                     ProviderKeyField(
                         label: "Claude API key",
@@ -775,11 +775,11 @@ struct SettingsView: View {
         return SettingsPage {
             SettingsCard(
                 title: "Documents",
-                blurb: "The copilot grounds its answers in these and cites the source. Indexed on this Mac, never uploaded."
+                blurb: "The Assistant grounds its answers in these and cites the source. Indexed on this Mac, never uploaded."
             ) {
                 if kb.documents.isEmpty {
                     SettingsRow(first: true) {
-                        Text("No documents yet. Add a pricing sheet or an FAQ and the copilot can quote it.")
+                        Text("No documents yet. Add a pricing sheet or an FAQ and the Assistant can quote it.")
                             .font(Theme.Typography.secondary)
                             .foregroundStyle(Theme.Colors.ink3)
                     }
@@ -934,7 +934,7 @@ struct KBDocumentRow: View {
                         .font(Theme.Typography.sans(13, .medium))
                         .lineLimit(1)
                     TextField(
-                        "When should the copilot use this? e.g. \"use for pricing questions\"",
+                        "When should the Assistant use this? e.g. \"use for pricing questions\"",
                         text: $note
                     )
                     .textFieldStyle(.plain)
@@ -965,7 +965,7 @@ struct KBDocumentRow: View {
                 .confirmationDialog("Remove \(document.name)?", isPresented: $confirmingRemove) {
                     Button("Remove", role: .destructive) { knowledgeBase.removeDocument(document) }
                 } message: {
-                    Text("The copilot stops using it right away. You can add the file again any time.")
+                    Text("The Assistant stops using it right away. You can add the file again any time.")
                 }
             }
 

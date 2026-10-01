@@ -703,7 +703,7 @@ enum CopilotSnapshot {
     /// of the given profile, drawn with the app's real colors and icons.
     private static func legend(profile: CallProfile?) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Parrot Copilot — what each card means")
+            Text("Parrot Assistant: what each card means")
                 .font(Theme.Typography.title(20))
                 .foregroundStyle(Theme.Colors.ink)
 

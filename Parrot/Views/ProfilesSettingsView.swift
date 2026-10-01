@@ -197,7 +197,7 @@ private struct ProfileDetailView: View {
                 }
                 SettingsRow {
                     FieldRow(label: "Call the other party",
-                             hint: "What the copilot calls them in cards & notes.") {
+                             hint: "What the Assistant calls them in cards & notes.") {
                         TextField("", text: $profile.counterpart, prompt: Text("e.g. the prospect"))
                     }
                 }
@@ -225,7 +225,7 @@ private struct ProfileDetailView: View {
                             .font(Theme.Typography.body)
                             .frame(height: 80)
                             .overlay(RoundedRectangle(cornerRadius: Theme.Metrics.radius).strokeBorder(Theme.Colors.line))
-                        Hint("House rules the copilot follows on every call, one per line, e.g. \"Always confirm budget before timeline.\"")
+                        Hint("House rules the Assistant follows on every call, one per line, e.g. \"Always confirm budget before timeline.\"")
                     }
                 }
                 SettingsToggleRow(
@@ -234,7 +234,7 @@ private struct ProfileDetailView: View {
                 )
                 SettingsToggleRow(
                     title: "On-device only",
-                    detail: "Calls under this profile never touch a cloud service: Whisper transcribes, Ollama runs the copilot and report, and the meeting stays out of cloud Ask, the webhook and AI apps. For therapy, legal or HR calls.",
+                    detail: "Calls under this profile never touch a cloud service: Whisper transcribes, Ollama runs the Assistant and report, and the meeting stays out of cloud Ask, the webhook and AI apps. For therapy, legal or HR calls.",
                     isOn: $profile.onDeviceOnly
                 )
             }

@@ -779,7 +779,7 @@ struct MeetingDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 if meeting.insights.isEmpty {
-                    emptyTabState("No copilot insights were captured on this call.")
+                    emptyTabState("No Assistant insights were captured on this call.")
                 } else {
                     ForEach(meeting.sortedInsights) { insight in
                         StoredInsightRow(
