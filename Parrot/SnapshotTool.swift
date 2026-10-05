@@ -198,7 +198,21 @@ enum CaptureTest {
         print("backend: \(manager.captureBackend.rawValue) | input: \(manager.inputDeviceName) | output: \(manager.outputDeviceName)")
         print("screen-recording preflight (SCK fallback available): \(CGPreflightScreenCaptureAccess())")
 
-        try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+        // CAPTURE_TEST_MUTE=1: "Mute me" for the middle third (#96). The mic
+        // file must keep its length with silence there, and the watchdog must
+        // not mistake our silence for another app grabbing the mic.
+        let muteTest = ProcessInfo.processInfo.environment["CAPTURE_TEST_MUTE"] != nil
+        if muteTest {
+            let third = UInt64(seconds / 3 * 1_000_000_000)
+            try? await Task.sleep(nanoseconds: third)
+            manager.setMicMuted(true)
+            try? await Task.sleep(nanoseconds: third)
+            print("while muted — mic signal lost: \(manager.micSignalLost) | not hearing you: \(manager.micSeemsDead)")
+            manager.setMicMuted(false)
+            try? await Task.sleep(nanoseconds: third)
+        } else {
+            try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+        }
 
         let endBackend = manager.captureBackend  // stopCapture resets it
         let systemURL = manager.systemAudioURL
@@ -215,6 +229,16 @@ enum CaptureTest {
         let systemStats = fileStats(systemURL)
         print("system .caf: \(systemStats.text)")
         print("mic .caf: \(fileStats(micURL).text)")
+        if muteTest, let micURL, let file = try? AVAudioFile(forReading: micURL),
+           let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(file.length)),
+           (try? file.read(into: buffer)) != nil, let ch = buffer.floatChannelData?[0] {
+            let n = Int(buffer.frameLength), third = n / 3
+            // Skip 0.3 s at each edge of the muted third: the toggles land between buffers.
+            let pad = Int(0.3 * file.processingFormat.sampleRate)
+            func level(_ r: Range<Int>) -> Float { r.reduce(Float(0)) { $0 + abs(ch[$1]) } / Float(max(1, r.count)) }
+            print(String(format: "mic level by third — before %.5f | muted %.5f | after %.5f",
+                         level(0..<third), level((third + pad)..<(2 * third - pad)), level((2 * third)..<n)))
+        }
 
         let pass = systemStats.peak > 0.01
         print(pass ? "CAPTURE OK — real system audio in the file"

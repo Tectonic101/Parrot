@@ -10,7 +10,7 @@ tree. Line counts are rough — they flag which files are worth reading whole.
 | `Parrot/ParrotApp.swift` | 178 | `@main`; parses CLI harness flags before the SwiftUI `App` starts |
 | `Parrot/ProfileTest.swift` | 1750 | `--profile-test`: headless logic harness, ~540 checks |
 | `Parrot/ProfileTest+Parakeet.swift` | 130 | `--profile-test` checks for Parakeet: language router, per-side probe, recommendation, rewind, imports |
-| `Parrot/SnapshotTool.swift` | 1255 | Offscreen PNG renderers + transcribe/analyze/capture harnesses; `--language-test` runs the live language check on a saved track; `--ask-chat-test, --ask-real` runs a real multi-turn Ask Parrot chat against Claude or Ollama |
+| `Parrot/SnapshotTool.swift` | 1279 | Offscreen PNG renderers + transcribe/analyze/capture harnesses; `--language-test` runs the live language check on a saved track; `--ask-chat-test, --ask-real` runs a real multi-turn Ask Parrot chat against Claude or Ollama |
 | `Parrot/CopilotHarness.swift` | 326 | `--kb-add`, `--doc-answer-eval` (Jev precision/recall), `--copilot-replay` (question-to-card latency) |
 | `Parrot/ToneHarness.swift` | 148 | `--nudge-replay [id] [--store path]` (a saved call through the live nudge rules, on a copy of the store), `--tone-snapshot <png>` (report card, pill, banner; light + dark) |
 | `Parrot/ProfileTest+Nudges.swift` | 298 | `--profile-test` checks for live nudges, the tone timeline and seconds-based talk share |
@@ -36,8 +36,8 @@ tree. Line counts are rough — they flag which files are worth reading whole.
 
 | File | L | Purpose |
 |---|---|---|
-| `Services/RecordingManager.swift` | 1249 | Orchestrates a recording session end-to-end; the hub; "Still recording?" reminder; live speaker sweeps (stable/window mapping, power pacing) |
-| `Services/AudioCaptureManager.swift` | 1002 | System audio (tap on 15+, SCK on 14.x/rescue) + mic tap, buffer conversion |
+| `Services/RecordingManager.swift` | 1267 | Orchestrates a recording session end-to-end; the hub; "Still recording?" reminder; live speaker sweeps (stable/window mapping, power pacing) |
+| `Services/AudioCaptureManager.swift` | 1022 | System audio (tap on 15+, SCK on 14.x/rescue) + mic tap, buffer conversion |
 | `Services/SystemAudioTap.swift` | 294 | Core Audio process tap: audio-only capture, no Screen Recording (macOS 15+) |
 | `Services/EchoCanceller.swift` | 138 | Swift wrapper over vendored SpeexDSP AEC |
 | `Services/TranscriptionEngine.swift` | 1721 | On-device WhisperKit or Parakeet; `AudioSource` routing; per-side language check (holds a Parakeet side until known, recheck + rewind); lazy fallback Whisper; live preview decode; Silero voice gate before every decode |
@@ -59,7 +59,7 @@ tree. Line counts are rough — they flag which files are worth reading whole.
 | `Services/BugReport.swift` | 120 | Pre-filled GitHub issue: diagnostics, own-window screenshot, URL builder |
 | `Services/SpeakerProfileStore.swift` | 85 | Voiceprint matching (cosine ≥ 0.65), narrowed to calendar invitees; remember/forget |
 | `Services/Receipts.swift` | 175 | Report receipts: parse `[mm:ss]` stamps, verify against the transcript, commitment/placeholder rules |
-| `Services/GlobalHotKey.swift` | 105 | Carbon system-wide shortcut (⌃⌥M mark), registered only while recording |
+| `Services/GlobalHotKey.swift` | 101 | Carbon system-wide shortcut (⌃⌥M mark), registered only while recording |
 | `Services/CallDetector.swift` | 281 | Mic-in-use reading (Core Audio process list) + pure call start/end state machine, app names; ignores Siri, Parrot's own capture, dictation apps |
 | `Services/CallWatcher.swift` | 356 | Polls the detector; Ask/Auto modes; notification actions + delegate; calendar reminders; `NotificationAccess` |
 | `Services/CalendarService.swift` | 250 | EventKit read-only: current event match, notes cleaning, invite context, title → profile |
@@ -98,7 +98,7 @@ tree. Line counts are rough — they flag which files are worth reading whole.
 | `Views/SidebarView.swift` | 361 | Meeting list, rows, talk-ratio strip |
 | `Views/DashboardView.swift` | 350 | Landing stats + recent meetings |
 | `Views/CopilotHomeCard.swift` | 110 | Home card: turn on Copilot, finish setup, waiting for the model, just turned on |
-| `Views/LiveRecordingView.swift` | 549 | In-call screen: chat bubbles, mic level, side tabs |
+| `Views/LiveRecordingView.swift` | 774 | In-call screen: chat bubbles, mic level, side tabs |
 | `Views/CopilotPanelView.swift` | 770 | Live insight cards, pinned blockers, suggested replies |
 | `Views/BriefViews.swift` | 147 | Brief summary line, documents-in-play row, live "Briefed" card (dashboard + copilot panel) |
 | `Views/SettingsCards.swift` | 187 | Settings building blocks: page, titled card, row, tag chip (the landing-page window look) |
@@ -124,8 +124,8 @@ tree. Line counts are rough — they flag which files are worth reading whole.
 | `Views/ModelDownloadProgressView.swift` | 34 | Whisper model download progress bar |
 | `Views/OllamaModelStatusView.swift` | 65 | Settings → Copilot model status, a thin view over OllamaService |
 | `Views/AudioImport.swift` | 108 | Drag-drop / file import of existing audio |
-| `Views/AppCommands.swift` | 253 | `AppSession`, menu commands, context menus, notifications |
-| `Views/MenuBarView.swift` | 59 | Menu bar extra |
+| `Views/AppCommands.swift` | 319 | `AppSession`, menu commands, context menus, notifications |
+| `Views/MenuBarView.swift` | 78 | Menu bar extra |
 | `Views/Theme.swift` | 160 | Single source of colors, fonts, metrics |
 | `Views/NudgePill.swift` | 156 | The floating nudge pill (non-activating panel, hidden from screen capture) and the Copilot panel's nudge banner |
 | `Views/ToneTimelineCard.swift` | 193 | Report card "How the call went": talk bars, mood line, numbered moments with Play |
