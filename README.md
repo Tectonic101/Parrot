@@ -142,7 +142,8 @@ Whisper auto-detects the language of the call, or you can pin one of 14 (English
 - **Knows your calendar** (opt-in, read-only, local): meetings take their event's name and guest list, guests become one-click speaker names, and an event title like "Interview: Jane" picks the matching profile. Only your own events count (not invites you haven't answered), and you can untick calendars you don't want read.
 - **Opens at login**, if you like, so it's there for the first call of the day.
 - **Records system audio and your mic** as two tracks. On macOS 15+ it uses the audio-only System Audio permission (Core Audio taps); on macOS 14, ScreenCaptureKit. No virtual audio drivers.
-- **Echo cancellation** (SpeexDSP) so the other side doesn't leak into your mic on speakers. On playback your side is turned down while only they talk, so a call recorded on speakers doesn't sound doubled. The mic reconnects by itself when AirPods die or switch mid-call.
+- **Echo cancellation** (SpeexDSP) so the other side doesn't leak into your mic on speakers. On playback your side is turned down while only they talk, so a call recorded on speakers doesn't sound doubled, and lines on your side that only echo theirs are left out of the transcript. The mic reconnects by itself when AirPods die or switch mid-call.
+- **Mute me.** Muting in Zoom or Teams doesn't reach Parrot, so it has its own: *Mute me* on the call screen, or ⌃⌥⇧M from any app, and your side records as silence until you unmute.
 - **Sentences, not fragments.** Lines land as whole sentences when the speaker pauses, with a live grey preview while they're still talking. Silence is never transcribed.
 - **Never loses a meeting.** If Parrot crashes or gets force-quit mid-call, the recording is recovered with its transcript and report on next launch. ⌘Q mid-call finishes the recording first.
 - **Forgot to hit stop?** After 15 minutes with nobody talking, Parrot asks *Still recording?* An idle room isn't turned into words, and if you want the tail gone anyway, right-click a line and choose *Delete Everything After This Line*. The audio is kept in full.
@@ -226,6 +227,7 @@ Want the tour again? **Help > Show Welcome Tour**.
 | ⌘F | Search meetings |
 | ⌘K | Ask Parrot |
 | ⌃⌥M | Mark a moment (from any app, while recording) |
+| ⌃⌥⇧M | Mute or unmute your side (from any app, while recording) |
 | ⌘, | Settings |
 
 ## Tech stack
@@ -293,7 +295,7 @@ The easiest way to report anything: click the little ladybug in the bottom right
 - **Models need internet once.** Whisper, Parakeet, voice-detection and speaker-detection models download on first use, and macOS fetches a language model the first time you add an Arabic, Indic or (on some Macs) Cyrillic document. After that, everything runs offline.
 - **Speaker detection isn't perfect.** Me vs Them is exact (separate tracks). Similar voices or heavy crosstalk on the other side can still get a line wrong; right-click it to reassign.
 - **Ask Parrot on a small local model.** With a small Ollama model (like gemma3:4b), answers that span many meetings can skip sources or mix up details. Answers about one meeting are fine, and Claude handles the broad ones well.
-- **Mic bleed on speakers.** Without headphones, a loud call can still leak into your mic now and then. Headphones fix it.
+- **Mic bleed on speakers.** Without headphones, Parrot leaves out lines that only echo the other side, but the first echo of a call, and echo mixed into your own words, can still get through. Headphones fix it.
 
 ## Similar projects
 
