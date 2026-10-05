@@ -301,6 +301,7 @@ Parrot isn't alone in the "no cloud, no bots, just transcribe my meeting" corner
 
 - [Meetily](https://github.com/Zackriya-Solutions/meetily): local Whisper/Parakeet transcription with Ollama summaries (Rust)
 - [Hyprnote](https://github.com/fastrepl/hyprnote): privacy-first meeting notepad, mic + system audio, on-device models
+- [Recap](https://github.com/RecapAI/Recap): native macOS meeting summaries, WhisperKit transcription with Ollama summaries (Swift)
 - [screenpipe](https://github.com/mediar-ai/screenpipe): continuous local screen and audio capture with local Whisper
 
 Parrot's angle: fully native SwiftUI + WhisperKit, and a *live* in-call assistant grounded in your own documents, rather than only post-call notes.
