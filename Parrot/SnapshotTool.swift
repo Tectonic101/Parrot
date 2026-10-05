@@ -177,8 +177,17 @@ enum CaptureTest {
         print("=== capture-test — macOS \(ProcessInfo.processInfo.operatingSystemVersionString) ===")
         let manager = AudioCaptureManager()
         let counter = BufferCounter()
+        // CAPTURE_TEST_STALL_MS=50 blocks every 20th system buffer that long,
+        // like transcription holding its buffer lock: the tap must not lose
+        // audio while its consumer is briefly stuck (issue #100).
+        let stallMs = Int(ProcessInfo.processInfo.environment["CAPTURE_TEST_STALL_MS"] ?? "") ?? 0
+        nonisolated(unsafe) var systemSeen = 0
         manager.onAudioBuffer = { buffer, source in
             counter.record(buffer: buffer, source: source)
+            if stallMs > 0, source == .them {
+                systemSeen += 1
+                if systemSeen % 20 == 0 { usleep(useconds_t(stallMs * 1000)) }
+            }
         }
         do {
             try await manager.startCapture()
@@ -200,6 +209,8 @@ enum CaptureTest {
         print(String(format: "live buffers — system: %d (peak %.4f) | mic: %d (peak %.4f)",
                      stats.systemBuffers, stats.systemPeak, stats.micBuffers, stats.micPeak))
         print("backend at end: \(endBackend.rawValue) | tap grant proven: \(UserDefaults.standard.bool(forKey: PermissionFlow.tapProvenKey))")
+        print(String(format: "system audio skipped by the tap: %.3f s%@", manager.systemLostSeconds,
+                     stallMs > 0 ? " (stalling \(stallMs) ms every 20th buffer)" : ""))
 
         let systemStats = fileStats(systemURL)
         print("system .caf: \(systemStats.text)")

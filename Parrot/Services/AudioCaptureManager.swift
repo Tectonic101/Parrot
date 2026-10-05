@@ -38,6 +38,8 @@ final class AudioCaptureManager: NSObject {
     /// The live SystemAudioTap on macOS 15+. Typed AnyObject because
     /// @available(macOS 15) types can't be stored properties at target 14.
     private var processTap: AnyObject?
+    /// System audio the tap skipped in the last recording (late callbacks).
+    @ObservationIgnored private(set) var systemLostSeconds: Double = 0
     /// True once the tap delivered any nonzero sample this recording. An
     /// unauthorized tap "works" but produces exact zeros forever (measured, no
     /// error/status API exists), so first real audio is the only proof of the
@@ -296,6 +298,7 @@ final class AudioCaptureManager: NSObject {
         // Stop system audio stream (whichever backend is live)
         if #available(macOS 15.0, *), let tap = processTap as? SystemAudioTap {
             tap.stop()
+            systemLostSeconds = tap.lostSeconds
         }
         processTap = nil
         if let stream {

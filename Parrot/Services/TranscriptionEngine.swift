@@ -1074,10 +1074,7 @@ final class TranscriptionEngine {
                         }
                         if usable { return pieces }
                         if Self.loopTrace { print("TRACE \(source.label) glossary decode unusable — retrying bare") }
-                        var bare = decodeOptions
-                        bare.promptTokens = nil
-                        bare.usePrefillPrompt = false
-                        return try await decode(bare)
+                        return try await decode(Self.withoutGlossary(decodeOptions))
                     }
 
                     do {
@@ -1357,9 +1354,7 @@ final class TranscriptionEngine {
         }
         kept[source] = nil
         guard let first = clips.first, let last = clips.last, let whisper = await ensureWhisper() else { return }
-        var bare = options
-        bare.promptTokens = nil
-        bare.usePrefillPrompt = false
+        let bare = Self.withoutGlossary(options)
         var redone: [TranscriptionResult] = []
         for clip in clips {
             let pieces = (try? await whisper.transcribe(audioArray: Self.normalizedForDecode(clip.audio),
@@ -1433,6 +1428,16 @@ final class TranscriptionEngine {
         options.promptTokens = tokens
         options.usePrefillPrompt = true
         glossaryActive = true
+    }
+
+    /// The same decode without the glossary prompt, for when the prompt
+    /// misfired or a Parakeet stretch is redone with Whisper. WhisperKit forces
+    /// the language only through the prefill, so a pinned language keeps it.
+    static func withoutGlossary(_ options: DecodingOptions) -> DecodingOptions {
+        var bare = options
+        bare.promptTokens = nil
+        bare.usePrefillPrompt = options.language != nil
+        return bare
     }
 
     /// Whisper leaks the initial prompt back as fake transcription on silent or
