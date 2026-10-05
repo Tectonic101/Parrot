@@ -35,6 +35,7 @@ enum ProfileTest {
         testPermissionFlow()
         testMicWatchdog()
         testCaptureClock()
+        testEchoGate()
         testModelFolderMatch()
         testBugReport()
         testSegmenter()
@@ -1922,6 +1923,84 @@ enum ProfileTest {
               E.fastPathQuery(question: "How much is the express identity verification?", before: "Them: hi")
                 == "How much is the express identity verification?")
         check("fast query with no context is the question", E.fastPathQuery(question: "Is it extra?", before: "") == "Is it extra?")
+    }
+
+    /// Loudness echo gate (#98) on a made-up 20 s call: noise shaped into
+    /// 80-240 ms syllables with gaps, deterministic so the checks never flake.
+    /// The clip under test is seconds 16-18 of the mic.
+    static func testEchoGate() {
+        typealias G = EchoGate
+        func speech(seed: UInt64, seconds: Double, level: Float = 0.1) -> [Float] {
+            var x = seed
+            func next() -> Float {  // 0..<1
+                x = x &* 6364136223846793005 &+ 1442695040888963407
+                return Float(x >> 40) / Float(1 << 24)
+            }
+            let total = Int(seconds * 16000)
+            var out: [Float] = []
+            var on = true
+            while out.count < total {
+                let amp = on ? level * (0.4 + next()) : level * 0.005
+                for _ in 0..<((4 + Int(next() * 9)) * G.hop) { out.append(amp * (next() * 2 - 1)) }
+                on.toggle()
+            }
+            return Array(out.prefix(total))
+        }
+        func shifted(_ s: [Float], frames: Int, gain: Float) -> [Float] {  // later by `frames`, or earlier if negative
+            let pad = Array(repeating: Float(0), count: abs(frames) * G.hop)
+            let moved = frames >= 0 ? pad + s.dropLast(frames * G.hop) : Array(s.dropFirst(-frames * G.hop)) + pad
+            return moved.map { $0 * gain }
+        }
+        func mix(_ a: [Float], _ b: [Float]) -> [Float] { zip(a, b).map(+) }
+        func inClip(_ base: [Float], _ insert: [Float]) -> [Float] {  // insert's 16-18 s into base
+            var out = base
+            out.replaceSubrange(256_000..<288_000, with: insert[256_000..<288_000])
+            return out
+        }
+
+        check("echo gate: envelope is the mean level per 20 ms",
+              G.envelope(Array(repeating: Float(-0.5), count: 640)[...]) == [0.5, 0.5])
+
+        let them = speech(seed: 1, seconds: 20)
+        // Live audio arrives in odd-sized buffers (170 from the tap, 1600 from the mic).
+        var levels = G.Levels()
+        let sizes = [170, 1600, 7, 320, 5000]
+        var at = 0, i = 0
+        while at < 64_000 {
+            let next = min(at + sizes[i % sizes.count], 64_000)
+            levels.add(them[at..<next])
+            at = next
+            i += 1
+        }
+        check("echo gate: running levels match the envelope", levels.frames == G.envelope(them[0..<64_000]))
+        let themEnv = G.envelope(them[...])
+        let hiss = speech(seed: 9, seconds: 20, level: 0.001)
+        let me = speech(seed: 2, seconds: 20)
+        func verdict(_ mic: [Float], them env: [Float] = themEnv) -> G.Verdict {
+            G.check(clip: Array(mic[256_000..<288_000]), mic: G.envelope(mic[...]), them: env, at: 256_000 / G.hop)
+        }
+
+        // Speakers: the mic hears them all call, 60 ms late (or 40 ms early on our clock).
+        let speakers = mix(shifted(them, frames: 3, gain: 0.08), hiss)
+        let echo = verdict(speakers)
+        check("echo gate: their voice 60 ms late in my mic is echo", echo.isEcho && echo.clip.lag == 3)
+        let early = verdict(mix(shifted(them, frames: -2, gain: 0.08), hiss))
+        check("echo gate: echo placed 40 ms early on our clock is still echo", early.isEcho && early.clip.lag == -2)
+        check("echo gate: talking over them on speakers is kept",
+              !verdict(inClip(speakers, mix(speakers, me))).isEcho)
+        let silent = G.envelope(speech(seed: 1, seconds: 20, level: 0.00001)[...])
+        check("echo gate: my voice while they're silent is kept",
+              !verdict(inClip(speakers, me), them: silent).isEcho)
+        check("echo gate: none of their audio yet means keep",
+              !verdict(speakers, them: []).isEcho)
+
+        // Headphones: the mic never hears them, so a short reply that happens
+        // to rise and fall with them is still mine (the "Hıhı" lines of a real
+        // 45-minute headphone call scored 0.6-0.9 on the clip alone).
+        let headphones = mix(me, hiss)
+        let lookalike = verdict(inClip(headphones, mix(shifted(them, frames: 3, gain: 0.08), hiss)))
+        check("echo gate: on headphones a clip that tracks them is kept", !lookalike.isEcho && lookalike.clip.follows > 0.6)
+        check("echo gate: headphones read as no bleed", verdict(headphones).bleed.follows < G.minBleed)
     }
 
     static func testGlossaryPrompt() {
