@@ -53,6 +53,11 @@ struct ParrotMain {
             DiarizeTest.run(audioPath: args[i + 1])
             return
         }
+        if let i = args.firstIndex(of: "--echo-replay"), i + 2 < args.count {
+            EchoReplay.run(micPath: args[i + 1], systemPath: args[i + 2],
+                           linesPath: i + 3 < args.count ? args[i + 3] : nil)
+            return
+        }
         if let i = args.firstIndex(of: "--capture-test") {
             let seconds = (i + 1 < args.count) ? (Double(args[i + 1]) ?? 10) : 10
             CaptureTest.run(seconds: seconds)

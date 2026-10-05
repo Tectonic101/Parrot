@@ -133,6 +133,77 @@ extension TranscribeTest {
 /// .app bundle — TCC decides by bundle identity. Uses a pumped main run loop,
 /// not the semaphore pattern: startCapture is @MainActor and the level/rescue
 /// hops dispatch to main, so a blocked main thread would deadlock them.
+/// `--echo-replay <mic.caf> <system.caf> [lines.tsv]`: scores a recorded
+/// call's Me lines with the loudness echo gate, to calibrate it on real
+/// speaker calls. lines.tsv is one stored line per row: start, end, speaker
+/// label, text (tab separated). Without it, prints only how far the mic
+/// trails the system track. Recordings from before 0.24.0 started the tracks
+/// seconds apart; that offset is measured and taken out first.
+enum EchoReplay {
+    static func run(micPath: String, systemPath: String, linesPath: String?) {
+        typealias G = EchoGate
+        guard let mic = load(micPath), let system = load(systemPath) else {
+            print("echo-replay: can't read the audio files"); exit(1)
+        }
+        let micEnv = G.envelope(mic[...]), themEnv = G.envelope(system[...])
+        // Whole-call delay within ±10 s, in log level like the gate.
+        func level(_ x: Float) -> Float { log10(x + 1e-4) }
+        let a = micEnv.map(level), b = themEnv.map(level)
+        var bestLag = 0, bestR: Float = -1
+        for lag in -500...500 {
+            let lo = max(0, lag), hi = min(a.count, b.count + lag)
+            guard hi - lo > 500 else { continue }
+            let ma = a[lo..<hi].reduce(0, +) / Float(hi - lo), mb = b[(lo - lag)..<(hi - lag)].reduce(0, +) / Float(hi - lo)
+            var ab: Float = 0, aa: Float = 0, bb: Float = 0
+            for i in lo..<hi {
+                let x = a[i] - ma, y = b[i - lag] - mb
+                ab += x * y; aa += x * x; bb += y * y
+            }
+            let r = aa > 0 && bb > 0 ? ab / (aa * bb).squareRoot() : 0
+            if r > bestR { bestR = r; bestLag = lag }
+        }
+        // ponytail: only old misaligned recordings with clear bleed get shifted;
+        // new ones are scored as the live gate sees them. Without bleed (headphones)
+        // the best lag is noise.
+        let shift = bestR < 0.3 || (-G.maxLead...G.maxLag).contains(bestLag) ? 0 : bestLag
+        print(String(format: "mic trails system by %d ms (whole-call r=%.2f)%@", bestLag * 20, bestR,
+                     shift == 0 ? "" : " — old recording, shifting by that much"))
+        guard let linesPath, let text = try? String(contentsOfFile: linesPath, encoding: .utf8) else { return }
+
+        let lines = text.split(separator: "\n").compactMap { row -> (start: Double, end: Double, label: String, text: String)? in
+            let f = row.split(separator: "\t", maxSplits: 3, omittingEmptySubsequences: false).map(String.init)
+            guard f.count == 4, let s = Double(f[0]), let e = Double(f[1]) else { return nil }
+            return (s, e, f[2], f[3])
+        }
+        // Both envelopes on the mic's clock, as they are live since 0.24.0.
+        let theirs = shift >= 0 ? Array(repeating: 0, count: shift) + themEnv : Array(themEnv.dropFirst(-shift))
+        var mine = 0, dropped = 0
+        for line in lines where line.label == "Me" {
+            let lo = max(0, Int(line.start * 16000)), hi = min(mic.count, Int(line.end * 16000))
+            guard hi > lo else { continue }
+            mine += 1
+            let verdict = G.check(clip: Array(mic[lo..<hi]), mic: micEnv, them: theirs, at: lo / G.hop)
+            if verdict.isEcho { dropped += 1 }
+            let overlapping = lines.filter { $0.label != "Me" && $0.start < line.end && $0.end > line.start }
+                .map(\.text).joined(separator: " / ")
+            print(String(format: "%7.1f-%7.1f bleed=%5.2f follows=%5.2f lag=%2d talk=%.2f %@ | %@  ‖ them: %@",
+                         line.start, line.end, verdict.bleed.follows, verdict.clip.follows, verdict.clip.lag,
+                         verdict.clip.themTalking, verdict.isEcho ? "DROP" : "keep", line.text,
+                         String(overlapping.prefix(90))))
+        }
+        print("Me lines: \(mine) | the gate drops \(dropped)")
+    }
+
+    private static func load(_ path: String) -> [Float]? {
+        guard let file = try? AVAudioFile(forReading: URL(fileURLWithPath: path)),
+              file.processingFormat.sampleRate == 16000,
+              let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(file.length)),
+              (try? file.read(into: buffer)) != nil,
+              let ch = buffer.floatChannelData?[0] else { return nil }
+        return Array(UnsafeBufferPointer(start: ch, count: Int(buffer.frameLength)))
+    }
+}
+
 enum CaptureTest {
     /// Cross-queue tallies from the onAudioBuffer callback (audio queues).
     private final class BufferCounter: @unchecked Sendable {
@@ -511,13 +582,13 @@ enum LiveLoopTest {
                 exit(0)
             }
 
-            var emitted: [(text: String, start: TimeInterval, end: TimeInterval)] = []
-            engine.onSegment = { r in emitted.append((r.text, r.startTime, r.endTime)) }
+            var emitted: [(text: String, start: TimeInterval, end: TimeInterval, who: String)] = []
+            engine.onSegment = { r in emitted.append((r.text, r.startTime, r.endTime, r.source.label)) }
             // A Parakeet rewind replaces lines, as RecordingManager does in the app.
-            // ponytail: the harness feeds one side only, so the range alone decides.
+            // ponytail: one side's rewind may drop the other side's lines in its range.
             engine.onReplace = { _, range, results in
                 emitted.removeAll { range.contains($0.start) }
-                emitted += results.map { ($0.text, $0.startTime, $0.endTime) }
+                emitted += results.map { ($0.text, $0.startTime, $0.endTime, $0.source.label) }
                 emitted.sort { $0.start < $1.start }
             }
 
@@ -526,28 +597,38 @@ enum LiveLoopTest {
                 print("liveloop-test: audio load failed — \(error)"); exit(1)
             }
             print("liveloop-test: \(samples.count) samples (\(String(format: "%.1f", Double(samples.count) / 16000))s)")
+            // LIVELOOP_MIC=<file> feeds a second track as Me, in step with the
+            // first (Them): a recorded call's mic and system tracks, to see the
+            // echo gate and the bleed dedupe work in the real loop.
+            var mic: [Float] = []
+            if let micPath = ProcessInfo.processInfo.environment["LIVELOOP_MIC"] {
+                do { mic = try loadSamples16k(path: micPath) } catch {
+                    print("liveloop-test: mic load failed — \(error)"); exit(1)
+                }
+            }
 
             engine.startTranscribing(meetingStartTime: .now)
             let realtime = ProcessInfo.processInfo.environment["LIVELOOP_REALTIME"] != nil
             let slice = 3200  // 200 ms, the ballpark capture delivers
             var i = 0
-            while i < samples.count {
+            while i < max(samples.count, mic.count) {
                 let end = min(i + slice, samples.count)
-                engine.appendAudio(pcmBuffer(Array(samples[i..<end])), source: .them)
+                if i < end { engine.appendAudio(pcmBuffer(Array(samples[i..<end])), source: .them) }
+                if i < mic.count { engine.appendAudio(pcmBuffer(Array(mic[i..<min(i + slice, mic.count)])), source: .me) }
                 // LIVELOOP_NOSWITCH=1 leaves the banner unanswered (keeps a pin).
                 if let heard = engine.languageMismatch, ProcessInfo.processInfo.environment["LIVELOOP_NOSWITCH"] == nil {
                     print(String(format: "liveloop-test: at %.1fs heard %@, switching", Double(end) / 16000, heard))
                     engine.switchLanguage(to: heard)
                 }
                 if realtime { try? await Task.sleep(for: .milliseconds(200)) }
-                i = end
+                i += slice
             }
             await engine.stopTranscribing()  // drain the tail
             try? await Task.sleep(for: .seconds(0.5))  // let queued onSegment hops land
 
             print("=== liveloop-test — \(emitted.count) segment(s) ===")
             for seg in emitted {
-                print(String(format: "[%6.2f – %6.2f] %@", seg.start, seg.end, seg.text))
+                print(String(format: "[%6.2f – %6.2f] %@%@", seg.start, seg.end, mic.isEmpty ? "" : seg.who + ": ", seg.text))
             }
             exit(0)
         }
