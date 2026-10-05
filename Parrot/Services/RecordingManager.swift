@@ -256,6 +256,20 @@ final class RecordingManager {
         }
     }
 
+    /// ⌃⌥⇧M mutes your side from any app (#96): Zoom's own mute never reaches
+    /// Parrot. Held only while recording, like Mark's.
+    private let muteHotKey = GlobalHotKey()
+    private var lastMuteToggle = Date.distantPast
+
+    var isMuted: Bool { audioCaptureManager.micMuted }
+
+    func toggleMute() {
+        // With Parrot in front, the global shortcut and the menu's own both fire.
+        guard Date().timeIntervalSince(lastMuteToggle) > 0.3 else { return }
+        lastMuteToggle = Date()
+        audioCaptureManager.setMicMuted(!audioCaptureManager.micMuted)
+    }
+
     /// Settings toggled mid-call: take effect now, not next recording.
     func refreshMarkHotKey() {
         markHotKey.unregister()
@@ -454,6 +468,9 @@ final class RecordingManager {
         lastIdleReminderAt = nil
         lastMarked = nil
         registerMarkHotKey()
+        muteHotKey.register(.muteMe) { [weak self] in
+            Task { @MainActor in self?.toggleMute() }
+        }
 
         // Experimental live speaker labels: re-diarize the call-so-far so
         // "Them" bubbles upgrade to stable Speaker N mid-call. Paced by
@@ -501,6 +518,7 @@ final class RecordingManager {
         timer = nil
         NudgePillController.shared.hide()
         markHotKey.unregister()
+        muteHotKey.unregister()
         // A "Still recording?" left in Notification Center is stale once stopped.
         UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [Self.idleReminderID])
         liveSweepTask?.cancel()

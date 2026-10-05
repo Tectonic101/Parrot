@@ -36,6 +36,7 @@ enum ProfileTest {
         testMicWatchdog()
         testCaptureClock()
         testEchoGate()
+        testMuteMe()
         testModelFolderMatch()
         testBugReport()
         testSegmenter()
@@ -578,6 +579,16 @@ enum ProfileTest {
     // Both tracks share one clock: a stream that starts late or goes quiet
     // owes silence (Sep 28 call: the other side's track began 18.5 s late,
     // so playback put every answer before its question).
+    /// "Mute me" (#96): silence of the same length, so the mic track and the
+    /// recording clock stay in step; unmuted audio passes untouched.
+    static func testMuteMe() {
+        let voice: [Float] = [0.2, -0.1, 0.05, 0]
+        check("mute me: muted mic becomes silence of the same length",
+              AudioCaptureManager.micOut(voice, muted: true) == [0, 0, 0, 0])
+        check("mute me: unmuted mic passes untouched", AudioCaptureManager.micOut(voice, muted: false) == voice)
+        check("mute me: its shortcut isn't Mark's", GlobalHotKey.Combo.muteMe != GlobalHotKey.Combo.markMoment)
+    }
+
     static func testCaptureClock() {
         let owed = { (elapsed: Double, written: Int) in
             AudioCaptureManager.silenceOwed(elapsed: elapsed, written: written, incoming: 160, sampleRate: 16000)
