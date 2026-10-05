@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 import SwiftData
 import Security
+import WhisperKit
 
 /// Offscreen logic harness. Run: `.build/debug/Parrot --profile-test`
 /// Prints PASS/FAIL per check and exits non-zero on any failure.
@@ -411,6 +412,22 @@ enum ProfileTest {
               !RecordingManager.isEchoDuplicate(
                 "Okay sure.",
                 "Can you send me the retention report before Tuesday?"))
+        // Issue #98: the mic re-heard the speakers through the echo canceller
+        // and two words came out misheard (6 of 8 exact, under the 0.8 bar).
+        check("bleed: garbled echo with misheard words is echo",
+              RecordingManager.isEchoDuplicate(
+                "kann sich zwar sehr gut wörtlich ausdrucken, aber...",
+                "Kann sich zwar sehr gut wirklich ausgucken, aber"))
+        check("bleed: same words, different message is not echo",
+              !RecordingManager.isEchoDuplicate(
+                "Wir müssen die Rechnung bis Freitag schicken.",
+                "Wir müssen die Rechnungen nicht mehr schicken."))
+        // Replies reuse the other side's words with a new ending. On the owner's
+        // store a loose match would have deleted real answers like these.
+        check("bleed: an answer reusing the question's words is kept",
+              !RecordingManager.isEchoDuplicate("Ekranı görüyor musun şimdi?", "Görüyorum şimdi."))
+        check("bleed: a question after their thanks is kept",
+              !RecordingManager.isEchoDuplicate("Thank you.", "What did you think, Sam?"))
         // After a live sweep the other side is "Speaker N", not "Them".
         let line = "Raporu yarın sabah sana gönderirim, tamam mı?"
         let echo: RecordingManager.BleedLine = (10, 13, line), twin: RecordingManager.BleedLine = (10.1, 13, line)
@@ -1914,6 +1931,19 @@ enum ProfileTest {
         check("groq fields carry the vocabulary prompt", with.contains { $0.0 == "prompt" && $0.1 == "Glossary: Launchese." })
         let without = GroqTranscriber.fields(language: nil, responseFormat: "json", prompt: nil)
         check("groq fields omit an absent prompt", !without.contains { $0.0 == "prompt" })
+
+        // WhisperKit forces the language only through the prefill. A retry that
+        // dropped it decoded German calls in whatever language Whisper guessed
+        // (issue #98: English filler lines with German pinned).
+        var pinned = DecodingOptions(task: .transcribe, language: "de", detectLanguage: false)
+        pinned.promptTokens = [1, 2, 3]
+        pinned.usePrefillPrompt = true
+        let bare = TranscriptionEngine.withoutGlossary(pinned)
+        check("glossary retry drops the prompt", bare.promptTokens == nil)
+        check("glossary retry keeps a pinned language", bare.language == "de" && bare.usePrefillPrompt)
+        let auto = TranscriptionEngine.withoutGlossary(
+            DecodingOptions(task: .transcribe, language: nil, detectLanguage: true))
+        check("glossary retry on auto still detects", auto.language == nil && auto.detectLanguage)
     }
 
     @MainActor

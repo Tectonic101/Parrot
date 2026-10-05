@@ -821,7 +821,27 @@ final class RecordingManager {
     nonisolated static func isEchoDuplicate(_ a: String, _ b: String) -> Bool {
         let ta = echoTokens(a), tb = echoTokens(b)
         guard !ta.isEmpty, !tb.isEmpty else { return false }
-        return Double(ta.intersection(tb).count) / Double(min(ta.count, tb.count)) >= 0.8
+        let (small, big) = ta.count <= tb.count ? (ta, tb) : (tb, ta)
+        let exact = small.intersection(big).count
+        // Misheard words only help a long line that's already mostly the same
+        // words. Short replies reuse the other side's words with a new ending
+        // ("görüyor musun?" "Görüyorum."), and counting those deleted real
+        // answers when replayed over the owner's store.
+        let misheard = small.count >= 4 && Double(exact) / Double(small.count) >= 0.6
+            ? small.subtracting(big).filter { word in big.contains { isEchoWord(word, $0) } }.count
+            : 0
+        return Double(exact + misheard) / Double(small.count) >= 0.8
+    }
+
+    /// Whether two words are the same word heard twice. The echo canceller
+    /// leaves a muffled copy, so the decoder mishears letters, not meaning:
+    /// "wörtlich" comes back as "wirklich", "ausdrucken" as "ausgucken".
+    nonisolated static func isEchoWord(_ a: String, _ b: String) -> Bool {
+        // Short words differ in meaning, not hearing: das/was, ist/isst, kann/dann.
+        guard a.count >= 5, b.count >= 5 else { return false }
+        // Letters added + removed (a swap counts 2), against both lengths:
+        // wörtlich/wirklich 4 of 16, ausdrucken/ausgucken 3 of 19.
+        return Double(Array(a).difference(from: Array(b)).count) <= Double(a.count + b.count) / 4
     }
 
     private nonisolated static func echoTokens(_ s: String) -> Set<String> {
