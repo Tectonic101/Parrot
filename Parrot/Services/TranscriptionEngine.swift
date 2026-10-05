@@ -64,6 +64,9 @@ final class TranscriptionEngine {
     /// over a long call; these running totals keep segment timestamps absolute.
     /// Guarded by `bufferLock` (the loop and `reanchorLocalClock` both touch it).
     private var consumedSamples: [AudioSource: Int] = [:]
+    /// Each stream's loudness per 20 ms, counted like `consumedSamples`, for
+    /// the echo gate. Guarded by `bufferLock`.
+    private var levels: [AudioSource: EchoGate.Levels] = [:]
     private var meetingStartTime = Date()
 
     /// The language this call sounds like, when it isn't what the session is
@@ -551,6 +554,7 @@ final class TranscriptionEngine {
 
         bufferLock.withLock {
             audioBuffers[source, default: []].append(contentsOf: samples)
+            levels[source, default: EchoGate.Levels()].add(samples[...])
         }
     }
 
@@ -755,6 +759,7 @@ final class TranscriptionEngine {
             deepgramFailedSources = []
             localClockOffset = [:]
             consumedSamples = [.me: 0, .them: 0]
+            levels = [:]
             appendedSamples = [:]
             heardSamples = [:]
         }
@@ -1022,6 +1027,33 @@ final class TranscriptionEngine {
                                          peak < Self.speechThreshold ? " SKIP" : ""))
                         }
                         guard peak >= Self.speechThreshold else { continue }
+                    }
+
+                    // Speakers: the mic re-hears the other side, and what the
+                    // echo canceller leaves decodes as Me lines, often filler in
+                    // another language that shares no words with theirs (#98).
+                    // Once the call shows the mic hears the speakers, skip a Me
+                    // clip whose loudness just follows theirs. Ahead of every
+                    // backend, like the voice gate.
+                    if source == .me {
+                        let tracks: (mic: [Float], them: [Float])? = self.bufferLock.withLock {
+                            // ponytail: both clocks must agree; a cloud fallback re-anchors one, and then the gate sits out.
+                            guard self.localClockOffset[.me] == self.localClockOffset[.them],
+                                  let mic = self.levels[.me], let them = self.levels[.them] else { return nil }
+                            return (mic.frames, them.frames)
+                        }
+                        if let tracks {
+                            let verdict = EchoGate.check(clip: chunk, mic: tracks.mic, them: tracks.them,
+                                                         at: startSample / EchoGate.hop)
+                            if verdict.isEcho {
+                                AudioCaptureManager.oslog.log("echo gate skipped a Me clip at \(startTime, format: .fixed(precision: 1), privacy: .public) s (follows \(verdict.clip.follows, format: .fixed(precision: 2), privacy: .public), bleed \(verdict.bleed.follows, format: .fixed(precision: 2), privacy: .public))")
+                                if Self.loopTrace {
+                                    print(String(format: "TRACE Me [%.2f-%.2f] echo gate SKIP follows=%.2f bleed=%.2f lag=%d",
+                                                 startTime, endTime, verdict.clip.follows, verdict.bleed.follows, verdict.clip.lag))
+                                }
+                                continue
+                            }
+                        }
                     }
 
                     // On-device decode — the default path, and the per-chunk
