@@ -122,8 +122,51 @@ enum ProfileTest {
         testCopilotFlags()
         testNudgeSession()
         testNudgeReplay()
+        testKnowledgeModel()
         print(failures == 0 ? "ALL PASS" : "FAILURES: \(failures)")
         exit(failures == 0 ? 0 : 1)
+    }
+
+    static func testKnowledgeModel() {
+        let sales = UUID(), vendor = UUID()
+        check("kb: all allows any call type", KBScope.all.allows(sales) && KBScope.all.allows(nil))
+        check("kb: off allows nothing", !KBScope.off.allows(sales) && !KBScope.off.allows(nil))
+        check("kb: only allows its types", KBScope.only([sales]).allows(sales) && !KBScope.only([sales]).allows(vendor))
+        check("kb: no call type means everything not off", KBScope.only([sales]).allows(nil))
+        check("kb: a deleted call type matches no live call", !KBScope.only([UUID()]).allows(sales))
+        check("kb: unticking from all keeps the rest", KBScope.all.toggling(sales, allTypes: [sales, vendor]) == .only([vendor]))
+        check("kb: ticking from off", KBScope.off.toggling(sales, allTypes: [sales, vendor]) == .only([sales]))
+        check("kb: unticking the last type is off", KBScope.only([sales]).toggling(sales, allTypes: [sales, vendor]) == .off)
+        check("kb: adding copies into sets that have the source", KBScope.only([sales]).adding(vendor, whereHas: sales) == .only([sales, vendor]))
+        check("kb: adding leaves other scopes alone",
+              KBScope.all.adding(vendor, whereHas: sales) == .all && KBScope.only([vendor]).adding(sales, whereHas: UUID()) == .only([vendor]))
+
+        let deal = KBFolder(name: "Acme deal", scope: .only([sales]))
+        let paused = KBFolder(name: "Old deals", scope: .off)
+        let inherits = KBDocument(name: "pricing.md", chunkCount: 1, addedAt: .now, folderID: deal.id)
+        let own = KBDocument(name: "nda.md", chunkCount: 1, addedAt: .now, folderID: paused.id, scope: .only([vendor]))
+        let loose = KBDocument(name: "faq.md", chunkCount: 1, addedAt: .now)
+        check("kb: same as folder takes the folder's", inherits.effectiveScope(in: [deal, paused]) == .only([sales]))
+        check("kb: own Use for beats an off folder", own.effectiveScope(in: [deal, paused]) == .only([vendor]))
+        check("kb: no folder is all call types", loose.effectiveScope(in: [deal]) == .all)
+        check("kb: a missing folder falls back to all", inherits.effectiveScope(in: []) == .all)
+
+        let tagged = KBDocument(name: "a.md", chunkCount: 1, addedAt: .now, profileIDs: [sales]).migrated()
+        let untagged = KBDocument(name: "b.md", chunkCount: 1, addedAt: .now).migrated()
+        check("kb: upgrade keeps tags as own Use for", tagged.scope == .only([sales]) && tagged.folderID == nil && tagged.profileIDs.isEmpty)
+        check("kb: upgrade turns no tags into off", untagged.scope == .off)
+
+        check("kb: display name hides the extension",
+              KBDocument(name: "05 - Service agreement.md", chunkCount: 1, addedAt: .now).displayName == "05 - Service agreement")
+        check("kb: display name keeps an unknown extension",
+              KBDocument(name: "notes v1.2", chunkCount: 1, addedAt: .now).displayName == "notes v1.2")
+
+        // Round trip: a No-folder, Same-as-folder document writes neither key
+        // and must come back as nil/nil (the per-document legacy trap).
+        let back = (try? JSONEncoder().encode(loose)).flatMap { try? JSONDecoder().decode(KBDocument.self, from: $0) }
+        check("kb: nil folder and scope survive a round trip", back != nil && back?.folderID == nil && back?.scope == nil)
+        let ownBack = (try? JSONEncoder().encode(own)).flatMap { try? JSONDecoder().decode(KBDocument.self, from: $0) }
+        check("kb: own scope survives a round trip", ownBack?.scope == .only([vendor]) && ownBack?.folderID == paused.id)
     }
 
     static func testKindStyleFallback() {
