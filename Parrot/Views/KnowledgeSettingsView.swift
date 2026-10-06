@@ -307,7 +307,7 @@ private struct ScopeMenu: View {
             ForEach(profiles) { profile in
                 Toggle(profile.name, isOn: choice(ticked(profile.id)) {
                     // From Same as folder this starts from the folder's set.
-                    set(effective.toggling(profile.id, allTypes: profiles.map(\.id)))
+                    set(effective.toggling(profile.id))
                 })
             }
             Divider()

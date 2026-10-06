@@ -137,9 +137,11 @@ enum ProfileTest {
         check("kb: only allows its types", KBScope.only([sales]).allows(sales) && !KBScope.only([sales]).allows(vendor))
         check("kb: no call type means everything not off", KBScope.only([sales]).allows(nil))
         check("kb: a deleted call type matches no live call", !KBScope.only([UUID()]).allows(sales))
-        check("kb: unticking from all keeps the rest", KBScope.all.toggling(sales, allTypes: [sales, vendor]) == .only([vendor]))
-        check("kb: ticking from off", KBScope.off.toggling(sales, allTypes: [sales, vendor]) == .only([sales]))
-        check("kb: unticking the last type is off", KBScope.only([sales]).toggling(sales, allTypes: [sales, vendor]) == .off)
+        // From "All call types" no single type shows ticked, so picking one
+        // means "just this one" (narrowing a folder), never "all but this".
+        check("kb: picking a type from all gives just that type", KBScope.all.toggling(sales) == .only([sales]))
+        check("kb: ticking from off", KBScope.off.toggling(sales) == .only([sales]))
+        check("kb: unticking the last type is off", KBScope.only([sales]).toggling(sales) == .off)
         check("kb: adding copies into sets that have the source", KBScope.only([sales]).adding(vendor, whereHas: sales) == .only([sales, vendor]))
         check("kb: adding leaves other scopes alone",
               KBScope.all.adding(vendor, whereHas: sales) == .all && KBScope.only([vendor]).adding(sales, whereHas: UUID()) == .only([vendor]))

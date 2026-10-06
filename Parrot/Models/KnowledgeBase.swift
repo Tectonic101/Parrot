@@ -33,12 +33,12 @@ enum KBScope: Codable, Equatable {
     }
 
     /// The scope after ticking or unticking one call type in the Use for
-    /// menu. `.all` starts from every type in `allTypes`; none left = off.
-    func toggling(_ id: UUID, allTypes: [UUID]) -> KBScope {
+    /// menu. From `.all` (where no single type shows ticked) a pick means
+    /// just that type; none left = off.
+    func toggling(_ id: UUID) -> KBScope {
         var ids: Set<UUID>
         switch self {
-        case .all: ids = Set(allTypes)
-        case .off: ids = []
+        case .all, .off: ids = []
         case .only(let current): ids = current
         }
         if ids.contains(id) { ids.remove(id) } else { ids.insert(id) }
