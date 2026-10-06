@@ -138,6 +138,9 @@ final class RecordingManager {
         // recording until the model below is ready.
         callWatcher.recordingManager = self
         callWatcher.start()
+        // Starts Sparkle at launch (not only when Settings opens) and keeps
+        // Restart now away from a running call.
+        AppUpdater.shared.isBusy = { [weak self] in self?.isRecording ?? false }
         // Catch the memory up with meetings finished before it existed (or
         // changed since): background, low priority, local only.
         Task { await syncMemory() }
@@ -578,6 +581,7 @@ final class RecordingManager {
         isRecording = false
         elapsedTime = 0
         recordingStartTime = nil
+        AppUpdater.shared.recordingStopped()
     }
 
     private func runPostCallChain(_ meetingRef: Meeting, anchors: [String: [Float]]) async {

@@ -128,8 +128,32 @@ enum ProfileTest {
         testKnowledgeList()
         testSidebarSearch()
         testWhatsNew()
+        testUpdateNotice()
         print(failures == 0 ? "ALL PASS" : "FAILURES: \(failures)")
         exit(failures == 0 ? 0 : 1)
+    }
+
+    @MainActor
+    static func testUpdateNotice() {
+        check("update notice: the title", UpdateNotice.title(version: "0.28.0") == "Parrot 0.28.0 is perched and ready")
+        check("update notice: posts when free", UpdateNotice.onReady(version: "0.28.0", alreadyPosted: nil, busy: false) == .post)
+        check("update notice: waits during a call", UpdateNotice.onReady(version: "0.28.0", alreadyPosted: nil, busy: true) == .hold)
+        check("update notice: once per version", UpdateNotice.onReady(version: "0.28.0", alreadyPosted: "0.28.0", busy: false) == .skip)
+
+        var recording = true
+        var installed = 0
+        let updater = AppUpdater(startSparkle: false)
+        updater.isBusy = { recording }
+        updater.updateReady(version: "0.28.0") { installed += 1 }
+        check("update notice: held while recording, posted when it stops", updater.postedVersion == nil)
+        updater.restartNow()
+        check("update notice: restart refused while recording",
+              installed == 0 && updater.lastNoticeBody == UpdateNotice.busyBody)
+        recording = false
+        updater.recordingStopped()
+        check("update notice: held notice goes out when the call stops", updater.postedVersion == "0.28.0")
+        updater.restartNow()
+        check("update notice: restart installs when free", installed == 1)
     }
 
     static func testWhatsNew() {
