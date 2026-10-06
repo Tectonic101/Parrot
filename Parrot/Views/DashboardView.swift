@@ -284,9 +284,21 @@ struct DashboardView: View {
     }
 
     private var totalWords: Int {
-        meetings.reduce(0) { total, meeting in
-            total + meeting.segments.reduce(0) { $0 + $1.text.split(separator: " ").count }
-        }
+        meetings.reduce(0) { $0 + Self.words(in: $1) }
+    }
+
+    // ponytail: process-lifetime cache keyed by meeting.id, same as
+    // TalkStripView's. Recounting every line on every save froze Home ~1.3 s
+    // per save with 16k lines; now only a meeting whose line count changed
+    // is recounted. An edit that keeps the count (rare) shows on next launch.
+    private static var wordCache: [UUID: (count: Int, words: Int)] = [:]
+
+    static func words(in meeting: Meeting) -> Int {
+        let segments = meeting.segments
+        if let cached = wordCache[meeting.id], cached.count == segments.count { return cached.words }
+        let words = segments.reduce(0) { $0 + $1.text.split(separator: " ").count }
+        wordCache[meeting.id] = (segments.count, words)
+        return words
     }
 
     private func formatNumber(_ n: Int) -> String {

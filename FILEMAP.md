@@ -96,8 +96,8 @@ tree. Line counts are rough — they flag which files are worth reading whole.
 | File | L | Purpose |
 |---|---|---|
 | `Views/ContentView.swift` | 200 | Root split view (`MainPage`: dashboard/settings/ask/aiApps/meeting) + empty state + corner bug button |
-| `Views/SidebarView.swift` | 361 | Meeting list, rows, talk-ratio strip |
-| `Views/DashboardView.swift` | 350 | Landing stats + recent meetings |
+| `Views/SidebarView.swift` | 386 | Meeting list, rows, talk-ratio strip; search runs as one database query per pause in typing (never in `body`) |
+| `Views/DashboardView.swift` | 408 | Landing stats (word count cached per meeting) + recent meetings |
 | `Views/CopilotHomeCard.swift` | 110 | Home card: turn on Copilot, finish setup, waiting for the model, just turned on |
 | `Views/LiveRecordingView.swift` | 774 | In-call screen: chat bubbles, mic level, side tabs |
 | `Views/CopilotPanelView.swift` | 770 | Live insight cards, pinned blockers, suggested replies |
