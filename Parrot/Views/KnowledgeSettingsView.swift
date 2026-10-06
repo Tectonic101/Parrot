@@ -421,8 +421,16 @@ enum KnowledgeList {
 
     /// Search: name or About line, ignoring case and accents.
     static func matches(_ document: KBDocument, _ query: String) -> Bool {
-        let q = query.trimmingCharacters(in: .whitespaces)
-        return q.isEmpty || document.name.localizedStandardContains(q) || document.note.localizedStandardContains(q)
+        let q = fold(query.trimmingCharacters(in: .whitespaces))
+        return q.isEmpty || fold(document.name).contains(q) || fold(document.note).contains(q)
+    }
+
+    /// Lowercase, no accents, Turkish ı/İ as plain i/I ("Çalışma" →
+    /// "calisma"). A fixed locale, so a Turkish Mac doesn't fold "I" to "ı".
+    private static func fold(_ text: String) -> String {
+        text.replacingOccurrences(of: "ı", with: "i")
+            .replacingOccurrences(of: "İ", with: "I")
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX"))
     }
 
     static func deleteMessage(count: Int) -> String {

@@ -306,6 +306,10 @@ enum ProfileTest {
         let doc = KBDocument(name: "05 - Service agreement.md", note: "Signed görüşme notes", chunkCount: 1, addedAt: .now)
         check("kb list: search ignores case", L.matches(doc, "SERVICE"))
         check("kb list: search reads the About line, accents ignored", L.matches(doc, "gorusme"))
+        // Turkish dotless ı is a letter, not an accented i: fold it by hand.
+        let turkish = KBDocument(name: "Çalışma planı.md", chunkCount: 1, addedAt: .now)
+        check("kb list: search finds Turkish typed without Turkish letters", L.matches(turkish, "calisma plani"))
+        check("kb list: search finds Turkish capitals", L.matches(turkish, "ÇALIŞMA"))
         check("kb list: a blank search matches", L.matches(doc, "  "))
         check("kb list: search misses", !L.matches(doc, "invoice"))
 
