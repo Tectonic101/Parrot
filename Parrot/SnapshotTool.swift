@@ -457,6 +457,8 @@ enum HelpShots {
         shot("settings-transcription.png", size: .init(width: 780, height: 620), settings(.transcription))
         shot("settings-copilot.png", size: .init(width: 780, height: 620), settings(.copilot))
         shot("settings-knowledge.png", size: .init(width: 780, height: 620), settings(.knowledge))
+        shot("whats-new-card.png", size: .init(width: 640, height: 260),
+             WhatsNewCard(news: .sample) {}.padding(Theme.Metrics.pad).background(Theme.Colors.canvas))
         shot("settings-connections.png", size: .init(width: 780, height: 620), settings(.connections))
         shot("settings-privacy.png", size: .init(width: 780, height: 620), settings(.privacy))
         let acmeRef = AskEngine.MeetingRef(ref: "M1", meetingID: meeting.id, title: meeting.title,

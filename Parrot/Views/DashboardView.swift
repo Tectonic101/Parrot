@@ -20,12 +20,19 @@ struct DashboardView: View {
     /// "switch to Turkish" banner, shown where a recording starts.
     @AppStorage(TranscriptionLanguage.defaultsKey) private var callLanguage = "auto"
     @AppStorage("whisperModel") private var speechModel = "base"
+    @AppStorage(WhatsNew.seenKey) private var whatsNewSeen = ""
+    @AppStorage("hasCompletedOnboarding") private var onboarded = false
 
     var body: some View {
         ScrollView {
             VStack(spacing: Theme.Metrics.sectionGap) {
                 recordButton
                     .padding(.top, 44)
+
+                if WhatsNew.shouldShowCard(running: AppUpdater.currentVersion, news: .current,
+                                           seen: whatsNewSeen, onboarded: onboarded) {
+                    WhatsNewCard(news: .current) { whatsNewSeen = AppUpdater.currentVersion }
+                }
 
                 CopilotHomeCard()
 
