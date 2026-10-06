@@ -119,7 +119,7 @@ Tell Parrot what kind of call it is, and the profile decides what the Assistant 
 |---|---|---|
 | **Claude** (`claude-haiku-4-5`) | Sharpest cards. Your own key. About $0.07 per call hour. | Transcript text, to Anthropic. Never audio. |
 | **Ollama** (local) | `llama3.2:3b`, `gemma3:4b`, or any model you like. Parrot can install Ollama and pull the model for you. Free. | Nothing. Works with the Wi-Fi off. |
-| **Custom server** | Anything OpenAI-compatible: OpenAI, Gemini, Groq, OpenRouter, LM Studio. | Transcript text, to the server you picked. |
+| **Other AI service** | Anything OpenAI-compatible: OpenRouter, OpenAI, Gemini, Groq, LM Studio. | Transcript text, to the server you picked. |
 
 Live cards and post-call reports can use different brains (say, Ollama live and Claude for the report).
 
