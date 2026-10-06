@@ -127,6 +127,7 @@ enum ProfileTest {
         testKnowledgeStoreUpgrade()
         testKnowledgeList()
         testSidebarSearch()
+        testTranscriptClick()
         testWhatsNew()
         testUpdateNotice()
         print(failures == 0 ? "ALL PASS" : "FAILURES: \(failures)")
@@ -399,6 +400,54 @@ enum ProfileTest {
               L.deleteMessage(count: 9) == "Its 9 documents move to No folder and keep their settings."
                 && L.deleteMessage(count: 1) == "Its document moves to No folder and keeps its settings.")
         check("kb list: closing then opening a folder", L.toggled("a", in: "b") == "a,b" && L.toggled("a", in: "a,b") == "b")
+    }
+
+    /// #54: a click on a long transcript sorted it twice and counted
+    /// speakers by decoding the names once per line.
+    @MainActor
+    static func testTranscriptClick() {
+        let schema = Schema([Meeting.self, TranscriptSegment.self, CallInsight.self, CallProfile.self, SpeakerProfile.self])
+        guard let container = try? ModelContainer(
+            for: schema, configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
+        ) else { check("click: container", false); return }
+        let context = container.mainContext
+        let m = Meeting(title: "Acme review")
+        context.insert(m)
+        func add(_ start: Double, _ label: String) -> TranscriptSegment {
+            let s = TranscriptSegment(startTime: start, endTime: start + 2, text: "Line at \(start)", speakerLabel: label)
+            s.meeting = m
+            context.insert(s)
+            return s
+        }
+        for start in [30.0, 10, 20, 0] { _ = add(start, start == 10 ? "Speaker 2" : "Speaker 1") }
+        try? context.save()
+
+        let cache = SortedLines()
+        check("click: lines come back in time order", cache.of(m).map(\.startTime) == [0, 10, 20, 30])
+        let late = add(25, "Me")
+        check("click: a new line is sorted in", cache.of(m).map(\.startTime) == [0, 10, 20, 25, 30])
+        context.delete(late)
+        try? context.save()
+        check("click: a removed line is gone", cache.of(m).map(\.startTime) == [0, 10, 20, 30])
+        // Polish swaps every line for new ones, same count.
+        for s in m.segments { context.delete(s) }
+        try? context.save()
+        for start in [5.0, 15, 35, 45] { _ = add(start, "Speaker 1") }
+        try? context.save()
+        check("click: replaced lines are never served stale", cache.of(m).map(\.startTime) == [5, 15, 35, 45])
+
+        let lines = cache.of(m)
+        check("click: before the first line nothing plays", SortedLines.playing(at: 2, in: lines) == nil)
+        check("click: a line plays from its start", SortedLines.playing(at: 15, in: lines)?.startTime == 15)
+        check("click: between lines the earlier one plays", SortedLines.playing(at: 34.9, in: lines)?.startTime == 15)
+        check("click: after the last line it keeps playing", SortedLines.playing(at: 900, in: lines)?.startTime == 45)
+        check("click: no lines, nothing plays", SortedLines.playing(at: 10, in: []) == nil)
+        let twins = [add(50, "Me"), add(50, "Speaker 1")]
+        let sameStart = SortedLines.playing(at: 50, in: cache.of(m))
+        check("click: two lines at one time pick the later one", sameStart?.id == cache.of(m).last?.id && twins.contains { $0.id == sameStart?.id })
+
+        m.speakerNames = ["Speaker 1": "Sam", "Speaker 2": "Sam"]
+        check("click: speaker count still merges one named voice", m.speakerCount == 2)
     }
 
     /// Sidebar search runs in the database: titles and transcript lines,
