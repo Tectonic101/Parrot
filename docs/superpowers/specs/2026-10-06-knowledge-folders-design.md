@@ -173,6 +173,14 @@ searching.
 **Delete folder:** confirm "Delete “Acme deal”? Its 9 documents move to No
 folder and keep their settings."
 
+**Profiles page.** Settings → Profiles has a "Knowledge Documents" card with
+an on/off switch per document for the selected call type. Two editors with
+different rules for one setting would bring the confusion back, so the card
+becomes read-only: the documents this call type can use (`isInPlay`), each
+with its folder name, and the hint "Change which documents a call type uses
+on the Knowledge page." (Found while planning; owner-approved direction:
+Use for lives on folders and documents.)
+
 ## 7. Testing
 
 `--profile-test` checks:
