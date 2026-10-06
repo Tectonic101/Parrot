@@ -38,6 +38,8 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate {
 
     static let readyCategory = "PARROT_UPDATE_READY"
     static let restartAction = "PARROT_RESTART_NOW"
+    private static let readyID = "parrot-update-ready"
+    private static let busyID = "parrot-update-busy"
 
     /// nil in unbundled dev builds (`swift build` with no Info.plist, and any
     /// harness run) — starting Sparkle without a feed just logs errors, and the
@@ -53,6 +55,9 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate {
     init(startSparkle: Bool) {
         super.init()
         guard startSparkle, Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") != nil else { return }
+        // A notice from before the last quit is stale: that update is installed now.
+        UNUserNotificationCenter.current().removeDeliveredNotifications(
+            withIdentifiers: [Self.readyID, Self.busyID])
         controller = SPUStandardUpdaterController(
             startingUpdater: true, updaterDelegate: self, userDriverDelegate: nil)
     }
@@ -100,20 +105,24 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate {
         }
     }
 
-    /// RecordingManager calls this when a call stops: a held notice goes out.
-    func recordingStopped() {
+    /// RecordingManager calls this when a call, its report or an import
+    /// finishes: a held notice goes out once nothing is left running.
+    func becameIdle() {
         guard let pending,
-              UpdateNotice.onReady(version: pending.version, alreadyPosted: postedVersion, busy: false) == .post
+              UpdateNotice.onReady(version: pending.version, alreadyPosted: postedVersion, busy: isBusy()) == .post
         else { return }
         postReady(pending.version)
     }
 
-    /// The notification's Restart now. Never during a call.
+    /// The notification's Restart now. Never during a call or while its
+    /// report is being written: relaunching then would cut that work short.
     func restartNow() {
         guard let pending else { return }
         if isBusy() {
-            notify(id: "parrot-update-busy", title: UpdateNotice.title(version: pending.version),
+            notify(id: Self.busyID, title: UpdateNotice.title(version: pending.version),
                    body: UpdateNotice.busyBody, category: nil)
+            // Clicking the action removed the notice; offer it again when idle.
+            postedVersion = nil
             return
         }
         pending.install()
@@ -121,7 +130,7 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate {
 
     private func postReady(_ version: String) {
         postedVersion = version
-        notify(id: "parrot-update-ready", title: UpdateNotice.title(version: version),
+        notify(id: Self.readyID, title: UpdateNotice.title(version: version),
                body: UpdateNotice.body, category: Self.readyCategory)
     }
 
@@ -133,7 +142,7 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
-        content.sound = .default
+        // No sound: it may arrive during a call Parrot isn't recording.
         if let category { content.categoryIdentifier = category }
         Task {
             let center = UNUserNotificationCenter.current()

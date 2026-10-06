@@ -70,6 +70,9 @@ final class RecordingManager {
     /// cancel the draining loop and share buffers with the old session. Readable
     /// so the live view can show a "Finalizing…" state.
     private(set) var isStopping = false
+    /// Post-call chains still writing a report. Counted before their task
+    /// starts, so the update notice can't slip in between stop and report.
+    private var chainsInFlight = 0
     private var timer: Timer?
     private(set) var modelContext: ModelContext?
 
@@ -139,8 +142,11 @@ final class RecordingManager {
         callWatcher.recordingManager = self
         callWatcher.start()
         // Starts Sparkle at launch (not only when Settings opens) and keeps
-        // Restart now away from a running call.
-        AppUpdater.shared.isBusy = { [weak self] in self?.isRecording ?? false }
+        // Restart now away from a call, its report, and imports.
+        AppUpdater.shared.isBusy = { [weak self] in
+            guard let self else { return false }
+            return isRecording || isBusy || chainsInFlight > 0
+        }
         // Catch the memory up with meetings finished before it existed (or
         // changed since): background, low priority, local only.
         Task { await syncMemory() }
@@ -569,6 +575,7 @@ final class RecordingManager {
             // start (and fill liveAnchors) before this chain reaches diarization.
             let anchors = liveAnchors
             liveAnchors = [:]
+            chainsInFlight += 1
             Task {
                 // A private meeting's report and after-call actions stay on
                 // this Mac; a call recording meanwhile is unaffected.
@@ -581,10 +588,14 @@ final class RecordingManager {
         isRecording = false
         elapsedTime = 0
         recordingStartTime = nil
-        AppUpdater.shared.recordingStopped()
+        AppUpdater.shared.becameIdle()
     }
 
     private func runPostCallChain(_ meetingRef: Meeting, anchors: [String: [Float]]) async {
+        defer {
+            chainsInFlight -= 1
+            AppUpdater.shared.becameIdle()
+        }
         let polishSeconds = await polishTranscript(meeting: meetingRef)
         await postProcess(meeting: meetingRef, anchors: anchors)
         if callAnalysisEngine.isEnabled, callAnalysisEngine.provider.isConfigured {
@@ -655,7 +666,10 @@ final class RecordingManager {
     }
 
     private func runImportWork(meeting: Meeting, audioURL: URL) async {
-        defer { importProgress = nil }
+        defer {
+            importProgress = nil
+            AppUpdater.shared.becameIdle()
+        }
 
         // 1. Whole-file, on-device transcription. Every segment is "Them" (one
         //    mixed track, no mic channel to tag "Me"); diarization splits it below.

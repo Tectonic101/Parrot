@@ -149,11 +149,27 @@ enum ProfileTest {
         updater.restartNow()
         check("update notice: restart refused while recording",
               installed == 0 && updater.lastNoticeBody == UpdateNotice.busyBody)
+        // The call has stopped but its report is still being written: still busy.
+        updater.becameIdle()
+        check("update notice: no notice while the call is still being processed", updater.postedVersion == nil)
         recording = false
-        updater.recordingStopped()
+        updater.becameIdle()
         check("update notice: held notice goes out when the call stops", updater.postedVersion == "0.28.0")
         updater.restartNow()
         check("update notice: restart installs when free", installed == 1)
+
+        // Told, then a call starts and Restart now is refused: the offer comes
+        // back once the call and its report are done.
+        var busy = false
+        let again = AppUpdater(startSparkle: false)
+        again.isBusy = { busy }
+        again.updateReady(version: "0.28.1") {}
+        busy = true
+        again.restartNow()
+        busy = false
+        again.becameIdle()
+        check("update notice: a refused restart is offered again after the call",
+              again.postedVersion == "0.28.1" && again.lastNoticeBody == UpdateNotice.body)
     }
 
     static func testWhatsNew() {

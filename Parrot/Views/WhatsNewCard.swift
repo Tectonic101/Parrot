@@ -18,6 +18,7 @@ struct WhatsNewCard: View {
                         Image(systemName: "sparkle")
                             .font(Theme.Typography.caption)
                             .foregroundStyle(Theme.Colors.accent)
+                            .accessibilityHidden(true)
                         Text(line)
                             .font(Theme.Typography.secondary)
                             .fixedSize(horizontal: false, vertical: true)
