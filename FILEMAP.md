@@ -36,7 +36,7 @@ tree. Line counts are rough — they flag which files are worth reading whole.
 
 | File | L | Purpose |
 |---|---|---|
-| `Services/RecordingManager.swift` | 1267 | Orchestrates a recording session end-to-end; the hub; "Still recording?" reminder; live speaker sweeps (stable/window mapping, power pacing) |
+| `Services/RecordingManager.swift` | 1314 | Orchestrates a recording session end-to-end; the hub; `writeReport` (Write report on a saved meeting); "Still recording?" reminder; live speaker sweeps (stable/window mapping, power pacing) |
 | `Services/AudioCaptureManager.swift` | 1022 | System audio (tap on 15+, SCK on 14.x/rescue) + mic tap, buffer conversion |
 | `Services/SystemAudioTap.swift` | 294 | Core Audio process tap: audio-only capture, no Screen Recording (macOS 15+) |
 | `Services/EchoCanceller.swift` | 138 | Swift wrapper over vendored SpeexDSP AEC |
@@ -106,7 +106,7 @@ tree. Line counts are rough — they flag which files are worth reading whole.
 | `Views/BriefViews.swift` | 147 | Brief summary line, documents-in-play row, live "Briefed" card (dashboard + copilot panel) |
 | `Views/SettingsCards.swift` | 191 | Settings building blocks: page, titled card, row (optional header tint), tag chip (the landing-page window look) |
 | `Views/KnowledgeSettingsView.swift` | 442 | Settings → Knowledge: folders, Use for pills and menu, About line, search, drag to move; `KnowledgeList` pure helpers |
-| `Views/MeetingDetailView.swift` | 1250 | Post-call tabs: transcript, insights, report; receipts actions, bookmarks card/rows; speaker naming popover (+ invitee suggestions) |
+| `Views/MeetingDetailView.swift` | 1600 | Post-call tabs: transcript, insights, report (Write report when there is none); receipts actions, bookmarks card/rows; speaker naming popover (+ invitee suggestions) |
 | `Views/BugReportSheet.swift` | 150 | Bug/idea report form + the corner ladybug button |
 | `Views/ReportContentView.swift` | 473 | Report section cards, talk-ratio bar, prose parser (incl. one-line local reports), receipt chips + popover |
 | `Views/SentimentStripView.swift` | 60 | Sentiment gauge strip |
