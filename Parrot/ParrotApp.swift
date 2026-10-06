@@ -17,6 +17,9 @@ struct ParrotMain {
         if let i = args.firstIndex(of: "--mcpb"), i + 2 < args.count {
             exit(MCPBundle.writeRelease(to: args[i + 1], version: args[i + 2], iconPath: i + 3 < args.count ? args[i + 3] : nil))
         }
+        if let i = args.firstIndex(of: "--whats-new-html"), i + 1 < args.count {
+            exit(WhatsNew.printHTML(for: args[i + 1]))
+        }
         if let i = args.firstIndex(of: "--snapshot"), i + 1 < args.count {
             MainActor.assumeIsolated { ReportSnapshot.write(to: args[i + 1]) }
             return

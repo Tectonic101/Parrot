@@ -127,8 +127,49 @@ enum ProfileTest {
         testKnowledgeStoreUpgrade()
         testKnowledgeList()
         testSidebarSearch()
+        testWhatsNew()
         print(failures == 0 ? "ALL PASS" : "FAILURES: \(failures)")
         exit(failures == 0 ? 0 : 1)
+    }
+
+    static func testWhatsNew() {
+        let news = WhatsNew(version: "0.28.0", headline: "Fresh feathers! Parrot 0.28.0",
+                            highlights: ["Folders for your documents.", "Calls stay smooth on long days."])
+        let quiet = WhatsNew(version: "0.28.0", headline: "", highlights: [])
+        check("whats new: shows after an update", WhatsNew.shouldShowCard(running: "0.28.0", news: news, seen: "0.27.0", onboarded: true))
+        check("whats new: the first release with the card shows it too", WhatsNew.shouldShowCard(running: "0.28.0", news: news, seen: "", onboarded: true))
+        check("whats new: not twice", !WhatsNew.shouldShowCard(running: "0.28.0", news: news, seen: "0.28.0", onboarded: true))
+        check("whats new: never for another version", !WhatsNew.shouldShowCard(running: "0.28.1", news: news, seen: "", onboarded: true))
+        check("whats new: a quiet release shows nothing", !WhatsNew.shouldShowCard(running: "0.28.0", news: quiet, seen: "", onboarded: true))
+        check("whats new: never before onboarding ends", !WhatsNew.shouldShowCard(running: "0.28.0", news: news, seen: "", onboarded: false))
+        check("whats new: a fresh install is marked seen before onboarding ends",
+              WhatsNew.seenAfterLaunch(running: "0.28.0", seen: "", onboarded: false) == "0.28.0"
+                && WhatsNew.seenAfterLaunch(running: "0.28.0", seen: "0.27.0", onboarded: true) == "0.27.0")
+
+        check("whats new: links the changelog entry", news.changelogURL.absoluteString == "https://openparrot.app/changelog#v0.28.0")
+        let html = news.html()
+        check("whats new: html has the headline, list and link",
+              html.contains("<h3>Fresh feathers! Parrot 0.28.0</h3>") && html.contains("<li>Folders for your documents.</li>")
+                && html.contains("href=\"https://openparrot.app/changelog#v0.28.0\">Read the full story</a>"))
+        check("whats new: html is a fragment Sparkle embeds", !html.lowercased().contains("<body") && !html.lowercased().contains("doctype"))
+        check("whats new: html escapes text",
+              WhatsNew(version: "1", headline: "A & B", highlights: ["<b>x</b>", "\"y\""]).html().contains("A &amp; B")
+                && WhatsNew(version: "1", headline: "A", highlights: ["<b>x</b>", "\"y\""]).html().contains("&lt;b&gt;x&lt;/b&gt;"))
+        check("whats new: a quiet release has no html", quiet.html().isEmpty)
+
+        check("whats new: good copy passes", news.copyProblems.isEmpty && quiet.copyProblems.isEmpty)
+        check("whats new: copy rules catch em-dashes, counts and length",
+              !WhatsNew(version: "1", headline: "A — B", highlights: ["x", "y"]).copyProblems.isEmpty
+                && !WhatsNew(version: "1", headline: "A", highlights: ["only one"]).copyProblems.isEmpty
+                && !WhatsNew(version: "1", headline: "A", highlights: ["a", "b", "c", "d", "e"]).copyProblems.isEmpty
+                && !WhatsNew(version: "1", headline: "A", highlights: [String(repeating: "x", count: 91), "b"]).copyProblems.isEmpty
+                && !WhatsNew(version: "1", headline: "", highlights: ["a", "b"]).copyProblems.isEmpty)
+        check("whats new: the shipped entry follows the rules", WhatsNew.current.copyProblems.isEmpty && WhatsNew.sample.copyProblems.isEmpty)
+
+        check("whats new: html refuses another version", WhatsNew.printHTML(for: "0.27.9", news: news) == 1)
+        check("whats new: html refuses broken copy",
+              WhatsNew.printHTML(for: "1", news: WhatsNew(version: "1", headline: "A", highlights: ["one"])) == 1)
+        check("whats new: html for the right version", WhatsNew.printHTML(for: "0.28.0", news: quiet) == 0)
     }
 
     static func testKnowledgeModel() {
