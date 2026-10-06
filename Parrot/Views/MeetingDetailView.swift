@@ -41,6 +41,7 @@ struct MeetingDetailView: View {
     @State private var playbackSpeed: Float = 1.0
     @State private var playbackTimer: Timer?
     @State private var activeSegmentID: UUID?
+    @State private var sortedLines = SortedLines()
     @State private var tab: ReportTab = .report
     @State private var themNameText = ""
     @State private var showCostBreakdown = false
@@ -57,6 +58,8 @@ struct MeetingDetailView: View {
     /// A Share action's success ("Saved to your folder."): a short note that
     /// fades, not a box to dismiss. Errors still use `actionMessage`.
     @State private var actionNote: String?
+    /// Write report (#107) is running for this meeting.
+    @State private var writingReport = false
     @State private var showPrivacyLedger = false
     /// The transcript as a receipts index — cached, not rebuilt on every
     /// playback tick (the timer re-renders this view ten times a second).
@@ -260,8 +263,9 @@ struct MeetingDetailView: View {
             HStack(spacing: 12) {
                 Label(meeting.date.formatted(date: .long, time: .shortened), systemImage: "calendar")
                 Label(meeting.formattedDuration, systemImage: "clock")
-                if meeting.speakerCount > 0 {
-                    Label("\(meeting.speakerCount) speakers", systemImage: "person.2")
+                let speakers = meeting.speakerCount
+                if speakers > 0 {
+                    Label("\(speakers) speakers", systemImage: "person.2")
                 }
                 statusBadge
             }
@@ -538,13 +542,25 @@ struct MeetingDetailView: View {
             Group {
                 if meeting.summary == nil && meeting.coaching == nil {
                     VStack(alignment: .leading, spacing: 16) {
-                        if meeting.status == .processing {
+                        if meeting.status == .processing || writingReport {
                             reportGeneratingRow("Writing your report…")
-                        } else if meeting.status == .failed, let reason = meeting.errorMessage {
-                            // Say why, not just that it failed.
-                            emptyTabState(reason)
                         } else {
-                            emptyTabState("No report was generated for this meeting.")
+                            // Say why, not just that it failed.
+                            let reason = meeting.status == .failed ? meeting.errorMessage : nil
+                            emptyTabState(reason ?? "No report yet. Write one now, or turn on the Assistant to get one after every call.")
+                            if !meeting.segments.isEmpty {
+                                Button("Write report") {
+                                    runAction {
+                                        writingReport = true
+                                        defer { writingReport = false }
+                                        try await recordingManager.writeReport(meeting)
+                                        return nil
+                                    }
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .disabled(actionRunning)
+                                .frame(maxWidth: .infinity)
+                            }
                         }
                         // Timing and marks don't need a report either.
                         toneCard
@@ -613,7 +629,7 @@ struct MeetingDetailView: View {
 
     /// The tone timeline, nil for imported audio (no "Me" track).
     private var toneModel: ToneTimeline.Model? {
-        ToneTimeline.model(duration: meeting.duration, spans: ToneTimeline.spans(meeting.sortedSegments),
+        ToneTimeline.model(duration: meeting.duration, spans: ToneTimeline.spans(sortedLines.of(meeting)),
                            nudges: meeting.nudges, timeline: meeting.moodTimeline, marks: meeting.bookmarks)
     }
 
@@ -654,7 +670,7 @@ struct MeetingDetailView: View {
         if let time = jump.time {
             // Links and Ask chips carry whole seconds, but the line shown as
             // "09:42" may start at 582.4: land on that line, not the one before.
-            let line = meeting.sortedSegments.first { $0.startTime >= time && $0.startTime < time + 1 }
+            let line = sortedLines.of(meeting).first { $0.startTime >= time && $0.startTime < time + 1 }
             showInTranscript(line?.startTime ?? time)
         } else {
             tab = .report
@@ -671,7 +687,7 @@ struct MeetingDetailView: View {
         seekTo(time)
         // Both tracks can cut a line at the same instant (a "Me" echo of the
         // other side): the receipt's own words pick the line it quoted.
-        if let text, let line = meeting.sortedSegments.first(where: { $0.startTime == time && $0.text == text }) {
+        if let text, let line = sortedLines.of(meeting).first(where: { $0.startTime == time && $0.text == text }) {
             activeSegmentID = line.id
         }
         tab = .transcript
@@ -861,7 +877,7 @@ struct MeetingDetailView: View {
     // MARK: - Transcript List
 
     private var transcriptList: some View {
-        let ordered = meeting.sortedSegments
+        let ordered = sortedLines.of(meeting)
         let items = TranscriptItem.merge(segments: ordered, bookmarks: meeting.bookmarks)
         return ScrollViewReader { proxy in
             ScrollView {
@@ -1163,7 +1179,7 @@ struct MeetingDetailView: View {
 
     /// Highlights the line under the playhead and sets the mic level for it.
     private func followPlayhead() {
-        activeSegmentID = meeting.sortedSegments.last { $0.startTime <= playbackTime }?.id
+        activeSegmentID = SortedLines.playing(at: playbackTime, in: sortedLines.of(meeting))?.id
         updateMicLevel()
     }
 
@@ -1173,6 +1189,38 @@ struct MeetingDetailView: View {
         return String(format: "%02d:%02d", m, s)
     }
 
+}
+
+/// The meeting's lines in time order, sorted again only when lines are added,
+/// removed or replaced (#54). Sorting a two-hour transcript takes ~37 ms, and
+/// every click and playback tick used to do it twice. A reference type, so
+/// refilling it while the body runs doesn't count as a state change.
+final class SortedLines {
+    private var key = 0
+    private var lines: [TranscriptSegment] = []
+
+    func of(_ meeting: Meeting) -> [TranscriptSegment] {
+        let segments = meeting.segments
+        // Which lines, in any order: an edit keeps it, polish's swap doesn't.
+        var key = segments.count
+        for s in segments { key ^= s.id.hashValue }
+        if key != self.key || lines.count != segments.count {
+            lines = segments.sorted { $0.startTime < $1.startTime }
+            self.key = key
+        }
+        return lines
+    }
+
+    /// The line playing at `time`: the last one starting at or before it.
+    /// Binary search, since it runs on every playback tick.
+    static func playing(at time: TimeInterval, in lines: [TranscriptSegment]) -> TranscriptSegment? {
+        var low = 0, high = lines.count
+        while low < high {
+            let mid = (low + high) / 2
+            if lines[mid].startTime <= time { low = mid + 1 } else { high = mid }
+        }
+        return low == 0 ? nil : lines[low - 1]
+    }
 }
 
 /// Playback mix for a call recorded on speakers. The mic track ("Me") also

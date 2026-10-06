@@ -26,6 +26,8 @@ struct ContentView: View {
     /// the user wants to show us.
     @State private var reportScreenshot: NSImage?
     #endif
+    @AppStorage(WhatsNew.seenKey) private var whatsNewSeen = ""
+    @AppStorage("hasCompletedOnboarding") private var onboarded = false
 
     var body: some View {
         splitView {
@@ -130,7 +132,12 @@ struct ContentView: View {
         // Ask Parrot's citations: open that meeting (the detail view seeks).
         .onChange(of: appSession.pendingJump) { _, jump in open(jump) }
         // A window opened by a link finds the jump already waiting.
-        .onAppear { open(appSession.pendingJump) }
+        .onAppear {
+            open(appSession.pendingJump)
+            // A fresh install marks its version seen before the tour ends.
+            whatsNewSeen = WhatsNew.seenAfterLaunch(running: AppUpdater.currentVersion,
+                                                    seen: whatsNewSeen, onboarded: onboarded)
+        }
         // openparrot:// links arrive through ParrotAppDelegate; keep them in
         // this window rather than opening a new one.
         .handlesExternalEvents(preferring: ["*"], allowing: ["*"])

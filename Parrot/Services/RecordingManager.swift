@@ -74,6 +74,9 @@ final class RecordingManager {
     /// cancel the draining loop and share buffers with the old session. Readable
     /// so the live view can show a "Finalizing…" state.
     private(set) var isStopping = false
+    /// Post-call chains still writing a report. Counted before their task
+    /// starts, so the update notice can't slip in between stop and report.
+    private var chainsInFlight = 0
     private var timer: Timer?
     private(set) var modelContext: ModelContext?
 
@@ -144,6 +147,12 @@ final class RecordingManager {
         callWatcher.recordingManager = self
         callWatcher.start()
         #endif
+        // Starts Sparkle at launch (not only when Settings opens) and keeps
+        // Restart now away from a call, its report, and imports.
+        AppUpdater.shared.isBusy = { [weak self] in
+            guard let self else { return false }
+            return isRecording || isBusy || chainsInFlight > 0
+        }
         // Catch the memory up with meetings finished before it existed (or
         // changed since): background, low priority, local only.
         Task { await syncMemory() }
@@ -578,6 +587,7 @@ final class RecordingManager {
             // start (and fill liveAnchors) before this chain reaches diarization.
             let anchors = liveAnchors
             liveAnchors = [:]
+            chainsInFlight += 1
             Task {
                 // A private meeting's report and after-call actions stay on
                 // this Mac; a call recording meanwhile is unaffected.
@@ -590,9 +600,14 @@ final class RecordingManager {
         isRecording = false
         elapsedTime = 0
         recordingStartTime = nil
+        AppUpdater.shared.becameIdle()
     }
 
     private func runPostCallChain(_ meetingRef: Meeting, anchors: [String: [Float]]) async {
+        defer {
+            chainsInFlight -= 1
+            AppUpdater.shared.becameIdle()
+        }
         let polishSeconds = await polishTranscript(meeting: meetingRef)
         await postProcess(meeting: meetingRef, anchors: anchors)
         if callAnalysisEngine.isEnabled, callAnalysisEngine.provider.isConfigured {
@@ -663,7 +678,10 @@ final class RecordingManager {
     }
 
     private func runImportWork(meeting: Meeting, audioURL: URL) async {
-        defer { importProgress = nil }
+        defer {
+            importProgress = nil
+            AppUpdater.shared.becameIdle()
+        }
 
         // 1. Whole-file, on-device transcription. Every segment is "Them" (one
         //    mixed track, no mic channel to tag "Me"); diarization splits it below.
@@ -884,12 +902,38 @@ final class RecordingManager {
 
     // MARK: - Post-Call Summary
 
+    /// The Report tab's Write report (#107): the report for a saved meeting
+    /// that has none, because the Assistant was off or its AI failed then.
+    /// Explicit, so it runs even with the Assistant off; private meetings stay
+    /// on this Mac, as the follow-up email does.
+    func writeReport(_ meeting: Meeting) async throws {
+        guard !meeting.segments.isEmpty else {
+            throw CocoaError(.featureUnsupported, userInfo: [NSLocalizedDescriptionKey: "This meeting has no transcript."])
+        }
+        guard callAnalysisEngine.provider.isConfigured else {
+            throw CocoaError(.featureUnsupported, userInfo: [NSLocalizedDescriptionKey: "Set up the Assistant's AI in Settings first."])
+        }
+        // Restart now waits for it, like the report after a call.
+        chainsInFlight += 1
+        defer {
+            chainsInFlight -= 1
+            AppUpdater.shared.becameIdle()
+        }
+        let error = await CloudGate.$scopeLocal.withValue(!CloudGate.mayLeaveMac(meeting) || CloudGate.forcesLocal) {
+            await generateSummary(meeting: meeting, includeCoaching: meeting.importedAt == nil)
+        }
+        if meeting.summary == nil, meeting.coaching == nil, let error { throw error }
+    }
+
     /// `includeCoaching` is false for imported files: a single mixed track has no
     /// "Me" channel, so talk-ratio/coaching would be measured against 0% and read
     /// as broken. The summary itself works fine from any transcript.
-    private func generateSummary(meeting: Meeting, includeCoaching: Bool = true) async {
+    /// Best-effort; returns the first failure for Write report to show.
+    @discardableResult
+    private func generateSummary(meeting: Meeting, includeCoaching: Bool = true) async -> Error? {
         let segments = meeting.sortedSegments
-        guard !segments.isEmpty else { return }
+        guard !segments.isEmpty else { return nil }
+        var firstError: Error?
 
         let transcript = meeting.promptTranscript
         let insightTitles = meeting.sortedInsights.map { "\($0.style.label): \($0.title)" }
@@ -908,9 +952,10 @@ final class RecordingManager {
             try? modelContext?.save()
         } catch {
             // Best-effort: the transcript and insights are already saved.
+            firstError = error
         }
 
-        guard includeCoaching else { return }
+        guard includeCoaching else { return firstError }
 
         // Coaching + follow-ups report, with the user's real talk balance
         // (seconds of speech, the same number the live gauge and timeline show).
@@ -926,7 +971,9 @@ final class RecordingManager {
             try? modelContext?.save()
         } catch {
             // Best-effort.
+            firstError = firstError ?? error
         }
+        return firstError
     }
 
     // MARK: - Post-call polish

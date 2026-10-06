@@ -7,19 +7,19 @@ tree. Line counts are rough — they flag which files are worth reading whole.
 
 | File | L | Purpose |
 |---|---|---|
-| `Parrot/ParrotApp.swift` | 178 | `@main`; parses CLI harness flags before the SwiftUI `App` starts |
+| `Parrot/ParrotApp.swift` | 266 | `@main`; parses CLI harness flags before the SwiftUI `App` starts |
 | `Parrot/ProfileTest.swift` | 1750 | `--profile-test`: headless logic harness, ~540 checks |
 | `Parrot/ProfileTest+Parakeet.swift` | 130 | `--profile-test` checks for Parakeet: language router, per-side probe, recommendation, rewind, imports |
 | `Parrot/SnapshotTool.swift` | 1360 | Offscreen PNG renderers + transcribe/analyze/capture harnesses; `--language-test` runs the live language check on a saved track; `--echo-replay` scores a recorded call's Me lines with the echo gate; `--liveloop-test` takes `LIVELOOP_MIC` to feed both tracks; `--ask-chat-test, --ask-real` runs a real multi-turn Ask Parrot chat against Claude or Ollama |
 | `Parrot/CopilotHarness.swift` | 326 | `--kb-add`, `--doc-answer-eval` (Jev precision/recall), `--copilot-replay` (question-to-card latency) |
-| `Parrot/ToneHarness.swift` | 148 | `--nudge-replay [id] [--store path]` (a saved call through the live nudge rules, on a copy of the store), `--tone-snapshot <png>` (report card, pill, banner; light + dark) |
+| `Parrot/ToneHarness.swift` | 200 | `--nudge-replay [id] [--store path]` (a saved call through the live nudge rules, on a copy of the store), `--tone-snapshot <png>` (report card, pill, banner; light + dark), `--pill-test [png]` (a real pill on screen, captured with ScreenCaptureKit to prove it's left out; `PILL_TEST_SHARED=1` is the control) |
 | `Parrot/ProfileTest+Nudges.swift` | 298 | `--profile-test` checks for live nudges, the tone timeline and seconds-based talk share |
 
 ## Models (SwiftData `@Model` + Codable values)
 
 | File | L | Purpose |
 |---|---|---|
-| `Models/Meeting.swift` | 166 | `Meeting` record + `MeetingStatus` lifecycle + per-speaker names/embeddings |
+| `Models/Meeting.swift` | 381 | `Meeting` record + `MeetingStatus` lifecycle + per-speaker names/embeddings |
 | `Models/TranscriptSegment.swift` | 34 | One diarized, timestamped utterance |
 | `Models/Insight.swift` | 65 | `CallInsight` (stored) and `Insight` (live value) |
 | `Models/CallProfile.swift` | 92 | Per-call-type prompt config: kinds, sentiment gauges |
@@ -36,12 +36,12 @@ tree. Line counts are rough — they flag which files are worth reading whole.
 
 | File | L | Purpose |
 |---|---|---|
-| `Services/RecordingManager.swift` | 1267 | Orchestrates a recording session end-to-end; the hub; "Still recording?" reminder; live speaker sweeps (stable/window mapping, power pacing) |
+| `Services/RecordingManager.swift` | 1314 | Orchestrates a recording session end-to-end; the hub; `writeReport` (Write report on a saved meeting); "Still recording?" reminder; live speaker sweeps (stable/window mapping, power pacing) |
 | `Services/AudioCaptureManager.swift` | 1022 | System audio (tap on 15+, SCK on 14.x/rescue) + mic tap, buffer conversion |
 | `Services/SystemAudioTap.swift` | 294 | Core Audio process tap: audio-only capture, no Screen Recording (macOS 15+) |
 | `Services/EchoCanceller.swift` | 138 | Swift wrapper over vendored SpeexDSP AEC |
-| `Services/EchoGate.swift` | 123 | Pure: skips a Me clip whose loudness just follows the other side's (speaker echo), once the call shows the mic hears the speakers |
-| `Services/TranscriptionEngine.swift` | 1753 | On-device WhisperKit or Parakeet; `AudioSource` routing; per-side language check (holds a Parakeet side until known, recheck + rewind); lazy fallback Whisper; live preview decode; Silero voice gate before every decode |
+| `Services/EchoGate.swift` | 151 | Pure: skips a Me clip whose loudness just follows the other side's (speaker echo), once the call shows the mic hears the speakers (over the last minute, or while they talk in the minute before the clip) |
+| `Services/TranscriptionEngine.swift` | 1757 | On-device WhisperKit or Parakeet; `AudioSource` routing; per-side language check (holds a Parakeet side until known, recheck + rewind); lazy fallback Whisper; live preview decode; Silero voice gate before every decode |
 | `Services/LanguageRouter.swift` | 142 | Pure: which engine each side of a Parakeet call uses (held, Parakeet, Whisper), recheck schedule; `LanguageProbe` gathers each side's first 10 s of speech |
 | `Services/ParakeetTranscriber.swift` | 38 | Parakeet TDT 0.6B v3 via FluidAudio (25 European languages, ~0.5 GB): load, transcribe with a script hint |
 | `Services/EngineRecommendation.swift` | 25 | The model a new install starts on: Parakeet only when every Mac language and past call fits its 25 |
@@ -56,13 +56,14 @@ tree. Line counts are rough — they flag which files are worth reading whole.
 | `Services/ProfilePresets.swift` | 170 | Built-in starter profiles (seven, incl. the buyer-side "Vendor call") |
 | `Services/ExportService.swift` | 265 | Export: TXT, SRT, Markdown (front matter, next-step checklist instead of repeated sections); `Parts` limits what an AI app gets |
 | `Services/PermissionFlow.swift` | 150 | System Audio (15+) / Screen Recording (14) + microphone grant flows |
-| `Services/AppUpdater.swift` | 56 | Sparkle updater: daily signed appcast check, installs on quit |
+| `Services/AppUpdater.swift` | 148 | Sparkle updater: daily signed appcast check, installs on quit; started at launch; as Sparkle's delegate posts "update waiting" (held during a call) with Restart now; `UpdateNotice` copy + rule |
+| `Services/WhatsNew.swift` | 92 | What the release brings: the Home card after updating and Sparkle's update-window notes; copy rules; `--whats-new-html X.Y.Z` for release.sh |
 | `Services/BugReport.swift` | 120 | Pre-filled GitHub issue: diagnostics, own-window screenshot, URL builder |
 | `Services/SpeakerProfileStore.swift` | 85 | Voiceprint matching (cosine ≥ 0.65), narrowed to calendar invitees; remember/forget |
 | `Services/Receipts.swift` | 175 | Report receipts: parse `[mm:ss]` stamps, verify against the transcript, commitment/placeholder rules |
 | `Services/GlobalHotKey.swift` | 101 | Carbon system-wide shortcut (⌃⌥M mark), registered only while recording |
 | `Services/CallDetector.swift` | 281 | Mic-in-use reading (Core Audio process list) + pure call start/end state machine, app names; ignores Siri, Parrot's own capture, dictation apps |
-| `Services/CallWatcher.swift` | 356 | Polls the detector; Ask/Auto modes; notification actions + delegate; calendar reminders; `NotificationAccess` |
+| `Services/CallWatcher.swift` | 362 | Polls the detector; Ask/Auto modes; notification actions + delegate (also routes the update's Restart now); calendar reminders; `NotificationAccess` |
 | `Services/CalendarService.swift` | 250 | EventKit read-only: current event match, notes cleaning, invite context, title → profile |
 | `Services/LoginItem.swift` | 60 | "Open Parrot at login" via SMAppService.mainApp |
 | `Services/NudgeDetector.swift` | 293 | Pure rules for the nine live nudges (timing + Copilot passes) and the rate limiter; `Tuning` holds every threshold |
@@ -99,12 +100,13 @@ tree. Line counts are rough — they flag which files are worth reading whole.
 | `Views/SidebarView.swift` | 386 | Meeting list, rows, talk-ratio strip; search runs as one database query per pause in typing (never in `body`) |
 | `Views/DashboardView.swift` | 408 | Landing stats (word count cached per meeting) + recent meetings |
 | `Views/CopilotHomeCard.swift` | 110 | Home card: turn on Copilot, finish setup, waiting for the model, just turned on |
+| `Views/WhatsNewCard.swift` | 39 | Home card once per version after an update: headline, highlights, Read the full story (changelog anchor), Got it |
 | `Views/LiveRecordingView.swift` | 774 | In-call screen: chat bubbles, mic level, side tabs |
 | `Views/CopilotPanelView.swift` | 770 | Live insight cards, pinned blockers, suggested replies |
 | `Views/BriefViews.swift` | 147 | Brief summary line, documents-in-play row, live "Briefed" card (dashboard + copilot panel) |
 | `Views/SettingsCards.swift` | 191 | Settings building blocks: page, titled card, row (optional header tint), tag chip (the landing-page window look) |
 | `Views/KnowledgeSettingsView.swift` | 442 | Settings → Knowledge: folders, Use for pills and menu, About line, search, drag to move; `KnowledgeList` pure helpers |
-| `Views/MeetingDetailView.swift` | 1250 | Post-call tabs: transcript, insights, report; receipts actions, bookmarks card/rows; speaker naming popover (+ invitee suggestions) |
+| `Views/MeetingDetailView.swift` | 1634 | Post-call tabs: transcript, insights, report (Write report when there is none); receipts actions, bookmarks card/rows; speaker naming popover (+ invitee suggestions); `SortedLines` (cached time order + binary-search playing line) |
 | `Views/BugReportSheet.swift` | 150 | Bug/idea report form + the corner ladybug button |
 | `Views/ReportContentView.swift` | 473 | Report section cards, talk-ratio bar, prose parser (incl. one-line local reports), receipt chips + popover |
 | `Views/SentimentStripView.swift` | 60 | Sentiment gauge strip |
@@ -145,7 +147,7 @@ tree. Line counts are rough — they flag which files are worth reading whole.
 | `.github/workflows/ci.yml` | macOS CI: build, `--profile-test`, snapshot renders (artifact), ad-hoc `.app` assembly |
 | `project.yml` | xcodegen input; `Parrot.xcodeproj` is generated from it |
 | `Package.swift` | SwiftPM deps (WhisperKit, vendored CSpeexDSP) |
-| `scripts/release.sh` | Release packaging; mirrors the Makefile's bundle step; builds `Parrot.mcpb` and `server.json` |
+| `scripts/release.sh` | Release packaging; mirrors the Makefile's bundle step; builds `Parrot.mcpb` and `server.json`; refuses a version `WhatsNew` doesn't describe and embeds its notes in the appcast |
 | `scripts/assemble-help.sh` | Builds the Apple Help Book into the .app from `docs/help/` (both builders call it) |
 | `integrations/claude-plugin/` | Claude plugin for the connector directory: `.mcp.json` + `server/launch.sh` (same launcher as the release `.mcpb`, harness-checked), four skills mirroring the MCP prompts, README, PRIVACY |
 | `server.json` | MCP Registry entry, written by `scripts/release.sh` per release (version, `.mcpb` URL, sha256) |

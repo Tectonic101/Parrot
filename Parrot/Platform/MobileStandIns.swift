@@ -11,7 +11,12 @@ final class AppUpdater {
     static let shared = AppUpdater()
     private init() {}
 
+    /// Set by RecordingManager on the Mac to hold an update during a call.
+    var isBusy: () -> Bool = { false }
+
     func checkForUpdates() {}
+    func becameIdle() {}
+    func restartNow() {}
     var isAvailable: Bool { false }
     var automaticallyUpdates: Bool {
         get { false }

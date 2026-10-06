@@ -99,6 +99,7 @@ enum ProfileTest {
         testAskDeepTestFixes()
         testAskReviewFixes()
         testAskRouting()
+        testWriteReport()
         testOnboardingFlow()
         testCopilotSetupState()
         testProviderKeyCheck()
@@ -128,8 +129,90 @@ enum ProfileTest {
         testKnowledgeStoreUpgrade()
         testKnowledgeList()
         testSidebarSearch()
+        testTranscriptClick()
+        testWhatsNew()
+        testUpdateNotice()
         print(failures == 0 ? "ALL PASS" : "FAILURES: \(failures)")
         exit(failures == 0 ? 0 : 1)
+    }
+
+    @MainActor
+    static func testUpdateNotice() {
+        check("update notice: the title", UpdateNotice.title(version: "0.28.0") == "Parrot 0.28.0 is perched and ready")
+        check("update notice: posts when free", UpdateNotice.onReady(version: "0.28.0", alreadyPosted: nil, busy: false) == .post)
+        check("update notice: waits during a call", UpdateNotice.onReady(version: "0.28.0", alreadyPosted: nil, busy: true) == .hold)
+        check("update notice: once per version", UpdateNotice.onReady(version: "0.28.0", alreadyPosted: "0.28.0", busy: false) == .skip)
+
+        var recording = true
+        var installed = 0
+        let updater = AppUpdater(startSparkle: false)
+        updater.isBusy = { recording }
+        updater.updateReady(version: "0.28.0") { installed += 1 }
+        check("update notice: held while recording, posted when it stops", updater.postedVersion == nil)
+        updater.restartNow()
+        check("update notice: restart refused while recording",
+              installed == 0 && updater.lastNoticeBody == UpdateNotice.busyBody)
+        // The call has stopped but its report is still being written: still busy.
+        updater.becameIdle()
+        check("update notice: no notice while the call is still being processed", updater.postedVersion == nil)
+        recording = false
+        updater.becameIdle()
+        check("update notice: held notice goes out when the call stops", updater.postedVersion == "0.28.0")
+        updater.restartNow()
+        check("update notice: restart installs when free", installed == 1)
+
+        // Told, then a call starts and Restart now is refused: the offer comes
+        // back once the call and its report are done.
+        var busy = false
+        let again = AppUpdater(startSparkle: false)
+        again.isBusy = { busy }
+        again.updateReady(version: "0.28.1") {}
+        busy = true
+        again.restartNow()
+        busy = false
+        again.becameIdle()
+        check("update notice: a refused restart is offered again after the call",
+              again.postedVersion == "0.28.1" && again.lastNoticeBody == UpdateNotice.body)
+    }
+
+    static func testWhatsNew() {
+        let news = WhatsNew(version: "0.28.0", headline: "Fresh feathers! Parrot 0.28.0",
+                            highlights: ["Folders for your documents.", "Calls stay smooth on long days."])
+        let quiet = WhatsNew(version: "0.28.0", headline: "", highlights: [])
+        check("whats new: shows after an update", WhatsNew.shouldShowCard(running: "0.28.0", news: news, seen: "0.27.0", onboarded: true))
+        check("whats new: the first release with the card shows it too", WhatsNew.shouldShowCard(running: "0.28.0", news: news, seen: "", onboarded: true))
+        check("whats new: not twice", !WhatsNew.shouldShowCard(running: "0.28.0", news: news, seen: "0.28.0", onboarded: true))
+        check("whats new: never for another version", !WhatsNew.shouldShowCard(running: "0.28.1", news: news, seen: "", onboarded: true))
+        check("whats new: a quiet release shows nothing", !WhatsNew.shouldShowCard(running: "0.28.0", news: quiet, seen: "", onboarded: true))
+        check("whats new: never before onboarding ends", !WhatsNew.shouldShowCard(running: "0.28.0", news: news, seen: "", onboarded: false))
+        check("whats new: a fresh install is marked seen before onboarding ends",
+              WhatsNew.seenAfterLaunch(running: "0.28.0", seen: "", onboarded: false) == "0.28.0"
+                && WhatsNew.seenAfterLaunch(running: "0.28.0", seen: "0.27.0", onboarded: true) == "0.27.0")
+
+        check("whats new: links the changelog entry", news.changelogURL.absoluteString == "https://openparrot.app/changelog#v0.28.0")
+        let html = news.html()
+        check("whats new: html has the headline, list and link",
+              html.contains("<h3>Fresh feathers! Parrot 0.28.0</h3>") && html.contains("<li>Folders for your documents.</li>")
+                && html.contains("href=\"https://openparrot.app/changelog#v0.28.0\">Read the full story</a>"))
+        check("whats new: html is a fragment Sparkle embeds", !html.lowercased().contains("<body") && !html.lowercased().contains("doctype"))
+        check("whats new: html escapes text",
+              WhatsNew(version: "1", headline: "A & B", highlights: ["<b>x</b>", "\"y\""]).html().contains("A &amp; B")
+                && WhatsNew(version: "1", headline: "A", highlights: ["<b>x</b>", "\"y\""]).html().contains("&lt;b&gt;x&lt;/b&gt;"))
+        check("whats new: a quiet release has no html", quiet.html().isEmpty)
+
+        check("whats new: good copy passes", news.copyProblems.isEmpty && quiet.copyProblems.isEmpty)
+        check("whats new: copy rules catch em-dashes, counts and length",
+              !WhatsNew(version: "1", headline: "A — B", highlights: ["x", "y"]).copyProblems.isEmpty
+                && !WhatsNew(version: "1", headline: "A", highlights: ["only one"]).copyProblems.isEmpty
+                && !WhatsNew(version: "1", headline: "A", highlights: ["a", "b", "c", "d", "e"]).copyProblems.isEmpty
+                && !WhatsNew(version: "1", headline: "A", highlights: [String(repeating: "x", count: 91), "b"]).copyProblems.isEmpty
+                && !WhatsNew(version: "1", headline: "", highlights: ["a", "b"]).copyProblems.isEmpty)
+        check("whats new: the shipped entry follows the rules", WhatsNew.current.copyProblems.isEmpty && WhatsNew.sample.copyProblems.isEmpty)
+
+        check("whats new: html refuses another version", WhatsNew.printHTML(for: "0.27.9", news: news) == 1)
+        check("whats new: html refuses broken copy",
+              WhatsNew.printHTML(for: "1", news: WhatsNew(version: "1", headline: "A", highlights: ["one"])) == 1)
+        check("whats new: html for the right version", WhatsNew.printHTML(for: "0.28.0", news: quiet) == 0)
     }
 
     static func testKnowledgeModel() {
@@ -319,6 +402,54 @@ enum ProfileTest {
               L.deleteMessage(count: 9) == "Its 9 documents move to No folder and keep their settings."
                 && L.deleteMessage(count: 1) == "Its document moves to No folder and keeps its settings.")
         check("kb list: closing then opening a folder", L.toggled("a", in: "b") == "a,b" && L.toggled("a", in: "a,b") == "b")
+    }
+
+    /// #54: a click on a long transcript sorted it twice and counted
+    /// speakers by decoding the names once per line.
+    @MainActor
+    static func testTranscriptClick() {
+        let schema = Schema([Meeting.self, TranscriptSegment.self, CallInsight.self, CallProfile.self, SpeakerProfile.self])
+        guard let container = try? ModelContainer(
+            for: schema, configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
+        ) else { check("click: container", false); return }
+        let context = container.mainContext
+        let m = Meeting(title: "Acme review")
+        context.insert(m)
+        func add(_ start: Double, _ label: String) -> TranscriptSegment {
+            let s = TranscriptSegment(startTime: start, endTime: start + 2, text: "Line at \(start)", speakerLabel: label)
+            s.meeting = m
+            context.insert(s)
+            return s
+        }
+        for start in [30.0, 10, 20, 0] { _ = add(start, start == 10 ? "Speaker 2" : "Speaker 1") }
+        try? context.save()
+
+        let cache = SortedLines()
+        check("click: lines come back in time order", cache.of(m).map(\.startTime) == [0, 10, 20, 30])
+        let late = add(25, "Me")
+        check("click: a new line is sorted in", cache.of(m).map(\.startTime) == [0, 10, 20, 25, 30])
+        context.delete(late)
+        try? context.save()
+        check("click: a removed line is gone", cache.of(m).map(\.startTime) == [0, 10, 20, 30])
+        // Polish swaps every line for new ones, same count.
+        for s in m.segments { context.delete(s) }
+        try? context.save()
+        for start in [5.0, 15, 35, 45] { _ = add(start, "Speaker 1") }
+        try? context.save()
+        check("click: replaced lines are never served stale", cache.of(m).map(\.startTime) == [5, 15, 35, 45])
+
+        let lines = cache.of(m)
+        check("click: before the first line nothing plays", SortedLines.playing(at: 2, in: lines) == nil)
+        check("click: a line plays from its start", SortedLines.playing(at: 15, in: lines)?.startTime == 15)
+        check("click: between lines the earlier one plays", SortedLines.playing(at: 34.9, in: lines)?.startTime == 15)
+        check("click: after the last line it keeps playing", SortedLines.playing(at: 900, in: lines)?.startTime == 45)
+        check("click: no lines, nothing plays", SortedLines.playing(at: 10, in: []) == nil)
+        let twins = [add(50, "Me"), add(50, "Speaker 1")]
+        let sameStart = SortedLines.playing(at: 50, in: cache.of(m))
+        check("click: two lines at one time pick the later one", sameStart?.id == cache.of(m).last?.id && twins.contains { $0.id == sameStart?.id })
+
+        m.speakerNames = ["Speaker 1": "Sam", "Speaker 2": "Sam"]
+        check("click: speaker count still merges one named voice", m.speakerCount == 2)
     }
 
     /// Sidebar search runs in the database: titles and transcript lines,
@@ -1587,6 +1718,91 @@ enum ProfileTest {
         }
     }
 
+    /// Stands in for the reports AI: counts calls, can be unset or fail.
+    private final class ReportRecorder: AnalysisProvider, @unchecked Sendable {
+        var configured = true
+        var failure: Error?
+        var summaries = 0
+        var coachings = 0
+        var isConfigured: Bool { configured }
+        func analyze(_ request: AnalysisRequest) async throws -> AnalysisResult { throw AnalysisError.missingAPIKey }
+        func summarize(transcript: String, insightTitles: [String], bookmarks: [String],
+                       instructions: String, counterpart: String) async throws -> String {
+            summaries += 1
+            if let failure { throw failure }
+            return "Summary"
+        }
+        func coachingReport(transcript: String, talkPercentMe: Int, instructions: String,
+                            counterpart: String) async throws -> String {
+            coachings += 1
+            if let failure { throw failure }
+            return "Coaching"
+        }
+        func complete(system: String, user: String, maxTokens: Int) async throws -> String { "" }
+    }
+
+    /// #107: Write report on a saved meeting that has none.
+    @MainActor
+    static func testWriteReport() {
+        let schema = Schema([Meeting.self, TranscriptSegment.self, CallInsight.self, CallProfile.self, SpeakerProfile.self])
+        guard let container = try? ModelContainer(
+            for: schema, configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
+        ) else { check("write report: container", false); return }
+        let context = container.mainContext
+        let ai = ReportRecorder()
+        let rm = RecordingManager(memory: MeetingMemory(directory: nil), chats: AskChatStore(directory: nil), provider: ai)
+        rm.attachForHarness(modelContext: context)
+        func meeting(lines: Int, imported: Bool = false) -> Meeting {
+            let m = Meeting(title: "Acme check-in")
+            m.status = .done
+            if imported { m.importedAt = .now }
+            context.insert(m)
+            for i in 0..<lines {
+                let s = TranscriptSegment(startTime: Double(i * 5), endTime: Double(i * 5 + 4),
+                                          text: "Line \(i)", speakerLabel: i.isMultiple(of: 2) ? "Me" : "Them")
+                s.meeting = m
+                context.insert(s)
+            }
+            return m
+        }
+        func write(_ m: Meeting) async -> String? {
+            do { try await rm.writeReport(m); return nil } catch { return error.localizedDescription }
+        }
+
+        let sem = DispatchSemaphore(value: 0)
+        Task { @MainActor in
+            let empty = await write(meeting(lines: 0))
+            check("write report: no transcript says so", empty == "This meeting has no transcript.")
+
+            ai.configured = false
+            let unset = meeting(lines: 4)
+            let unsetError = await write(unset)
+            check("write report: no AI set up says where to fix it", unsetError == "Set up the Assistant's AI in Settings first.")
+            check("write report: no AI set up never calls it", ai.summaries == 0)
+
+            ai.configured = true
+            ai.failure = AnalysisError.badResponse("Could not connect to the server.")
+            let failing = meeting(lines: 4)
+            let failError = await write(failing)
+            check("write report: the AI's error is shown", failError == "Could not connect to the server.")
+            check("write report: a failure leaves no report", failing.summary == nil && failing.coaching == nil)
+
+            ai.failure = nil
+            let ok = meeting(lines: 4)
+            let okError = await write(ok)
+            check("write report: succeeds", okError == nil)
+            check("write report: summary and coaching written", ok.summary == "Summary" && ok.coaching == "Coaching")
+
+            let coachingBefore = ai.coachings
+            let imported = meeting(lines: 4, imported: true)
+            _ = await write(imported)
+            check("write report: imported file gets the summary", imported.summary == "Summary")
+            check("write report: imported file gets no coaching", ai.coachings == coachingBefore && imported.coaching == nil)
+            sem.signal()
+        }
+        while sem.wait(timeout: .now()) == .timedOut { RunLoop.main.run(until: .now + 0.01) }
+    }
+
     /// The whole `ask` path with a cloud AI: an on-device-only meeting never
     /// reaches a prompt, and counts are done on the Mac with no AI at all.
     @MainActor
@@ -2225,6 +2441,24 @@ enum ProfileTest {
         let lookalike = verdict(inClip(headphones, mix(shifted(them, frames: 3, gain: 0.08), hiss)))
         check("echo gate: on headphones a clip that tracks them is kept", !lookalike.isEcho && lookalike.clip.follows > 0.6)
         check("echo gate: headphones read as no bleed", verdict(headphones).bleed.follows < G.minBleed)
+
+        // #98: on speakers while I do most of the talking. My loud turns in
+        // their silences dragged the whole-window correlation below zero, so
+        // the gate never fired; while they talk, the mic still follows them.
+        func only(_ s: [Float], _ seconds: [Range<Double>]) -> [Float] {
+            s.enumerated().map { i, x in seconds.contains { $0.contains(Double(i) / 16000) } ? x : 0 }
+        }
+        let theirs = only(them, [0..<3, 9..<11, 16..<18])
+        let mine = only(speech(seed: 2, seconds: 20, level: 0.3), [3..<9, 11..<16, 18..<20])
+        let theirsEnv = G.envelope(theirs[...])
+        let busy = verdict(mix(mix(shifted(theirs, frames: 3, gain: 0.08), mine), hiss), them: theirsEnv)
+        check("echo gate: on speakers, echo is caught when I do most of the talking", busy.isEcho)
+        check("echo gate: ...by the while-they-talk check, not the whole-window one",
+              busy.bleed.follows < G.minBleed && busy.talkBleed.follows >= G.minTalkBleed)
+        let busyHeadphones = verdict(mix(mine, hiss), them: theirsEnv)
+        check("echo gate: on headphones, doing most of the talking reads as no bleed",
+              !busyHeadphones.isEcho && busyHeadphones.bleed.follows < G.minBleed
+                && busyHeadphones.talkBleed.follows < G.minTalkBleed)
     }
 
     static func testGlossaryPrompt() {

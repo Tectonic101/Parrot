@@ -67,9 +67,20 @@ enum EchoGate {
     static let bleedWindow = 3000
     static let minBleedFrames = 500
 
+    /// #98: on a call where I do most of the talking, my turns in their
+    /// silences drag `bleed` below zero and the gate never fires. So also ask
+    /// whether the mic follows them while they talk, over the minute BEFORE
+    /// the clip (a clip can't vouch for itself). Owner's store: headphone
+    /// calls p95 0.27, two lines of 2,443 over 0.45; speaker calls 0.6...0.95.
+    /// Needs 2 s of them talking: with less, a headphone call scored up to 0.5.
+    static let minTalkBleed: Float = 0.45
+    static let minBleedTalkFrames = 100
+
     struct Verdict {
         var clip: Score
         var bleed: Score
+        /// The while-they-talk score, from before the clip.
+        var talkBleed: Score
         var isEcho: Bool
     }
 
@@ -78,20 +89,29 @@ enum EchoGate {
     static func check(clip: [Float], mic: [Float], them: [Float], at startFrame: Int) -> Verdict {
         let end = min(mic.count, startFrame + clip.count / hop)
         let from = max(maxLag, end - bleedWindow)  // room for every delay before it
-        let bleed = end - from < minBleedFrames ? Score(follows: 0, lag: 0, themTalking: 0)
+        let none = Score(follows: 0, lag: 0, themTalking: 0)
+        let bleed = end - from < minBleedFrames ? none
             : follow(Array(mic[from..<end]), them: them, at: from, lags: -maxLead...maxLag)
+        let start = min(mic.count, startFrame)
+        let talkFrom = max(maxLag, start - bleedWindow)
+        let talkBleed = start - talkFrom < minBleedFrames ? none
+            : follow(Array(mic[talkFrom..<start]), them: them, at: talkFrom, lags: -maxLead...maxLag, whileTheyTalk: true)
+        let hears = bleed.follows >= minBleed ? bleed : talkBleed.follows >= minTalkBleed ? talkBleed : nil
         // Echo arrives at the call's own delay. Searching every delay let short
         // clips match by chance (best of 21 tries over 25 frames).
-        let near = max(-maxLead, bleed.lag - 2)...min(maxLag, bleed.lag + 2)
+        let lag = (hears ?? bleed).lag
+        let near = max(-maxLead, lag - 2)...min(maxLag, lag + 2)
         let clip = follow(envelope(clip[...]), them: them, at: startFrame, lags: near)
-        let echo = bleed.follows >= minBleed && clip.themTalking >= minTalking && clip.follows >= minFollows
-        return Verdict(clip: clip, bleed: bleed, isEcho: echo)
+        let echo = hears != nil && clip.themTalking >= minTalking && clip.follows >= minFollows
+        return Verdict(clip: clip, bleed: bleed, talkBleed: talkBleed, isEcho: echo)
     }
 
     /// Best correlation of a mic envelope starting at `start` with theirs over
     /// `lags` (positive: the mic is later). Compared in log level, so a quiet
     /// echo and a loud original line up. Too few frames to judge reads as 0.
-    private static func follow(_ mine: [Float], them: [Float], at start: Int, lags: ClosedRange<Int>) -> Score {
+    /// `whileTheyTalk` scores only the frames where they're talking.
+    private static func follow(_ mine: [Float], them: [Float], at start: Int, lags: ClosedRange<Int>,
+                               whileTheyTalk: Bool = false) -> Score {
         let n = min(mine.count, them.count - start - max(0, -lags.lowerBound))
         guard start >= 0, n >= 10 else { return Score(follows: 0, lag: 0, themTalking: 0) }
         func level(_ x: Float) -> Float { log10(x + 1e-4) }
@@ -99,9 +119,17 @@ enum EchoGate {
         var best = Score(follows: -1, lag: 0, themTalking: 0)
         for lag in lags where start - lag >= 0 {
             let theirs = them[(start - lag) ..< (start - lag + n)]
-            let r = pearson(a, theirs.map(level))
+            let talks = theirs.map { $0 > talkingFloor }
+            let talking = talks.filter { $0 }.count
+            let r: Float
+            if whileTheyTalk {
+                guard talking >= minBleedTalkFrames else { continue }
+                let pairs = zip(a, zip(theirs, talks)).filter { $0.1.1 }
+                r = pearson(pairs.map(\.0), pairs.map { level($0.1.0) })
+            } else {
+                r = pearson(a, theirs.map(level))
+            }
             if r > best.follows {
-                let talking = theirs.filter { $0 > talkingFloor }.count
                 best = Score(follows: r, lag: lag, themTalking: Float(talking) / Float(n))
             }
         }

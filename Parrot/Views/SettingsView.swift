@@ -711,13 +711,13 @@ struct SettingsView: View {
             }
         case .custom:
             SettingsLabeledRow(title: "Server URL") {
-                TextField("", text: $copilotCustomBaseURL, prompt: Text("https://api.openai.com/v1"))
+                TextField("", text: $copilotCustomBaseURL, prompt: Text("https://openrouter.ai/api/v1"))
                     .labelsHidden()
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 280)
             }
             SettingsLabeledRow(title: "Model") {
-                TextField("", text: $copilotCustomModel, prompt: Text("gpt-5-mini"))
+                TextField("", text: $copilotCustomModel, prompt: Text("google/gemini-2.5-flash"))
                     .labelsHidden()
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 220)
@@ -727,7 +727,7 @@ struct SettingsView: View {
                     label: "API key",
                     account: "custom-llm-api-key",
                     placeholder: "optional — not needed for local servers",
-                    hint: "Any OpenAI-compatible server: OpenAI, Gemini, Groq, OpenRouter, LM Studio… Costs aren't estimated for custom servers."
+                    hint: "Any service that speaks the OpenAI API: OpenRouter, OpenAI, Gemini, Groq, LM Studio… Costs aren't estimated for these."
                 )
             }
         }
