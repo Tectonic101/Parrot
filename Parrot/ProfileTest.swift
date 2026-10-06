@@ -126,6 +126,7 @@ enum ProfileTest {
         testKnowledgeService()
         testKnowledgeStoreUpgrade()
         testKnowledgeList()
+        testSidebarSearch()
         print(failures == 0 ? "ALL PASS" : "FAILURES: \(failures)")
         exit(failures == 0 ? 0 : 1)
     }
@@ -317,6 +318,32 @@ enum ProfileTest {
               L.deleteMessage(count: 9) == "Its 9 documents move to No folder and keep their settings."
                 && L.deleteMessage(count: 1) == "Its document moves to No folder and keeps its settings.")
         check("kb list: closing then opening a folder", L.toggled("a", in: "b") == "a,b" && L.toggled("a", in: "a,b") == "b")
+    }
+
+    /// Sidebar search runs in the database: titles and transcript lines,
+    /// any case, never a meeting that doesn't say it.
+    @MainActor
+    static func testSidebarSearch() {
+        let schema = Schema([Meeting.self, TranscriptSegment.self, CallInsight.self, CallProfile.self, SpeakerProfile.self])
+        guard let container = try? ModelContainer(
+            for: schema, configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
+        ) else { check("search: in-memory store", false); return }
+        let context = container.mainContext
+        let funnel = Meeting(title: "Website funnel review")
+        let turkish = Meeting(title: "Weekly sync")
+        let other = Meeting(title: "Budget")
+        [funnel, turkish, other].forEach(context.insert)
+        for (meeting, text) in [(turkish, "Görüşme yarın saat üçte"), (other, "Numbers look fine")] {
+            let line = TranscriptSegment(startTime: 0, endTime: 2, text: text)
+            context.insert(line)
+            line.meeting = meeting
+        }
+        try? context.save()
+        let ids = { SidebarView.meetingIDs(matching: $0, in: context) }
+        check("search: title, any case", ids("FUNNEL") == [funnel.id])
+        check("search: transcript line, any case", ids("görüşme") == [turkish.id] && ids("GÖRÜŞME") == [turkish.id])
+        check("search: accents ignored", ids("gorusme") == [turkish.id])
+        check("search: a word nobody said matches nothing", ids("zzqx").isEmpty)
     }
 
     static func testKindStyleFallback() {
