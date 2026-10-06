@@ -186,8 +186,8 @@ enum EchoReplay {
             if verdict.isEcho { dropped += 1 }
             let overlapping = lines.filter { $0.label != "Me" && $0.start < line.end && $0.end > line.start }
                 .map(\.text).joined(separator: " / ")
-            print(String(format: "%7.1f-%7.1f bleed=%5.2f follows=%5.2f lag=%2d talk=%.2f %@ | %@  ‖ them: %@",
-                         line.start, line.end, verdict.bleed.follows, verdict.clip.follows, verdict.clip.lag,
+            print(String(format: "%7.1f-%7.1f bleed=%5.2f whileTalking=%5.2f follows=%5.2f lag=%2d talk=%.2f %@ | %@  ‖ them: %@",
+                         line.start, line.end, verdict.bleed.follows, verdict.talkBleed.follows, verdict.clip.follows, verdict.clip.lag,
                          verdict.clip.themTalking, verdict.isEcho ? "DROP" : "keep", line.text,
                          String(overlapping.prefix(90))))
         }
