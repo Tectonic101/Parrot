@@ -122,9 +122,202 @@ enum ProfileTest {
         testCopilotFlags()
         testNudgeSession()
         testNudgeReplay()
+        testKnowledgeModel()
+        testKnowledgeService()
+        testKnowledgeStoreUpgrade()
+        testKnowledgeList()
         testSidebarSearch()
         print(failures == 0 ? "ALL PASS" : "FAILURES: \(failures)")
         exit(failures == 0 ? 0 : 1)
+    }
+
+    static func testKnowledgeModel() {
+        let sales = UUID(), vendor = UUID()
+        check("kb: all allows any call type", KBScope.all.allows(sales) && KBScope.all.allows(nil))
+        check("kb: off allows nothing", !KBScope.off.allows(sales) && !KBScope.off.allows(nil))
+        check("kb: only allows its types", KBScope.only([sales]).allows(sales) && !KBScope.only([sales]).allows(vendor))
+        check("kb: no call type means everything not off", KBScope.only([sales]).allows(nil))
+        check("kb: a deleted call type matches no live call", !KBScope.only([UUID()]).allows(sales))
+        // From "All call types" no single type shows ticked, so picking one
+        // means "just this one" (narrowing a folder), never "all but this".
+        check("kb: picking a type from all gives just that type", KBScope.all.toggling(sales) == .only([sales]))
+        check("kb: ticking from off", KBScope.off.toggling(sales) == .only([sales]))
+        check("kb: unticking the last type is off", KBScope.only([sales]).toggling(sales) == .off)
+        check("kb: adding copies into sets that have the source", KBScope.only([sales]).adding(vendor, whereHas: sales) == .only([sales, vendor]))
+        check("kb: adding leaves other scopes alone",
+              KBScope.all.adding(vendor, whereHas: sales) == .all && KBScope.only([vendor]).adding(sales, whereHas: UUID()) == .only([vendor]))
+
+        let deal = KBFolder(name: "Acme deal", scope: .only([sales]))
+        let paused = KBFolder(name: "Old deals", scope: .off)
+        let inherits = KBDocument(name: "pricing.md", chunkCount: 1, addedAt: .now, folderID: deal.id)
+        let own = KBDocument(name: "nda.md", chunkCount: 1, addedAt: .now, folderID: paused.id, scope: .only([vendor]))
+        let loose = KBDocument(name: "faq.md", chunkCount: 1, addedAt: .now)
+        check("kb: same as folder takes the folder's", inherits.effectiveScope(in: [deal, paused]) == .only([sales]))
+        check("kb: own Use for beats an off folder", own.effectiveScope(in: [deal, paused]) == .only([vendor]))
+        check("kb: no folder is all call types", loose.effectiveScope(in: [deal]) == .all)
+        check("kb: a missing folder falls back to all", inherits.effectiveScope(in: []) == .all)
+
+        let tagged = KBDocument(name: "a.md", chunkCount: 1, addedAt: .now, profileIDs: [sales]).migrated()
+        let untagged = KBDocument(name: "b.md", chunkCount: 1, addedAt: .now).migrated()
+        check("kb: upgrade keeps tags as own Use for", tagged.scope == .only([sales]) && tagged.folderID == nil && tagged.profileIDs.isEmpty)
+        check("kb: upgrade turns no tags into off", untagged.scope == .off)
+
+        check("kb: display name hides the extension",
+              KBDocument(name: "05 - Service agreement.md", chunkCount: 1, addedAt: .now).displayName == "05 - Service agreement")
+        check("kb: display name keeps an unknown extension",
+              KBDocument(name: "notes v1.2", chunkCount: 1, addedAt: .now).displayName == "notes v1.2")
+
+        // Round trip: a No-folder, Same-as-folder document writes neither key
+        // and must come back as nil/nil (the per-document legacy trap).
+        let back = (try? JSONEncoder().encode(loose)).flatMap { try? JSONDecoder().decode(KBDocument.self, from: $0) }
+        check("kb: nil folder and scope survive a round trip", back != nil && back?.folderID == nil && back?.scope == nil)
+        let ownBack = (try? JSONEncoder().encode(own)).flatMap { try? JSONDecoder().decode(KBDocument.self, from: $0) }
+        check("kb: own scope survives a round trip", ownBack?.scope == .only([vendor]) && ownBack?.folderID == paused.id)
+    }
+
+    @MainActor
+    static func testKnowledgeService() {
+        let kb = KnowledgeBaseService(persistent: false)
+        let sales = UUID(), vendor = UUID()
+        let deal = KBFolder(name: "Acme deal", scope: .only([sales]))
+        let paused = KBFolder(name: "Old deals", scope: .off)
+        let inDeal = KBDocument(name: "pricing.md", chunkCount: 1, addedAt: .now, folderID: deal.id)
+        let ownInDeal = KBDocument(name: "nda.md", chunkCount: 1, addedAt: .now, folderID: deal.id, scope: .only([vendor]))
+        let inPaused = KBDocument(name: "old-plan.md", chunkCount: 1, addedAt: .now, folderID: paused.id)
+        let loose = KBDocument(name: "faq.md", chunkCount: 1, addedAt: .now)
+        kb.seedForSnapshot(documents: [inDeal, ownInDeal, inPaused, loose], folders: [deal, paused])
+
+        check("kb: in play follows the folder", Set(kb.documentsInPlay(for: sales)) == ["pricing.md", "faq.md"])
+        check("kb: own Use for wins", Set(kb.documentsInPlay(for: vendor)) == ["nda.md", "faq.md"])
+        check("kb: no call type skips only off", Set(kb.documentsInPlay(for: nil)) == ["pricing.md", "nda.md", "faq.md"])
+        check("kb: documents in a folder, by name", kb.documents(in: deal.id).map(\.name) == ["nda.md", "pricing.md"])
+
+        kb.move(inDeal, to: paused.id)
+        check("kb: a moved document follows its new folder", !kb.documentsInPlay(for: sales).contains("pricing.md"))
+        kb.move(ownInDeal, to: nil)
+        check("kb: a moved document keeps its own Use for",
+              kb.documentsInPlay(for: vendor).contains("nda.md") && !kb.documentsInPlay(for: sales).contains("nda.md"))
+
+        kb.deleteFolder(paused)
+        let oldPlan = kb.documents.first { $0.name == "old-plan.md" }
+        check("kb: deleting an off folder keeps its documents off",
+              oldPlan?.folderID == nil && oldPlan?.scope == .off && !kb.documentsInPlay(for: nil).contains("old-plan.md"))
+        check("kb: deleting a folder never deletes documents", kb.documents.count == 4 && kb.folders.map(\.name) == ["Acme deal"])
+
+        kb.renameFolder(deal, to: "   ")
+        check("kb: a blank name keeps the folder's name", kb.folders.first?.name == "Acme deal")
+        kb.renameFolder(deal, to: "Northwind deal")
+        check("kb: rename", kb.folders.first?.name == "Northwind deal")
+
+        kb.copyProfileTags(from: sales, to: vendor)
+        check("kb: a new call type gets the source's folders", kb.folders.first?.scope == .only([sales, vendor]))
+
+        let tag = UUID()
+        kb.tagAllDocuments(into: tag)
+        check("kb: first seeding turns off documents on for that type",
+              kb.documentsInPlay(for: tag).contains("old-plan.md") && kb.documentsInPlay(for: tag).contains("nda.md"))
+
+        // Re-adding a file is an update: About line, folder and Use for stay.
+        let old = KBDocument(name: "terms.md", note: "Signed terms, 2026", chunkCount: 3, addedAt: .distantPast,
+                             folderID: deal.id, scope: .only([vendor]))
+        let updated = KnowledgeBaseService.replacing([old], with: KBDocument(name: "terms.md", chunkCount: 5, addedAt: .now))
+        check("kb: re-adding keeps About, folder and Use for",
+              updated.count == 1 && updated[0].note == "Signed terms, 2026" && updated[0].folderID == deal.id
+                && updated[0].scope == .only([vendor]) && updated[0].chunkCount == 5)
+
+        // Two deals often hold files with the same name: adding one into a
+        // different folder must not replace the other deal's document.
+        let docs = [old, KBDocument(name: "faq.md", chunkCount: 1, addedAt: .now)]
+        let other = KBFolder(name: "Northwind deal")
+        let folders = [deal, other]
+        check("kb: same name in another folder is refused",
+              KnowledgeBaseService.addConflict(name: "terms.md", into: other.id, documents: docs, folders: folders)
+                == "terms.md is already in “Acme deal”. Rename the file to keep both.")
+        check("kb: same name from No folder into a folder is refused",
+              KnowledgeBaseService.addConflict(name: "faq.md", into: other.id, documents: docs, folders: folders)
+                == "faq.md is already in No folder. Rename the file to keep both.")
+        check("kb: re-adding into its own folder is an update",
+              KnowledgeBaseService.addConflict(name: "terms.md", into: deal.id, documents: docs, folders: folders) == nil)
+        check("kb: re-adding from Add documents is an update",
+              KnowledgeBaseService.addConflict(name: "terms.md", into: nil, documents: docs, folders: folders) == nil)
+        // A folder deleted while a file was still indexing into it: the
+        // document must show under No folder, where its .all scope matches.
+        let orphans = KnowledgeBaseService(persistent: false)
+        orphans.seedForSnapshot(documents: [KBDocument(name: "late.md", chunkCount: 1, addedAt: .now, folderID: UUID())],
+                                folders: [deal])
+        check("kb: a document whose folder is gone shows under No folder", orphans.documents(in: nil).map(\.name) == ["late.md"])
+        check("kb: a new name never conflicts",
+              KnowledgeBaseService.addConflict(name: "new.md", into: other.id, documents: docs, folders: folders) == nil)
+    }
+
+    @MainActor
+    static func testKnowledgeStoreUpgrade() {
+        let fm = FileManager.default
+        let dir = fm.temporaryDirectory.appendingPathComponent("kb-upgrade-\(UUID().uuidString)", isDirectory: true)
+        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        let index = dir.appendingPathComponent("index.json")
+        let backup = dir.appendingPathComponent("index-backup-before-folders.json")
+        let sales = UUID()
+        let legacy = """
+        {"documents":[
+          {"id":"\(UUID().uuidString)","name":"tagged.md","note":"","chunkCount":1,"addedAt":0,"profileIDs":["\(sales.uuidString)"]},
+          {"id":"\(UUID().uuidString)","name":"untagged.md","note":"","chunkCount":1,"addedAt":0}
+        ],"chunks":[]}
+        """
+        try? Data(legacy.utf8).write(to: index)
+        setenv("PARROT_KB_INDEX", index.path, 1)
+        defer { unsetenv("PARROT_KB_INDEX"); try? fm.removeItem(at: dir) }
+
+        let kb = KnowledgeBaseService()
+        check("kb upgrade: tags become own Use for", kb.documents.first { $0.name == "tagged.md" }?.scope == .only([sales]))
+        check("kb upgrade: untagged documents stay off, now visibly", kb.documents.first { $0.name == "untagged.md" }?.scope == .off)
+        check("kb upgrade: nothing is copied before a save", !fm.fileExists(atPath: backup.path))
+
+        // A document added after the upgrade: No folder, Same as folder.
+        kb.seedForSnapshot(documents: kb.documents + [KBDocument(name: "fresh.md", chunkCount: 1, addedAt: .now)], folders: kb.folders)
+        kb.createFolder(name: "Acme deal")  // saves
+        check("kb upgrade: the first save keeps a backup", fm.fileExists(atPath: backup.path))
+        let written = (try? String(contentsOf: index, encoding: .utf8)) ?? ""
+        check("kb upgrade: the index is now version 2", written.contains("\"version\":2"))
+        check("kb upgrade: old tags are no longer written", !written.contains("profileIDs"))
+
+        let reopened = KnowledgeBaseService()
+        let fresh = reopened.documents.first { $0.name == "fresh.md" }
+        check("kb upgrade: a new document stays in play after relaunch",
+              fresh != nil && fresh?.scope == nil && fresh.map { reopened.isInPlay($0, callType: sales) } == true)
+        check("kb upgrade: folders come back", reopened.folders.map(\.name) == ["Acme deal"])
+    }
+
+    @MainActor
+    static func testKnowledgeList() {
+        let presets = ProfilePresets.all()
+        guard let sales = presets.first(where: { $0.name == "Sales discovery" }),
+              let vendor = presets.first(where: { $0.name == "Vendor call" }) else {
+            check("kb list: presets present", false); return
+        }
+        typealias L = KnowledgeList
+        check("kb list: inheriting shows Same as folder", L.pill(own: nil, inherited: .only([sales.id]), profiles: presets) == .sameAsFolder)
+        check("kb list: No folder default shows Same as folder", L.pill(own: nil, inherited: .all, profiles: presets) == .sameAsFolder)
+        check("kb list: own types are highlighted", L.pill(own: .only([vendor.id]), inherited: .all, profiles: presets) == .types(["Vendor call"], own: true))
+        check("kb list: a folder's types are not highlighted", L.pill(own: .only([sales.id]), inherited: nil, profiles: presets) == .types(["Sales discovery"], own: false))
+        check("kb list: inheriting off shows not used", L.pill(own: nil, inherited: .off, profiles: presets) == .notUsed)
+        check("kb list: an off folder shows paused", L.pill(own: .off, inherited: nil, profiles: presets) == .paused)
+        check("kb list: only deleted call types shows not used", L.pill(own: .only([UUID()]), inherited: .all, profiles: presets) == .notUsed)
+
+        let doc = KBDocument(name: "05 - Service agreement.md", note: "Signed görüşme notes", chunkCount: 1, addedAt: .now)
+        check("kb list: search ignores case", L.matches(doc, "SERVICE"))
+        check("kb list: search reads the About line, accents ignored", L.matches(doc, "gorusme"))
+        // Turkish dotless ı is a letter, not an accented i: fold it by hand.
+        let turkish = KBDocument(name: "Çalışma planı.md", chunkCount: 1, addedAt: .now)
+        check("kb list: search finds Turkish typed without Turkish letters", L.matches(turkish, "calisma plani"))
+        check("kb list: search finds Turkish capitals", L.matches(turkish, "ÇALIŞMA"))
+        check("kb list: a blank search matches", L.matches(doc, "  "))
+        check("kb list: search misses", !L.matches(doc, "invoice"))
+
+        check("kb list: delete message counts",
+              L.deleteMessage(count: 9) == "Its 9 documents move to No folder and keep their settings."
+                && L.deleteMessage(count: 1) == "Its document moves to No folder and keeps its settings.")
+        check("kb list: closing then opening a folder", L.toggled("a", in: "b") == "a,b" && L.toggled("a", in: "a,b") == "b")
     }
 
     /// Sidebar search runs in the database: titles and transcript lines,
@@ -204,18 +397,10 @@ enum ProfileTest {
     @MainActor
     static func testKBScoping() {
         let kb = KnowledgeBaseService(persistent: false)
-        // Synchronous: unknown profile UUID always returns empty names list.
-        check("documentNames empty for unknown profile", kb.documentNames(for: UUID()).isEmpty)
-        // Synchronous: after tagging all docs into a fresh ID, every doc contains it.
+        check("documentsInPlay for an unknown profile is empty on an empty KB", kb.documentsInPlay(for: UUID()).isEmpty)
         let tagID = UUID()
         kb.tagAllDocuments(into: tagID)
-        // If kb has any documents, they should all contain tagID. Vacuously true on empty KB.
-        check("tagAllDocuments tags every document", kb.documents.allSatisfy { $0.profileIDs.contains(tagID) })
-        // Scoped search for unknown profile: since search() early-returns [] when chunks is empty
-        // (CLI KB is always empty), and for a truly unknown profile even with chunks the allowedNames
-        // set would be empty making snapshot empty. We assert via documentNames proxy — a freshly
-        // created UUID has no documents tagged into it.
-        check("documentNames for untagged profile is empty", kb.documentNames(for: UUID()).isEmpty)
+        check("tagAllDocuments on an empty KB is a no-op", kb.documents.isEmpty)
     }
 
     @MainActor

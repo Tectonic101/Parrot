@@ -85,8 +85,6 @@ struct SettingsView: View {
     @AppStorage("liveSpeakerLabels") private var liveSpeakerLabels = false
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \SpeakerProfile.name) private var voiceProfiles: [SpeakerProfile]
-    @Query(sort: \CallProfile.sortOrder) private var allProfiles: [CallProfile]
-    @State private var showFileImporter = false
     /// There's no Save button — @AppStorage persists on every change. This
     /// drives a small transient "Saved" chip so that's visible, debounced so
     /// typing in a field shows one toast when the user pauses, not per key.
@@ -177,7 +175,7 @@ struct SettingsView: View {
                 case .transcription: transcriptionPage
                 case .copilot: copilotPage
                 case .apiKeys: apiKeysPage
-                case .knowledge: knowledgePage
+                case .knowledge: KnowledgeSettingsView()
                 case .profiles: ProfilesSettingsView()
                 case .connections: ConnectionsSettingsPage()
                 case .privacy: PrivacySettingsPage()
@@ -767,61 +765,6 @@ struct SettingsView: View {
             Hint("All keys are stored in your macOS keychain, never in the app's files.")
         }
     }
-
-    // MARK: - Knowledge
-
-    private var knowledgePage: some View {
-        let kb = recordingManager.knowledgeBase
-        return SettingsPage {
-            SettingsCard(
-                title: "Documents",
-                blurb: "The Assistant grounds its answers in these and cites the source. Indexed on this Mac, never uploaded."
-            ) {
-                if kb.documents.isEmpty {
-                    SettingsRow(first: true) {
-                        Text("No documents yet. Add a pricing sheet or an FAQ and the Assistant can quote it.")
-                            .font(Theme.Typography.secondary)
-                            .foregroundStyle(Theme.Colors.ink3)
-                    }
-                }
-                ForEach(Array(kb.documents.enumerated()), id: \.element.id) { index, document in
-                    SettingsRow(first: index == 0) {
-                        KBDocumentRow(document: document, knowledgeBase: kb, profiles: allProfiles)
-                    }
-                }
-                SettingsRow {
-                    HStack(spacing: 10) {
-                        Button("Add Documents…") {
-                            showFileImporter = true
-                        }
-                        if kb.isIndexing {
-                            ProgressView()
-                                .controlSize(.small)
-                            Text("Embedding on this Mac…")
-                                .font(Theme.Typography.secondary)
-                                .foregroundStyle(Theme.Colors.ink2)
-                        }
-                        if let error = kb.lastError {
-                            Label(error, systemImage: "exclamationmark.triangle")
-                                .font(Theme.Typography.secondary)
-                                .foregroundStyle(Theme.Colors.warn)
-                        }
-                    }
-                }
-            }
-        }
-        .fileImporter(
-            isPresented: $showFileImporter,
-            allowedContentTypes: [.pdf, .plainText, .text],
-            allowsMultipleSelection: true
-        ) { result in
-            if case .success(let urls) = result {
-                Task {
-                    await recordingManager.knowledgeBase.addDocuments(at: urls)
-                }
-            }
-        }
-    }
 }
 
 enum Appearance: String, CaseIterable {
@@ -897,101 +840,6 @@ struct Hint: View {
             .font(Theme.Typography.secondary)
             .foregroundStyle(Theme.Colors.ink2)
             .fixedSize(horizontal: false, vertical: true)
-    }
-}
-
-// MARK: - Knowledge Base Document Row
-
-struct KBDocumentRow: View {
-    let document: KBDocument
-    let knowledgeBase: KnowledgeBaseService
-    /// Every call profile, so the row can show and toggle which ones use this document.
-    let profiles: [CallProfile]
-
-    @State private var note: String
-    /// Removal asks first: a document is work the user prepared, and the
-    /// trash icon sits next to a text field they click into all the time.
-    @State private var confirmingRemove = false
-
-    init(document: KBDocument, knowledgeBase: KnowledgeBaseService, profiles: [CallProfile]) {
-        self.document = document
-        self.knowledgeBase = knowledgeBase
-        self.profiles = profiles
-        _note = State(initialValue: document.note)
-    }
-
-    private var isPDF: Bool { document.name.lowercased().hasSuffix(".pdf") }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .top, spacing: 8) {
-                Image(systemName: isPDF ? "doc.richtext" : "doc.text")
-                    .foregroundStyle(Theme.Colors.accent)
-                    .padding(.top, 1)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(document.name)
-                        .font(Theme.Typography.sans(13, .medium))
-                        .lineLimit(1)
-                    TextField(
-                        "When should the Assistant use this? e.g. \"use for pricing questions\"",
-                        text: $note
-                    )
-                    .textFieldStyle(.plain)
-                    .font(Theme.Typography.secondary)
-                    .foregroundStyle(Theme.Colors.ink2)
-                    .onSubmit {
-                        knowledgeBase.updateNote(note, for: document)
-                    }
-                }
-
-                Spacer(minLength: 8)
-
-                Text("\(document.chunkCount) chunks · on-device")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.ink3)
-                    .monospacedDigit()
-                    .lineLimit(1)
-
-                Button {
-                    confirmingRemove = true
-                } label: {
-                    Image(systemName: "trash")
-                        .font(Theme.Typography.caption)
-                        .foregroundStyle(Theme.Colors.ink3)
-                }
-                .buttonStyle(.plain)
-                .help("Remove from knowledge base")
-                .confirmationDialog("Remove \(document.name)?", isPresented: $confirmingRemove) {
-                    Button("Remove", role: .destructive) { knowledgeBase.removeDocument(document) }
-                } message: {
-                    Text("The Assistant stops using it right away. You can add the file again any time.")
-                }
-            }
-
-            // Which profiles may quote it. Same data Profiles → documents edits.
-            FlowLayout(spacing: 6) {
-                Text("Use for")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.ink3)
-                    .padding(.vertical, 4)
-                ForEach(profiles) { profile in
-                    Button {
-                        toggle(profile)
-                    } label: {
-                        TagChip(label: profile.name, on: document.profileIDs.contains(profile.id))
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.leading, 24)
-        }
-    }
-
-    private func toggle(_ profile: CallProfile) {
-        var ids = document.profileIDs
-        if ids.contains(profile.id) { ids.remove(profile.id) } else { ids.insert(profile.id) }
-        knowledgeBase.setProfiles(ids, for: document)
     }
 }
 

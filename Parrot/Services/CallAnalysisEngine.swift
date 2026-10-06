@@ -409,7 +409,7 @@ final class CallAnalysisEngine {
             instructions: profile?.tone ?? "",
             callBrief: callBrief,
             allowGeneralKnowledge: profile?.allowGeneralKnowledge ?? true,
-            knownDocumentNames: profile.map { knowledgeBase?.documentNames(for: $0.id) ?? [] } ?? (knowledgeBase?.documents.map(\.name) ?? []),
+            knownDocumentNames: knowledgeBase?.documentsInPlay(for: profile?.id) ?? [],
             persona: profile?.persona ?? "",
             counterpart: profile?.counterpart ?? "the other person",
             kinds: profile?.kinds ?? [],

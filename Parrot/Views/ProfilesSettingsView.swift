@@ -240,16 +240,28 @@ private struct ProfileDetailView: View {
             }
 
             // MARK: Knowledge Documents section
-            SettingsCard(title: "Knowledge Documents", blurb: "Documents this profile may quote. The Knowledge page shows the same tags.") {
-                if knowledgeBase.documents.isEmpty {
-                    SettingsRow(first: true) {
-                        Hint("No documents yet. Add them on the Knowledge page, then tag them here.")
+            // Read-only: Use for is set on the Knowledge page (folders and
+            // documents); one editor per setting.
+            SettingsCard(title: "Knowledge Documents", blurb: "Documents this profile can use.") {
+                let docs = knowledgeBase.documents
+                    .filter { knowledgeBase.isInPlay($0, callType: profile.id) }
+                    .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+                ForEach(Array(docs.enumerated()), id: \.element.id) { index, doc in
+                    SettingsRow(first: index == 0) {
+                        HStack(spacing: 12) {
+                            Text(doc.displayName)
+                                .font(Theme.Typography.body)
+                                .lineLimit(1)
+                            Spacer(minLength: 12)
+                            Text(knowledgeBase.folders.first { $0.id == doc.folderID }?.name ?? "No folder")
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(Theme.Colors.ink3)
+                                .lineLimit(1)
+                        }
                     }
                 }
-                ForEach(Array(knowledgeBase.documents.enumerated()), id: \.element.id) { index, doc in
-                    SettingsRow(first: index == 0) {
-                        DocTagToggle(doc: doc, profileID: profile.id, knowledgeBase: knowledgeBase)
-                    }
+                SettingsRow(first: docs.isEmpty) {
+                    Hint("Change which documents a call type uses on the Knowledge page.")
                 }
             }
 
@@ -372,43 +384,6 @@ private struct ProfileDetailView: View {
         profile.gauges = gs
         profile.isUserModified = true
         try? context.save()
-    }
-}
-
-// MARK: - Doc Tag Toggle
-
-private struct DocTagToggle: View {
-    let doc: KBDocument
-    let profileID: UUID
-    let knowledgeBase: KnowledgeBaseService
-
-    private var isTagged: Bool {
-        doc.profileIDs.contains(profileID)
-    }
-
-    var body: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 1) {
-                Text(doc.name)
-                    .font(Theme.Typography.body)
-                    .lineLimit(1)
-                Text("\(doc.chunkCount) chunks · on-device")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.ink3)
-            }
-            Spacer(minLength: 12)
-            Toggle("", isOn: Binding(
-                get: { isTagged },
-                set: { newValue in
-                    var ids = doc.profileIDs
-                    if newValue { ids.insert(profileID) } else { ids.remove(profileID) }
-                    knowledgeBase.setProfiles(ids, for: doc)
-                }
-            ))
-            .labelsHidden()
-            .toggleStyle(.switch)
-            .controlSize(.small)
-        }
     }
 }
 
