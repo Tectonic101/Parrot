@@ -15,7 +15,7 @@ enum CopilotProviderKind: String, CaseIterable, Identifiable {
         switch self {
         case .claude: "Claude (cloud)"
         case .ollama: "Ollama (local)"
-        case .custom: "Custom server"
+        case .custom: "Other AI service"
         }
     }
 
