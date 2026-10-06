@@ -120,6 +120,7 @@ struct KnowledgeSettingsView: View {
                         .foregroundStyle(Theme.Colors.ink2)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(open ? "Close folder" : "Open folder")
                 Image(systemName: folder == nil ? "tray" : "folder")
                     .foregroundStyle(paused ? Theme.Colors.ink3 : Theme.Colors.ink2)
                 if let folder, renamingID == folder.id {
@@ -164,6 +165,7 @@ struct KnowledgeSettingsView: View {
                     .menuStyle(.borderlessButton)
                     .menuIndicator(.hidden)
                     .fixedSize()
+                    .accessibilityLabel("Folder actions")
                 } else {
                     Text("All call types")
                         .font(Theme.Typography.caption)
@@ -260,6 +262,7 @@ struct KBDocumentRow: View {
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
                 .fixedSize()
+                .accessibilityLabel("Document actions")
             }
             .contentShape(Rectangle())
             .draggable(document.id.uuidString)

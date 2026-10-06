@@ -128,7 +128,7 @@ downgrades, and someone who installs an older build by hand can restore
 - Documents: `setScope(_ scope: KBScope?, for document:)`, `move(_ document:, to folderID: UUID?)`, `addDocuments(at:into folderID:)` (existing `addDocuments(at:)` calls it with `nil`).
 - Resolution: `effectiveScope(of:) -> KBScope` and `isInPlay(_:callType:) -> Bool`, the only place the rule lives.
 - Callers rewired to `isInPlay`: `search(query:profileID:topK:)` (all three `CallAnalysisEngine` call sites and the Jev fast path go through it), `documentsInPlay(for:)` (Home Assistant card, call brief), `documentNames(for:)`.
-- `copyProfileTags(from:to:)` (duplicating a call type): insert `to` into every folder and document `only` set containing `from`.
+- `copyProfileTags(from:to:)` (a built-in call type added after install starts with Default's documents): insert `to` into every folder and document `only` set containing `from`. Duplicating a call type does not call it (true before this change too).
 - `tagAllDocuments(into:)` (first-ever profile seeding, pre-profiles stores): insert into each document's `only` set, turning `off` into `only([id])`. Runs after migration, so very old stores keep working as before.
 - `setProfiles(_:for:)` is replaced by `setScope`.
 
