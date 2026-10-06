@@ -239,6 +239,12 @@ enum ProfileTest {
               KnowledgeBaseService.addConflict(name: "terms.md", into: deal.id, documents: docs, folders: folders) == nil)
         check("kb: re-adding from Add documents is an update",
               KnowledgeBaseService.addConflict(name: "terms.md", into: nil, documents: docs, folders: folders) == nil)
+        // A folder deleted while a file was still indexing into it: the
+        // document must show under No folder, where its .all scope matches.
+        let orphans = KnowledgeBaseService(persistent: false)
+        orphans.seedForSnapshot(documents: [KBDocument(name: "late.md", chunkCount: 1, addedAt: .now, folderID: UUID())],
+                                folders: [deal])
+        check("kb: a document whose folder is gone shows under No folder", orphans.documents(in: nil).map(\.name) == ["late.md"])
         check("kb: a new name never conflicts",
               KnowledgeBaseService.addConflict(name: "new.md", into: other.id, documents: docs, folders: folders) == nil)
     }

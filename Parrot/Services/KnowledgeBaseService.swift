@@ -189,9 +189,16 @@ final class KnowledgeBaseService {
         save()
     }
 
-    /// A folder's documents (nil = No folder), by name.
+    /// A folder's documents (nil = No folder), by name. No folder also holds
+    /// any document whose folder is gone (deleted while it was indexing), so
+    /// nothing in play is ever hidden.
     func documents(in folderID: UUID?) -> [KBDocument] {
-        documents.filter { $0.folderID == folderID }
+        let known = Set(folders.map(\.id))
+        return documents
+            .filter { doc in
+                guard folderID == nil else { return doc.folderID == folderID }
+                return doc.folderID.map { !known.contains($0) } ?? true
+            }
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
