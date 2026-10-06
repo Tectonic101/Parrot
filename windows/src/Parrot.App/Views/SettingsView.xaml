@@ -1,0 +1,240 @@
+<!-- Parrot for Windows. Derived from Parrot (GPL-3.0), SettingsView.swift, ProfilesSettingsView.swift, KnowledgeSettingsView.swift. -->
+<UserControl x:Class="Parrot.App.Views.SettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:v="clr-namespace:Parrot.App.Views">
+    <UserControl.Resources>
+        <Style x:Key="FieldLabel" TargetType="TextBlock" BasedOn="{StaticResource SecondaryText}">
+            <Setter Property="Margin" Value="0,10,0,3" />
+        </Style>
+        <Style x:Key="Section" TargetType="StackPanel">
+            <Setter Property="MaxWidth" Value="720" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="Margin" Value="4,12,16,24" />
+        </Style>
+    </UserControl.Resources>
+    <DockPanel Margin="20,16,20,12">
+        <TextBlock DockPanel.Dock="Top" Text="Settings" Style="{StaticResource TitleText}" />
+        <TabControl Margin="0,12,0,0" Background="Transparent" BorderThickness="0,1,0,0" BorderBrush="{DynamicResource LineBrush}">
+
+            <!-- Assistant -->
+            <TabItem Header="Assistant">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Style="{StaticResource Section}">
+                        <CheckBox Content="Live assistant during calls (suggested answers, open questions, coaching)" IsChecked="{Binding CopilotEnabled}" />
+                        <TextBlock Style="{StaticResource CaptionText}" Margin="22,0,0,0"
+                                   Text="Off by default on the Mac; here it only runs once a provider below is set up. Recent transcript text and matching knowledge-base passages are sent to the provider you choose." />
+
+                        <TextBlock Text="Live cards provider" Style="{StaticResource FieldLabel}" />
+                        <ComboBox ItemsSource="{Binding ProviderOptions}" SelectedItem="{Binding LiveProvider}" />
+                        <TextBlock Text="Post-call reports &amp; Ask Parrot provider" Style="{StaticResource FieldLabel}" />
+                        <ComboBox ItemsSource="{Binding ReportsProviderOptions}" SelectedItem="{Binding ReportsProvider}" />
+
+                        <TextBlock Text="MODELS" Style="{StaticResource SectionLabel}" Margin="0,22,0,0" />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="170" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Text="Claude model" Style="{StaticResource FieldLabel}" />
+                            <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding AnthropicModel, UpdateSourceTrigger=LostFocus}" Margin="0,6,0,0" />
+                            <TextBlock Grid.Row="1" Text="OpenAI model" Style="{StaticResource FieldLabel}" />
+                            <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding OpenAIModel, UpdateSourceTrigger=LostFocus}" Margin="0,6,0,0" />
+                            <TextBlock Grid.Row="2" Text="Groq model" Style="{StaticResource FieldLabel}" />
+                            <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding GroqModel, UpdateSourceTrigger=LostFocus}" Margin="0,6,0,0" />
+                            <TextBlock Grid.Row="3" Text="Gemini model" Style="{StaticResource FieldLabel}" />
+                            <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding GeminiModel, UpdateSourceTrigger=LostFocus}" Margin="0,6,0,0" />
+                            <TextBlock Grid.Row="4" Text="Ollama model" Style="{StaticResource FieldLabel}" />
+                            <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding OllamaModel, UpdateSourceTrigger=LostFocus}" Margin="0,6,0,0" />
+                            <TextBlock Grid.Row="5" Text="Ollama URL" Style="{StaticResource FieldLabel}" />
+                            <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding OllamaBaseUrl, UpdateSourceTrigger=LostFocus}" Margin="0,6,0,0" />
+                            <TextBlock Grid.Row="6" Text="Custom server URL" Style="{StaticResource FieldLabel}" />
+                            <TextBox Grid.Row="6" Grid.Column="1" Text="{Binding CustomBaseUrl, UpdateSourceTrigger=LostFocus}" Margin="0,6,0,0"
+                                     ToolTip="OpenAI-compatible base URL ending in /v1 (LM Studio, OpenRouter, vLLM…)" />
+                            <TextBlock Grid.Row="7" Text="Custom model" Style="{StaticResource FieldLabel}" />
+                            <TextBox Grid.Row="7" Grid.Column="1" Text="{Binding CustomModel, UpdateSourceTrigger=LostFocus}" Margin="0,6,0,0" />
+                        </Grid>
+                        <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                            <Button Content="Test live provider" Command="{Binding TestProviderCommand}" />
+                            <TextBlock Text="{Binding TestResult}" Style="{StaticResource SecondaryText}" Margin="10,0,0,0" VerticalAlignment="Center" MaxWidth="520" />
+                        </StackPanel>
+
+                        <TextBlock Text="API KEYS" Style="{StaticResource SectionLabel}" Margin="0,22,0,0" />
+                        <TextBlock Style="{StaticResource CaptionText}"
+                                   Text="Keys are encrypted with Windows DPAPI for your user account and stored in the Parrot data folder. They are never shown again after saving." />
+                        <ItemsControl ItemsSource="{Binding Keys}" Margin="0,6,0,0">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,6,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="170" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding Label}" Style="{StaticResource BodyText}" FontSize="13" />
+                                            <TextBlock Style="{StaticResource CaptionText}" Foreground="{DynamicResource GoodBrush}" Text="Saved ✓"
+                                                       Visibility="{Binding HasKey, Converter={StaticResource VisibleWhen}}" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1">
+                                            <PasswordBox v:PasswordBoxBinding.Text="{Binding Input, Mode=TwoWay}" ToolTip="{Binding Hint}" />
+                                            <TextBlock Text="{Binding Message}" Style="{StaticResource CaptionText}"
+                                                       Visibility="{Binding Message, Converter={StaticResource VisibleWhen}}" />
+                                        </StackPanel>
+                                        <Button Grid.Column="2" Content="Save" Command="{Binding SaveCommand}" Margin="6,0,0,0" VerticalAlignment="Top" />
+                                        <Button Grid.Column="3" Content="Remove" Style="{StaticResource SubtleButton}" Command="{Binding ClearCommand}"
+                                                Margin="4,0,0,0" VerticalAlignment="Top" Visibility="{Binding HasKey, Converter={StaticResource VisibleWhen}}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <TextBlock Text="PACE" Style="{StaticResource SectionLabel}" Margin="0,22,0,0" />
+                        <ComboBox ItemsSource="{Binding PaceOptions}" SelectedItem="{Binding Pace}" />
+                        <TextBlock Text="How much recent conversation each request carries" Style="{StaticResource FieldLabel}" />
+                        <ComboBox ItemsSource="{Binding WindowOptions}" SelectedItem="{Binding Window}" />
+                        <CheckBox Content="Write a report (summary + coaching) when a call ends" IsChecked="{Binding GenerateReport}" Margin="0,14,0,0" />
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- Transcription & audio -->
+            <TabItem Header="Transcription &amp; audio">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Style="{StaticResource Section}">
+                        <TextBlock Text="Transcription engine" Style="{StaticResource FieldLabel}" Margin="0,0,0,3" />
+                        <ComboBox ItemsSource="{Binding EngineOptions}" SelectedItem="{Binding Engine}" />
+                        <TextBlock Style="{StaticResource CaptionText}"
+                                   Text="On-device keeps audio on this PC. Cloud engines upload each utterance to the provider using your own key." />
+
+                        <TextBlock Text="On-device model" Style="{StaticResource FieldLabel}" />
+                        <ComboBox ItemsSource="{Binding WhisperModelOptions}" SelectedItem="{Binding WhisperModel}" />
+                        <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                            <TextBlock Text="{Binding ModelStatus}" Style="{StaticResource CaptionText}" VerticalAlignment="Center" />
+                            <Button Content="Download now" Command="{Binding DownloadModelCommand}" Margin="10,0,0,0" Padding="10,3" />
+                        </StackPanel>
+                        <ProgressBar Height="4" Margin="0,6,0,0" Maximum="100" Value="{Binding DownloadProgress}"
+                                     Visibility="{Binding IsDownloading, Converter={StaticResource VisibleWhen}}" />
+
+                        <TextBlock Text="Language" Style="{StaticResource FieldLabel}" />
+                        <ComboBox ItemsSource="{Binding LanguageOptions}" SelectedItem="{Binding Language}" />
+                        <TextBlock Text="Vocabulary (names and terms, comma separated — primes on-device Whisper)" Style="{StaticResource FieldLabel}" />
+                        <TextBox Text="{Binding Vocabulary, UpdateSourceTrigger=LostFocus}" />
+
+                        <TextBlock Text="AUDIO" Style="{StaticResource SectionLabel}" Margin="0,22,0,0" />
+                        <TextBlock Text="Your microphone (“Me”)" Style="{StaticResource FieldLabel}" />
+                        <ComboBox ItemsSource="{Binding Microphones}" SelectedItem="{Binding Microphone}" />
+                        <TextBlock Text="Call audio output (“Them”) — Parrot records what this device plays" Style="{StaticResource FieldLabel}" />
+                        <ComboBox ItemsSource="{Binding Outputs}" SelectedItem="{Binding Output}" />
+                        <Button Content="Refresh devices" HorizontalAlignment="Left" Margin="0,8,0,0" Command="{Binding RefreshDevicesCommand}" />
+                        <CheckBox Content="Drop my-mic lines that just repeat the other side (speaker bleed without headphones)"
+                                  IsChecked="{Binding EchoSuppression}" Margin="0,14,0,0" />
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- Call types -->
+            <TabItem Header="Call types">
+                <Grid Margin="4,12,4,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="220" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <DockPanel>
+                        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,8,0,0">
+                            <Button Content="Duplicate" Command="{Binding DuplicateProfileCommand}" />
+                            <Button Content="Delete" Style="{StaticResource SubtleButton}" Command="{Binding DeleteProfileCommand}" Margin="6,0,0,0" />
+                        </StackPanel>
+                        <ListBox ItemsSource="{Binding Profiles}" SelectedItem="{Binding SelectedProfile}" DisplayMemberPath="Name"
+                                 ItemContainerStyle="{StaticResource PlainListItem}" Foreground="{DynamicResource InkBrush}" />
+                    </DockPanel>
+                    <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" Margin="16,0,0,0">
+                        <StackPanel MaxWidth="640" HorizontalAlignment="Left">
+                            <TextBlock Style="{StaticResource CaptionText}"
+                                       Text="The selected call type is used for your next recording. Built-in types can be tuned; duplicate one to rename it." />
+                            <TextBlock Text="Name" Style="{StaticResource FieldLabel}" />
+                            <TextBox Text="{Binding ProfileName, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Text="What the assistant calls the other side (e.g. “the prospect”)" Style="{StaticResource FieldLabel}" />
+                            <TextBox Text="{Binding ProfileCounterpart, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Text="Standing rules (tone, goals — always followed)" Style="{StaticResource FieldLabel}" />
+                            <TextBox Text="{Binding ProfileTone, UpdateSourceTrigger=LostFocus}" AcceptsReturn="True" TextWrapping="Wrap" Height="70"
+                                     VerticalContentAlignment="Top" />
+                            <TextBlock Text="Persona" Style="{StaticResource FieldLabel}" />
+                            <TextBox Text="{Binding ProfilePersona, UpdateSourceTrigger=LostFocus}" AcceptsReturn="True" TextWrapping="Wrap" Height="110"
+                                     VerticalContentAlignment="Top" />
+                            <CheckBox Content="Answer from general knowledge when my documents don't cover a question" IsChecked="{Binding ProfileAllowGeneral}"
+                                      Margin="0,10,0,0" />
+                            <TextBlock Text="CARD KINDS" Style="{StaticResource SectionLabel}" Margin="0,18,0,4" />
+                            <TextBlock Text="{Binding ProfileKinds}" Style="{StaticResource SecondaryText}" />
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </TabItem>
+
+            <!-- Knowledge -->
+            <TabItem Header="Knowledge">
+                <DockPanel Margin="4,12,4,0" MaxWidth="760" HorizontalAlignment="Left">
+                    <StackPanel DockPanel.Dock="Top">
+                        <TextBlock Style="{StaticResource SecondaryText}"
+                                   Text="Add pricing sheets, FAQs and playbooks (.txt, .md, .pdf). They stay on this PC; only the few passages that match what's being discussed are sent with an assistant request." />
+                        <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                            <Button Content="Add documents…" Style="{StaticResource PrimaryButton}" Command="{Binding AddDocumentsCommand}" />
+                            <TextBlock Text="{Binding KnowledgeMessage}" Style="{StaticResource SecondaryText}" Margin="10,0,0,0" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </StackPanel>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,12,0,0">
+                        <ItemsControl ItemsSource="{Binding Documents}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Style="{StaticResource Card}" Margin="0,0,0,8" Padding="12,10">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="{DynamicResource InkBrush}" />
+                                                <TextBlock Text="{Binding Detail}" Style="{StaticResource CaptionText}" />
+                                                <TextBox Text="{Binding Note, UpdateSourceTrigger=LostFocus}" Margin="0,6,0,0"
+                                                         ToolTip="About this document (sent to the assistant with its passages), e.g. “Signed agreement, Sept 2026”" />
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="1" Margin="12,0,0,0">
+                                                <CheckBox Content="Use on calls" IsChecked="{Binding Enabled}" />
+                                                <Button Content="Remove" Style="{StaticResource SubtleButton}" HorizontalAlignment="Right"
+                                                        Command="{Binding DataContext.RemoveDocumentCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                        CommandParameter="{Binding}" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </DockPanel>
+            </TabItem>
+
+            <!-- Appearance & data -->
+            <TabItem Header="General">
+                <StackPanel Style="{StaticResource Section}">
+                    <TextBlock Text="Appearance" Style="{StaticResource FieldLabel}" Margin="0,0,0,3" />
+                    <ComboBox ItemsSource="{Binding ThemeOptions}" SelectedItem="{Binding Theme}" Width="240" HorizontalAlignment="Left" />
+                    <TextBlock Text="Data folder" Style="{StaticResource FieldLabel}" />
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{Binding DataFolder}" Style="{StaticResource MonoText}" VerticalAlignment="Center" />
+                        <Button Content="Open" Command="{Binding OpenDataFolderCommand}" Margin="10,0,0,0" />
+                    </StackPanel>
+                    <TextBlock Style="{StaticResource CaptionText}" Margin="0,8,0,0"
+                               Text="Meetings are JSON files under meetings\, audio under audio\, speech models under models\. Delete the folder to remove everything." />
+                    <TextBlock Style="{StaticResource CaptionText}" Margin="0,16,0,0"
+                               Text="Parrot for Windows is free software under the GNU GPL v3, derived from Parrot for macOS." />
+                </StackPanel>
+            </TabItem>
+        </TabControl>
+    </DockPanel>
+</UserControl>

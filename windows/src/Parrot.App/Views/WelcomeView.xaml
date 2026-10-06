@@ -1,0 +1,18 @@
+<!-- Parrot for Windows. Derived from Parrot (GPL-3.0), OnboardingView.swift. -->
+<UserControl x:Class="Parrot.App.Views.WelcomeView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <StackPanel MaxWidth="560" HorizontalAlignment="Center" VerticalAlignment="Center">
+        <Image Source="/Assets/parrot.png" Width="72" Height="72" HorizontalAlignment="Left" />
+        <TextBlock Text="Welcome to Parrot" Style="{StaticResource TitleText}" Margin="0,12,0,0" />
+        <TextBlock Style="{StaticResource BodyText}" Margin="0,10,0,0"
+                   Text="Parrot records both sides of a call — your microphone and everything your PC plays — transcribes it on this PC, and writes a report when you stop." />
+        <TextBlock Style="{StaticResource BodyText}" Margin="0,10,0,0"
+                   Text="Add an AI key in Settings to get live suggested answers while the other side talks, and a summary with coaching after the call. Ollama works fully offline." />
+        <TextBlock Style="{StaticResource SecondaryText}" Margin="0,10,0,0"
+                   Text="Tell the people on the call that you are recording. Headphones give the cleanest “Me” track." />
+        <StackPanel Orientation="Horizontal" Margin="0,18,0,0">
+            <Button Content="Open Settings" Style="{StaticResource PrimaryButton}" Command="{Binding OpenSettingsCommand}" />
+        </StackPanel>
+    </StackPanel>
+</UserControl>

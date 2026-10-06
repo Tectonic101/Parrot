@@ -1,0 +1,108 @@
+<!-- Parrot for Windows. Derived from Parrot (GPL-3.0), ContentView.swift / SidebarView.swift. -->
+<Window x:Class="Parrot.App.Views.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:Parrot.App.ViewModels"
+        xmlns:v="clr-namespace:Parrot.App.Views"
+        Title="Parrot" Width="1280" Height="820" MinWidth="900" MinHeight="560"
+        Icon="/Assets/parrot.ico"
+        Background="{DynamicResource CanvasBrush}"
+        FontFamily="{StaticResource SansFont}"
+        TextOptions.TextFormattingMode="Display">
+    <Window.Resources>
+        <DataTemplate DataType="{x:Type vm:LiveViewModel}"><v:LiveView /></DataTemplate>
+        <DataTemplate DataType="{x:Type vm:MeetingDetailViewModel}"><v:MeetingDetailView /></DataTemplate>
+        <DataTemplate DataType="{x:Type vm:AskViewModel}"><v:AskView /></DataTemplate>
+        <DataTemplate DataType="{x:Type vm:SettingsViewModel}"><v:SettingsView /></DataTemplate>
+        <DataTemplate DataType="{x:Type vm:WelcomeViewModel}"><v:WelcomeView /></DataTemplate>
+    </Window.Resources>
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="272" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <!-- Sidebar -->
+        <Border Grid.Column="0" Background="{DynamicResource PanelBrush}" BorderBrush="{DynamicResource LineBrush}" BorderThickness="0,0,1,0">
+            <DockPanel Margin="14,16,14,12">
+                <StackPanel DockPanel.Dock="Top">
+                    <StackPanel Orientation="Horizontal" Margin="4,0,0,14">
+                        <Image Source="/Assets/parrot.png" Width="26" Height="26" />
+                        <TextBlock Text="Parrot" FontSize="18" FontWeight="Bold" Margin="8,0,0,0" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource InkBrush}" />
+                    </StackPanel>
+
+                    <Button Command="{Binding ToggleRecordCommand}" Style="{StaticResource RecordButton}" HorizontalAlignment="Stretch">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource Icon}" Text="&#xE7C8;" Margin="0,0,8,0"
+                                       Visibility="{Binding IsRecording, Converter={StaticResource VisibleWhen}, ConverterParameter=Invert}" />
+                            <TextBlock Style="{StaticResource Icon}" Text="&#xE71A;" Margin="0,0,8,0"
+                                       Visibility="{Binding IsRecording, Converter={StaticResource VisibleWhen}}" />
+                            <TextBlock Text="{Binding RecordButtonText}" />
+                        </StackPanel>
+                    </Button>
+                    <StackPanel Visibility="{Binding StartStatus, Converter={StaticResource VisibleWhen}}" Margin="2,8,2,0">
+                        <TextBlock Text="{Binding StartStatus}" Style="{StaticResource CaptionText}" />
+                        <ProgressBar Height="4" Margin="0,4,0,0" Minimum="0" Maximum="100" Value="{Binding StartProgress}"
+                                     IsIndeterminate="{Binding StartProgress, Converter={x:Static v:NegativeToTrueConverter.Instance}}" />
+                    </StackPanel>
+
+                    <TextBlock Text="CALL TYPE" Style="{StaticResource SectionLabel}" Margin="4,14,0,4" />
+                    <ComboBox ItemsSource="{Binding Profiles}" SelectedItem="{Binding ActiveProfile}" DisplayMemberPath="Name"
+                              IsEnabled="{Binding IsRecording, Converter={StaticResource InverseBool}}" />
+
+                    <StackPanel Margin="0,14,0,6">
+                        <Button Style="{StaticResource NavButton}" Command="{Binding ShowLiveCommand}"
+                                Visibility="{Binding IsRecording, Converter={StaticResource VisibleWhen}}">
+                            <StackPanel Orientation="Horizontal">
+                                <Ellipse Width="9" Height="9" Fill="{DynamicResource StopBrush}" Margin="2,0,10,0" />
+                                <TextBlock Text="Live call" Foreground="{DynamicResource InkBrush}" FontWeight="SemiBold" />
+                                <TextBlock Text="{Binding Live.Elapsed}" Style="{StaticResource MonoText}" Margin="8,0,0,0" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <Button Style="{StaticResource NavButton}" Command="{Binding OpenAskCommand}">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource Icon}" Text="&#xE8BD;" Foreground="{DynamicResource Ink2Brush}" Margin="0,0,10,0" />
+                                <TextBlock Text="Ask Parrot" Foreground="{DynamicResource InkBrush}" />
+                            </StackPanel>
+                        </Button>
+                        <Button Style="{StaticResource NavButton}" Command="{Binding OpenSettingsCommand}">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource Icon}" Text="&#xE713;" Foreground="{DynamicResource Ink2Brush}" Margin="0,0,10,0" />
+                                <TextBlock Text="Settings" Foreground="{DynamicResource InkBrush}" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+
+                    <TextBlock Text="MEETINGS" Style="{StaticResource SectionLabel}" Margin="4,8,0,4" />
+                    <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged, Delay=250}" Margin="0,0,0,6"
+                             ToolTip="Search titles, reports and transcripts" />
+                </StackPanel>
+                <ListBox ItemsSource="{Binding Meetings}" SelectedItem="{Binding SelectedMeeting}"
+                         ItemContainerStyle="{StaticResource PlainListItem}">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel>
+                                <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource InkBrush}"
+                                           TextTrimming="CharacterEllipsis" />
+                                <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                    <TextBlock Text="{Binding Subtitle}" Style="{StaticResource CaptionText}" TextWrapping="NoWrap" />
+                                    <TextBlock Text=" · processing" Style="{StaticResource CaptionText}" Foreground="{DynamicResource WarnBrush}"
+                                               Visibility="{Binding IsProcessing, Converter={StaticResource VisibleWhen}}" />
+                                </StackPanel>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </DockPanel>
+        </Border>
+
+        <!-- Content -->
+        <Grid Grid.Column="1">
+            <TextBlock Text="Select a meeting, or press Record to start." Style="{StaticResource SecondaryText}"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                       Visibility="{Binding CurrentPage, Converter={StaticResource VisibleWhen}, ConverterParameter=Invert}" />
+            <ContentControl Content="{Binding CurrentPage}" Focusable="False" />
+        </Grid>
+    </Grid>
+</Window>

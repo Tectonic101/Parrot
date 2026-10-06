@@ -1,0 +1,15 @@
+<Project>
+  <!-- Parrot for Windows. Derived from Parrot (GPL-3.0). -->
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <Version>0.1.0</Version>
+    <Company>Parrot contributors</Company>
+    <Product>Parrot for Windows</Product>
+    <Copyright>GPL-3.0-or-later</Copyright>
+    <PackageLicenseExpression>GPL-3.0-or-later</PackageLicenseExpression>
+  </PropertyGroup>
+</Project>
