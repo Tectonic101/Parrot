@@ -2440,6 +2440,24 @@ enum ProfileTest {
         let lookalike = verdict(inClip(headphones, mix(shifted(them, frames: 3, gain: 0.08), hiss)))
         check("echo gate: on headphones a clip that tracks them is kept", !lookalike.isEcho && lookalike.clip.follows > 0.6)
         check("echo gate: headphones read as no bleed", verdict(headphones).bleed.follows < G.minBleed)
+
+        // #98: on speakers while I do most of the talking. My loud turns in
+        // their silences dragged the whole-window correlation below zero, so
+        // the gate never fired; while they talk, the mic still follows them.
+        func only(_ s: [Float], _ seconds: [Range<Double>]) -> [Float] {
+            s.enumerated().map { i, x in seconds.contains { $0.contains(Double(i) / 16000) } ? x : 0 }
+        }
+        let theirs = only(them, [0..<3, 9..<11, 16..<18])
+        let mine = only(speech(seed: 2, seconds: 20, level: 0.3), [3..<9, 11..<16, 18..<20])
+        let theirsEnv = G.envelope(theirs[...])
+        let busy = verdict(mix(mix(shifted(theirs, frames: 3, gain: 0.08), mine), hiss), them: theirsEnv)
+        check("echo gate: on speakers, echo is caught when I do most of the talking", busy.isEcho)
+        check("echo gate: ...by the while-they-talk check, not the whole-window one",
+              busy.bleed.follows < G.minBleed && busy.talkBleed.follows >= G.minTalkBleed)
+        let busyHeadphones = verdict(mix(mine, hiss), them: theirsEnv)
+        check("echo gate: on headphones, doing most of the talking reads as no bleed",
+              !busyHeadphones.isEcho && busyHeadphones.bleed.follows < G.minBleed
+                && busyHeadphones.talkBleed.follows < G.minTalkBleed)
     }
 
     static func testGlossaryPrompt() {

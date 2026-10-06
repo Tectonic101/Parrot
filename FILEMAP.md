@@ -40,7 +40,7 @@ tree. Line counts are rough — they flag which files are worth reading whole.
 | `Services/AudioCaptureManager.swift` | 1022 | System audio (tap on 15+, SCK on 14.x/rescue) + mic tap, buffer conversion |
 | `Services/SystemAudioTap.swift` | 294 | Core Audio process tap: audio-only capture, no Screen Recording (macOS 15+) |
 | `Services/EchoCanceller.swift` | 138 | Swift wrapper over vendored SpeexDSP AEC |
-| `Services/EchoGate.swift` | 123 | Pure: skips a Me clip whose loudness just follows the other side's (speaker echo), once the call shows the mic hears the speakers |
+| `Services/EchoGate.swift` | 151 | Pure: skips a Me clip whose loudness just follows the other side's (speaker echo), once the call shows the mic hears the speakers (over the last minute, or while they talk in the minute before the clip) |
 | `Services/TranscriptionEngine.swift` | 1757 | On-device WhisperKit or Parakeet; `AudioSource` routing; per-side language check (holds a Parakeet side until known, recheck + rewind); lazy fallback Whisper; live preview decode; Silero voice gate before every decode |
 | `Services/LanguageRouter.swift` | 142 | Pure: which engine each side of a Parakeet call uses (held, Parakeet, Whisper), recheck schedule; `LanguageProbe` gathers each side's first 10 s of speech |
 | `Services/ParakeetTranscriber.swift` | 38 | Parakeet TDT 0.6B v3 via FluidAudio (25 European languages, ~0.5 GB): load, transcribe with a script hint |
