@@ -223,8 +223,24 @@ enum ProfileTest {
         check("kb: re-adding keeps About, folder and Use for",
               updated.count == 1 && updated[0].note == "Signed terms, 2026" && updated[0].folderID == deal.id
                 && updated[0].scope == .only([vendor]) && updated[0].chunkCount == 5)
-        let addedInto = KnowledgeBaseService.replacing([old], with: KBDocument(name: "terms.md", chunkCount: 5, addedAt: .now, folderID: paused.id))
-        check("kb: re-adding into a folder moves it there", addedInto[0].folderID == paused.id && addedInto[0].scope == .only([vendor]))
+
+        // Two deals often hold files with the same name: adding one into a
+        // different folder must not replace the other deal's document.
+        let docs = [old, KBDocument(name: "faq.md", chunkCount: 1, addedAt: .now)]
+        let other = KBFolder(name: "Northwind deal")
+        let folders = [deal, other]
+        check("kb: same name in another folder is refused",
+              KnowledgeBaseService.addConflict(name: "terms.md", into: other.id, documents: docs, folders: folders)
+                == "terms.md is already in “Acme deal”. Rename the file to keep both.")
+        check("kb: same name from No folder into a folder is refused",
+              KnowledgeBaseService.addConflict(name: "faq.md", into: other.id, documents: docs, folders: folders)
+                == "faq.md is already in No folder. Rename the file to keep both.")
+        check("kb: re-adding into its own folder is an update",
+              KnowledgeBaseService.addConflict(name: "terms.md", into: deal.id, documents: docs, folders: folders) == nil)
+        check("kb: re-adding from Add documents is an update",
+              KnowledgeBaseService.addConflict(name: "terms.md", into: nil, documents: docs, folders: folders) == nil)
+        check("kb: a new name never conflicts",
+              KnowledgeBaseService.addConflict(name: "new.md", into: other.id, documents: docs, folders: folders) == nil)
     }
 
     @MainActor

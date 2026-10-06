@@ -52,6 +52,10 @@ final class KnowledgeBaseService {
         }
 
         let name = url.lastPathComponent
+        if let conflict = Self.addConflict(name: name, into: folderID, documents: documents, folders: folders) {
+            lastError = conflict
+            return
+        }
         guard let text = Self.extractText(from: url), !text.isEmpty else {
             lastError = "Couldn't read \(name)"
             return
@@ -87,6 +91,18 @@ final class KnowledgeBaseService {
         documents = Self.replacing(documents, with: KBDocument(
             name: name, chunkCount: embedded.count, addedAt: .now, folderID: folderID))
         save()
+    }
+
+    /// Why a file can't be added into `folderID`, or nil. Documents are keyed
+    /// by file name, so a same-named file aimed at a different folder is
+    /// most likely another deal's file: refuse rather than replace it. Into
+    /// its own folder, or from Add documents (nil), it's an update.
+    nonisolated static func addConflict(name: String, into folderID: UUID?,
+                                        documents: [KBDocument], folders: [KBFolder]) -> String? {
+        guard let folderID, let existing = documents.first(where: { $0.name == name }),
+              existing.folderID != folderID else { return nil }
+        let place = folders.first { $0.id == existing.folderID }.map { "“\($0.name)”" } ?? "No folder"
+        return "\(name) is already in \(place). Rename the file to keep both."
     }
 
     /// `documents` with `new` added. A file of the same name is an update:
