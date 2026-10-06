@@ -81,6 +81,11 @@ struct ParrotMain {
             MainActor.assumeIsolated { NudgeReplay.run(args: Array(args[(i + 1)...])) }
             return
         }
+        if let i = args.firstIndex(of: "--pill-test") {
+            let out = (i + 1 < args.count) ? args[i + 1] : nil
+            MainActor.assumeIsolated { PillTest.run(out: out) }
+            return
+        }
         if let i = args.firstIndex(of: "--tone-snapshot"), i + 1 < args.count {
             MainActor.assumeIsolated { ToneSnapshot.write(to: args[i + 1]) }
             return

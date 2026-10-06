@@ -1385,12 +1385,16 @@ final class TranscriptionEngine {
             return
         }
         kept[source] = nil
+        let started = Date()
         guard let first = clips.first, let last = clips.last, let whisper = await ensureWhisper() else { return }
+        if Self.loopTrace { print(String(format: "TRACE %@ rewind: Whisper ready after %.1f s", source.label, Date().timeIntervalSince(started))) }
         let bare = Self.withoutGlossary(options)
         var redone: [TranscriptionResult] = []
         for clip in clips {
+            let clipStarted = Date()
             let pieces = (try? await whisper.transcribe(audioArray: Self.normalizedForDecode(clip.audio),
                                                         decodeOptions: bare)) ?? []
+            if Self.loopTrace { print(String(format: "TRACE %@ rewind: %.1f s clip in %.1f s", source.label, clip.end - clip.start, Date().timeIntervalSince(clipStarted))) }
             let text = Self.cleaned(pieces.map(\.text).joined(separator: " "))
             if !text.isEmpty {
                 redone.append(TranscriptionResult(text: text, source: source, startTime: clip.start,
