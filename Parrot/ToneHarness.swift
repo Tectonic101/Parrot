@@ -153,7 +153,9 @@ enum ToneSnapshot {
 /// ScreenCaptureKit, the way Zoom and Meet share a screen, and saves that
 /// strip. The pill has `sharingType = .none`, so it must not be in it. Run
 /// from the signed app (`open -n -W dist/Parrot.app --args --pill-test out.png`)
-/// so the capture uses Parrot's Screen Recording permission.
+/// so the capture uses Parrot's Screen Recording permission. The app is
+/// sandboxed: a relative path lands in ~/Library/Containers/com.uygar.parrot/Data.
+/// Proof is in the PNG: no pill here, a pill with PILL_TEST_SHARED=1.
 @MainActor
 enum PillTest {
     static func run(out: String?) {
@@ -190,8 +192,7 @@ enum PillTest {
                 contentFilter: SCContentFilter(display: display, excludingWindows: []), configuration: config)
             let rep = NSBitmapImageRep(cgImage: image)
             try rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
-            let pillOnScreen = content.windows.contains { $0.owningApplication?.processID == ProcessInfo.processInfo.processIdentifier }
-            print("pill-test: captured \(path); the pill window is listed as shareable: \(pillOnScreen)")
+            print("pill-test: captured \(path)")
         } catch {
             print("pill-test: capture failed: \(error.localizedDescription)")
         }
