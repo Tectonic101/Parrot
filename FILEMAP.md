@@ -19,7 +19,7 @@ tree. Line counts are rough — they flag which files are worth reading whole.
 
 | File | L | Purpose |
 |---|---|---|
-| `Models/Meeting.swift` | 166 | `Meeting` record + `MeetingStatus` lifecycle + per-speaker names/embeddings |
+| `Models/Meeting.swift` | 381 | `Meeting` record + `MeetingStatus` lifecycle + per-speaker names/embeddings |
 | `Models/TranscriptSegment.swift` | 34 | One diarized, timestamped utterance |
 | `Models/Insight.swift` | 65 | `CallInsight` (stored) and `Insight` (live value) |
 | `Models/CallProfile.swift` | 92 | Per-call-type prompt config: kinds, sentiment gauges |
@@ -57,7 +57,7 @@ tree. Line counts are rough — they flag which files are worth reading whole.
 | `Services/ExportService.swift` | 265 | Export: TXT, SRT, Markdown (front matter, next-step checklist instead of repeated sections); `Parts` limits what an AI app gets |
 | `Services/PermissionFlow.swift` | 150 | System Audio (15+) / Screen Recording (14) + microphone grant flows |
 | `Services/AppUpdater.swift` | 148 | Sparkle updater: daily signed appcast check, installs on quit; started at launch; as Sparkle's delegate posts "update waiting" (held during a call) with Restart now; `UpdateNotice` copy + rule |
-| `Services/WhatsNew.swift` | 87 | What the release brings: the Home card after updating and Sparkle's update-window notes; copy rules; `--whats-new-html X.Y.Z` for release.sh |
+| `Services/WhatsNew.swift` | 92 | What the release brings: the Home card after updating and Sparkle's update-window notes; copy rules; `--whats-new-html X.Y.Z` for release.sh |
 | `Services/BugReport.swift` | 120 | Pre-filled GitHub issue: diagnostics, own-window screenshot, URL builder |
 | `Services/SpeakerProfileStore.swift` | 85 | Voiceprint matching (cosine ≥ 0.65), narrowed to calendar invitees; remember/forget |
 | `Services/Receipts.swift` | 175 | Report receipts: parse `[mm:ss]` stamps, verify against the transcript, commitment/placeholder rules |
@@ -106,7 +106,7 @@ tree. Line counts are rough — they flag which files are worth reading whole.
 | `Views/BriefViews.swift` | 147 | Brief summary line, documents-in-play row, live "Briefed" card (dashboard + copilot panel) |
 | `Views/SettingsCards.swift` | 191 | Settings building blocks: page, titled card, row (optional header tint), tag chip (the landing-page window look) |
 | `Views/KnowledgeSettingsView.swift` | 442 | Settings → Knowledge: folders, Use for pills and menu, About line, search, drag to move; `KnowledgeList` pure helpers |
-| `Views/MeetingDetailView.swift` | 1600 | Post-call tabs: transcript, insights, report (Write report when there is none); receipts actions, bookmarks card/rows; speaker naming popover (+ invitee suggestions) |
+| `Views/MeetingDetailView.swift` | 1634 | Post-call tabs: transcript, insights, report (Write report when there is none); receipts actions, bookmarks card/rows; speaker naming popover (+ invitee suggestions); `SortedLines` (cached time order + binary-search playing line) |
 | `Views/BugReportSheet.swift` | 150 | Bug/idea report form + the corner ladybug button |
 | `Views/ReportContentView.swift` | 473 | Report section cards, talk-ratio bar, prose parser (incl. one-line local reports), receipt chips + popover |
 | `Views/SentimentStripView.swift` | 60 | Sentiment gauge strip |

@@ -107,6 +107,7 @@ Tell Parrot what kind of call it is, and the profile decides what the Assistant 
 - **Moments you marked** during the call (the *Mark* button, or ⌃⌥M from any app) get their own card, and the report is written knowing they mattered.
 - **Share it:** a follow-up email with only the promises actually made (opens in Mail, addressed to the invitees), next steps into Apple Reminders, Markdown notes into your Obsidian vault or any folder (automatically, if you like), or a webhook to Zapier/Make/n8n for Slack, Notion and CRMs.
 - **Coaching:** talk balance, what went well, what to improve, objections and questions marked *Handled* or *Missed*, and commitments from both sides.
+- **No report?** Calls recorded with the Assistant off get one on demand: *Write report* on the meeting's Report tab.
 - **Per-call AI cost** down to the cent: model, tokens, calls and transcription minutes, with a line-by-line breakdown. Local features show $0.00, proudly.
 - **Playback synced with the transcript** (0.5x to 2x): click a line, hear that moment.
 - **Notes** you type during or after the call are kept with the meeting.
@@ -151,7 +152,7 @@ Whisper auto-detects the language of the call, or you can pin one of 14 (English
 - **Export** a meeting as Markdown, TXT (notes, report, Assistant cards and transcript in one file) or SRT subtitles.
 - **Searchable history.** Search titles and transcripts, meetings grouped by day, with a talk-ratio strip on each.
 - **Menu bar item** to start and stop from anywhere, and a dashboard with your meetings, hours and words.
-- **Keeps itself up to date** with signed Sparkle updates that install when you quit, never during a recording.
+- **Keeps itself up to date** with signed Sparkle updates that install when you quit, never during a recording. A notification says when one is ready (*Restart now* if you can't wait), and Home shows what's new once you're on it.
 - **A real user guide** inside the app (Help > Parrot Help, searchable and offline), also [on the web](https://openparrot.app/help).
 - **Bug reports in two clicks.** The ladybug in the corner writes the boring parts (version, model, settings) and hands you a pre-filled GitHub issue to check and post yourself.
 - Light and dark mode, native SwiftUI, no Electron.
@@ -173,6 +174,7 @@ This is a microphone-and-system-audio app, so you shouldn't have to take my word
 | Call detection | Nothing (asks macOS which apps use the mic) | No one | Unless you turn it off |
 | Ask Parrot | The few best-matching excerpts and the chat's recent messages (never on-device-only meetings) | The AI you pick for Ask Parrot (your reports AI by default) | Only with a cloud AI; nothing with Ollama |
 | Follow-up email | The meeting's transcript | Your reports AI | Only when you draft one |
+| Write report | The meeting's transcript | Your reports AI (on your Mac for on-device-only meetings) | Only when you click it |
 | Webhook | Summary, next steps, notes (transcript if allowed) | The address you paste | Only if you set one; never for on-device-only meetings |
 | Claude and other AI apps (MCP) | What the app reads when you ask it, only the parts you share | That app's company (Anthropic for Claude, under your account) | Only if you turn it on; never on-device-only meetings, audio or keys |
 | The Assistant on Ollama | Nothing | Your own Mac | Always local |
