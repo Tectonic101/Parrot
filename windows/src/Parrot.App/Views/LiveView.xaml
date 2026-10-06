@@ -71,7 +71,7 @@
                         </Button>
                         <TextBlock Text="ASSISTANT" Style="{StaticResource SectionLabel}" Margin="0,4,0,0" />
                     </DockPanel>
-                    <TextBlock Text="{Binding CopilotStatus}" Style="{StaticResource CaptionText}" Margin="0,0,0,8">
+                    <TextBlock Text="{Binding CopilotStatus}" Margin="0,0,0,8">
                         <TextBlock.Style>
                             <Style TargetType="TextBlock" BasedOn="{StaticResource CaptionText}">
                                 <Style.Triggers>
