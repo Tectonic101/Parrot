@@ -125,6 +125,7 @@ enum ProfileTest {
         testKnowledgeModel()
         testKnowledgeService()
         testKnowledgeStoreUpgrade()
+        testKnowledgeList()
         print(failures == 0 ? "ALL PASS" : "FAILURES: \(failures)")
         exit(failures == 0 ? 0 : 1)
     }
@@ -260,6 +261,34 @@ enum ProfileTest {
         check("kb upgrade: a new document stays in play after relaunch",
               fresh != nil && fresh?.scope == nil && fresh.map { reopened.isInPlay($0, callType: sales) } == true)
         check("kb upgrade: folders come back", reopened.folders.map(\.name) == ["Acme deal"])
+    }
+
+    @MainActor
+    static func testKnowledgeList() {
+        let presets = ProfilePresets.all()
+        guard let sales = presets.first(where: { $0.name == "Sales discovery" }),
+              let vendor = presets.first(where: { $0.name == "Vendor call" }) else {
+            check("kb list: presets present", false); return
+        }
+        typealias L = KnowledgeList
+        check("kb list: inheriting shows Same as folder", L.pill(own: nil, inherited: .only([sales.id]), profiles: presets) == .sameAsFolder)
+        check("kb list: No folder default shows Same as folder", L.pill(own: nil, inherited: .all, profiles: presets) == .sameAsFolder)
+        check("kb list: own types are highlighted", L.pill(own: .only([vendor.id]), inherited: .all, profiles: presets) == .types(["Vendor call"], own: true))
+        check("kb list: a folder's types are not highlighted", L.pill(own: .only([sales.id]), inherited: nil, profiles: presets) == .types(["Sales discovery"], own: false))
+        check("kb list: inheriting off shows not used", L.pill(own: nil, inherited: .off, profiles: presets) == .notUsed)
+        check("kb list: an off folder shows paused", L.pill(own: .off, inherited: nil, profiles: presets) == .paused)
+        check("kb list: only deleted call types shows not used", L.pill(own: .only([UUID()]), inherited: .all, profiles: presets) == .notUsed)
+
+        let doc = KBDocument(name: "05 - Service agreement.md", note: "Signed görüşme notes", chunkCount: 1, addedAt: .now)
+        check("kb list: search ignores case", L.matches(doc, "SERVICE"))
+        check("kb list: search reads the About line, accents ignored", L.matches(doc, "gorusme"))
+        check("kb list: a blank search matches", L.matches(doc, "  "))
+        check("kb list: search misses", !L.matches(doc, "invoice"))
+
+        check("kb list: delete message counts",
+              L.deleteMessage(count: 9) == "Its 9 documents move to No folder and keep their settings."
+                && L.deleteMessage(count: 1) == "Its document moves to No folder and keeps its settings.")
+        check("kb list: closing then opening a folder", L.toggled("a", in: "b") == "a,b" && L.toggled("a", in: "a,b") == "b")
     }
 
     static func testKindStyleFallback() {
