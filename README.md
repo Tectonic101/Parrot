@@ -65,7 +65,7 @@ An always-on assistant that watches the conversation and puts the right thing on
 <p align="center"><img src=".github/readme/knowledge.png" alt="Knowledge settings with security-faq.pdf tagged for Sales discovery, and the Assistant answering the SSO question from it" width="560"></p>
 
 - Drop in PDFs, text or Markdown: pricing sheets, FAQs, playbooks. They're chunked and embedded **on your Mac** with Apple's NaturalLanguage framework, plus an exact-word (BM25) index. Nothing is uploaded; only the few passages that match a question go to the AI you picked for the Assistant.
-- Give each document a note ("use for pricing questions") and tag it into the profiles that should use it.
+- Sort documents into **folders** and set **Use for** once per folder: every call type, a few, or Off to pause it. One document can have its own setting, anything the Assistant can't use says so, and a one-line about tells you (and the Assistant) what's inside.
 - **Coaching instructions** for every call ("keep answers short, always offer three price options").
 - Choose whether it may answer from **general knowledge** when your documents don't cover it. Every card says where its answer came from.
 
@@ -84,7 +84,7 @@ Free, no meeting bot, no 30-day limit, and your meetings stay on your Mac until 
 Tell Parrot what kind of call it is, and the profile decides what the Assistant watches for and how the report is written.
 
 - **Seven built-ins:** Default, Sales discovery, 1:1 coaching, Interview, Customer support, Vendor call, Generic. Sales looks for objections and buying signals; Interview for follow-ups and red flags; a 1:1 gets reflections and open questions.
-- **Make your own:** name it, say who the other side is, write a persona and rules, pick its documents, add your own card types (with color, icon, "keep on screen until handled") and gauges.
+- **Make your own:** name it, say who the other side is, write a persona and rules, choose which documents it uses, add your own card types (with color, icon, "keep on screen until handled") and gauges.
 
 ### 🗣️ Speaker names: names, not "Speaker 2"
 
