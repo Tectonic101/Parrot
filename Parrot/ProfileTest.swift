@@ -98,6 +98,7 @@ enum ProfileTest {
         testAskDeepTestFixes()
         testAskReviewFixes()
         testAskRouting()
+        testWriteReport()
         testOnboardingFlow()
         testCopilotSetupState()
         testProviderKeyCheck()
@@ -1665,6 +1666,91 @@ enum ProfileTest {
             prompts.append(system + "\n" + user)
             return "SAME"
         }
+    }
+
+    /// Stands in for the reports AI: counts calls, can be unset or fail.
+    private final class ReportRecorder: AnalysisProvider, @unchecked Sendable {
+        var configured = true
+        var failure: Error?
+        var summaries = 0
+        var coachings = 0
+        var isConfigured: Bool { configured }
+        func analyze(_ request: AnalysisRequest) async throws -> AnalysisResult { throw AnalysisError.missingAPIKey }
+        func summarize(transcript: String, insightTitles: [String], bookmarks: [String],
+                       instructions: String, counterpart: String) async throws -> String {
+            summaries += 1
+            if let failure { throw failure }
+            return "Summary"
+        }
+        func coachingReport(transcript: String, talkPercentMe: Int, instructions: String,
+                            counterpart: String) async throws -> String {
+            coachings += 1
+            if let failure { throw failure }
+            return "Coaching"
+        }
+        func complete(system: String, user: String, maxTokens: Int) async throws -> String { "" }
+    }
+
+    /// #107: Write report on a saved meeting that has none.
+    @MainActor
+    static func testWriteReport() {
+        let schema = Schema([Meeting.self, TranscriptSegment.self, CallInsight.self, CallProfile.self, SpeakerProfile.self])
+        guard let container = try? ModelContainer(
+            for: schema, configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
+        ) else { check("write report: container", false); return }
+        let context = container.mainContext
+        let ai = ReportRecorder()
+        let rm = RecordingManager(memory: MeetingMemory(directory: nil), chats: AskChatStore(directory: nil), provider: ai)
+        rm.attachForHarness(modelContext: context)
+        func meeting(lines: Int, imported: Bool = false) -> Meeting {
+            let m = Meeting(title: "Acme check-in")
+            m.status = .done
+            if imported { m.importedAt = .now }
+            context.insert(m)
+            for i in 0..<lines {
+                let s = TranscriptSegment(startTime: Double(i * 5), endTime: Double(i * 5 + 4),
+                                          text: "Line \(i)", speakerLabel: i.isMultiple(of: 2) ? "Me" : "Them")
+                s.meeting = m
+                context.insert(s)
+            }
+            return m
+        }
+        func write(_ m: Meeting) async -> String? {
+            do { try await rm.writeReport(m); return nil } catch { return error.localizedDescription }
+        }
+
+        let sem = DispatchSemaphore(value: 0)
+        Task { @MainActor in
+            let empty = await write(meeting(lines: 0))
+            check("write report: no transcript says so", empty == "This meeting has no transcript.")
+
+            ai.configured = false
+            let unset = meeting(lines: 4)
+            let unsetError = await write(unset)
+            check("write report: no AI set up says where to fix it", unsetError == "Set up the Assistant's AI in Settings first.")
+            check("write report: no AI set up never calls it", ai.summaries == 0)
+
+            ai.configured = true
+            ai.failure = AnalysisError.badResponse("Could not connect to the server.")
+            let failing = meeting(lines: 4)
+            let failError = await write(failing)
+            check("write report: the AI's error is shown", failError == "Could not connect to the server.")
+            check("write report: a failure leaves no report", failing.summary == nil && failing.coaching == nil)
+
+            ai.failure = nil
+            let ok = meeting(lines: 4)
+            let okError = await write(ok)
+            check("write report: succeeds", okError == nil)
+            check("write report: summary and coaching written", ok.summary == "Summary" && ok.coaching == "Coaching")
+
+            let coachingBefore = ai.coachings
+            let imported = meeting(lines: 4, imported: true)
+            _ = await write(imported)
+            check("write report: imported file gets the summary", imported.summary == "Summary")
+            check("write report: imported file gets no coaching", ai.coachings == coachingBefore && imported.coaching == nil)
+            sem.signal()
+        }
+        while sem.wait(timeout: .now()) == .timedOut { RunLoop.main.run(until: .now + 0.01) }
     }
 
     /// The whole `ask` path with a cloud AI: an on-device-only meeting never

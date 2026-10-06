@@ -888,12 +888,38 @@ final class RecordingManager {
 
     // MARK: - Post-Call Summary
 
+    /// The Report tab's Write report (#107): the report for a saved meeting
+    /// that has none, because the Assistant was off or its AI failed then.
+    /// Explicit, so it runs even with the Assistant off; private meetings stay
+    /// on this Mac, as the follow-up email does.
+    func writeReport(_ meeting: Meeting) async throws {
+        guard !meeting.segments.isEmpty else {
+            throw CocoaError(.featureUnsupported, userInfo: [NSLocalizedDescriptionKey: "This meeting has no transcript."])
+        }
+        guard callAnalysisEngine.provider.isConfigured else {
+            throw CocoaError(.featureUnsupported, userInfo: [NSLocalizedDescriptionKey: "Set up the Assistant's AI in Settings first."])
+        }
+        // Restart now waits for it, like the report after a call.
+        chainsInFlight += 1
+        defer {
+            chainsInFlight -= 1
+            AppUpdater.shared.becameIdle()
+        }
+        let error = await CloudGate.$scopeLocal.withValue(!CloudGate.mayLeaveMac(meeting) || CloudGate.forcesLocal) {
+            await generateSummary(meeting: meeting, includeCoaching: meeting.importedAt == nil)
+        }
+        if meeting.summary == nil, meeting.coaching == nil, let error { throw error }
+    }
+
     /// `includeCoaching` is false for imported files: a single mixed track has no
     /// "Me" channel, so talk-ratio/coaching would be measured against 0% and read
     /// as broken. The summary itself works fine from any transcript.
-    private func generateSummary(meeting: Meeting, includeCoaching: Bool = true) async {
+    /// Best-effort; returns the first failure for Write report to show.
+    @discardableResult
+    private func generateSummary(meeting: Meeting, includeCoaching: Bool = true) async -> Error? {
         let segments = meeting.sortedSegments
-        guard !segments.isEmpty else { return }
+        guard !segments.isEmpty else { return nil }
+        var firstError: Error?
 
         let transcript = meeting.promptTranscript
         let insightTitles = meeting.sortedInsights.map { "\($0.style.label): \($0.title)" }
@@ -912,9 +938,10 @@ final class RecordingManager {
             try? modelContext?.save()
         } catch {
             // Best-effort: the transcript and insights are already saved.
+            firstError = error
         }
 
-        guard includeCoaching else { return }
+        guard includeCoaching else { return firstError }
 
         // Coaching + follow-ups report, with the user's real talk balance
         // (seconds of speech, the same number the live gauge and timeline show).
@@ -930,7 +957,9 @@ final class RecordingManager {
             try? modelContext?.save()
         } catch {
             // Best-effort.
+            firstError = firstError ?? error
         }
+        return firstError
     }
 
     // MARK: - Post-call polish
