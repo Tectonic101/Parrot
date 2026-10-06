@@ -1,6 +1,8 @@
 #if os(macOS)
 import AppKit
 #endif
+import Foundation
+import Observation
 import Security
 
 /// Installs the official Ollama app from inside Parrot. The sandbox lets us
