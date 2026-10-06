@@ -107,6 +107,18 @@ struct KBDocument: Codable, Identifiable {
         scope = try? c.decodeIfPresent(KBScope.self, forKey: .scope)
     }
 
+    /// `profileIDs` is never written: it exists only to upgrade old indexes.
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(name, forKey: .name)
+        try c.encode(note, forKey: .note)
+        try c.encode(chunkCount, forKey: .chunkCount)
+        try c.encode(addedAt, forKey: .addedAt)
+        try c.encodeIfPresent(folderID, forKey: .folderID)
+        try c.encodeIfPresent(scope, forKey: .scope)
+    }
+
     /// This document as a pre-folders index upgrades: no folder, its tags
     /// become its own Use for, and no tags (which meant never used on a
     /// call) becomes off. Behaviour is unchanged, only visible now.

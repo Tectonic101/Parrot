@@ -423,9 +423,9 @@ enum HelpShots {
         // Two documents so the Knowledge page shows rows, notes, and profile tags.
         rm.knowledgeBase.seedForSnapshot(documents: [
             KBDocument(name: "security-faq.pdf", note: "Use for security and data questions",
-                       chunkCount: 14, addedAt: .now, profileIDs: Set([salesProfile?.id].compactMap { $0 })),
+                       chunkCount: 14, addedAt: .now, scope: .only(Set([salesProfile?.id].compactMap { $0 }))),
             KBDocument(name: "pricing-2026.md", note: "Use for pricing questions",
-                       chunkCount: 9, addedAt: .now, profileIDs: Set([salesProfile?.id].compactMap { $0 })),
+                       chunkCount: 9, addedAt: .now, scope: .only(Set([salesProfile?.id].compactMap { $0 }))),
         ])
 
         func settings(_ section: SettingsSection) -> some View {

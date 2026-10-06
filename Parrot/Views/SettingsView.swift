@@ -979,7 +979,7 @@ struct KBDocumentRow: View {
                     Button {
                         toggle(profile)
                     } label: {
-                        TagChip(label: profile.name, on: document.profileIDs.contains(profile.id))
+                        TagChip(label: profile.name, on: knowledgeBase.isInPlay(document, callType: profile.id))
                     }
                     .buttonStyle(.plain)
                 }
@@ -989,9 +989,8 @@ struct KBDocumentRow: View {
     }
 
     private func toggle(_ profile: CallProfile) {
-        var ids = document.profileIDs
-        if ids.contains(profile.id) { ids.remove(profile.id) } else { ids.insert(profile.id) }
-        knowledgeBase.setProfiles(ids, for: document)
+        let next = knowledgeBase.effectiveScope(of: document).toggling(profile.id, allTypes: profiles.map(\.id))
+        knowledgeBase.setScope(next, for: document)
     }
 }
 

@@ -31,9 +31,8 @@ enum KBAddTool {
             guard let doc = kb.documents.first(where: { $0.name == (path as NSString).lastPathComponent }) else {
                 print("kb-add FAILED: document not indexed"); exit(1)
             }
-            let profiles = ProfilePresets.all()
-            kb.setProfiles(Set(profiles.map(\.id)), for: doc)
-            print("kb-add: \(doc.name) → \(doc.chunkCount) chunks, tagged into \(profiles.count) profiles (already there: \(before))")
+            kb.setScope(.all, for: doc)
+            print("kb-add: \(doc.name) → \(doc.chunkCount) chunks, used on all call types (already there: \(before))")
             exit(0)
         }
         dispatchMain()
