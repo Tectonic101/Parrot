@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 import SwiftUI
 
@@ -336,3 +337,4 @@ enum CopilotReplay {
                      calls, Double(calls) / minutes, stats.attempts, stats.hits, stats.failures))
     }
 }
+#endif

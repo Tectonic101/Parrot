@@ -1,3 +1,4 @@
+#if os(macOS)
 import SwiftUI
 import AppKit
 import SwiftData
@@ -1367,3 +1368,4 @@ enum ReportSnapshot {
     - Create a calm-down menu and report back on which skills Alex likes [52:40]
     """
 }
+#endif

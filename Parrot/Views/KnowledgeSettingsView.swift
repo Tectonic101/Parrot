@@ -130,7 +130,7 @@ struct KnowledgeSettingsView: View {
                         .focused($renameFocused)
                         .onAppear { renameFocused = true }
                         .onSubmit { commitRename(folder) }
-                        .onExitCommand { renamingID = nil }
+                        .onEscape { renamingID = nil }
                         .onChange(of: renameFocused) { _, focused in
                             if !focused, renamingID == folder.id { commitRename(folder) }
                         }
@@ -162,7 +162,7 @@ struct KnowledgeSettingsView: View {
                     } label: {
                         Image(systemName: "ellipsis")
                     }
-                    .menuStyle(.borderlessButton)
+                    .borderlessMenuStyle()
                     .menuIndicator(.hidden)
                     .fixedSize()
                     .accessibilityLabel("Folder actions")
@@ -259,7 +259,7 @@ struct KBDocumentRow: View {
                 } label: {
                     Image(systemName: "ellipsis")
                 }
-                .menuStyle(.borderlessButton)
+                .borderlessMenuStyle()
                 .menuIndicator(.hidden)
                 .fixedSize()
                 .accessibilityLabel("Document actions")

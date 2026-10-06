@@ -48,10 +48,12 @@ struct SidebarView: View {
                     page = .ask
                 }
                 .help("Ask anything about your past calls (⌘K)")
+                #if os(macOS)
                 NavRow(title: "Claude & AI Apps", icon: "app.connected.to.app.below.fill", selected: page == .aiApps) {
                     page = .aiApps
                 }
                 .help("Use your meetings in Claude, Codex or Cursor")
+                #endif
             }
             .padding(.horizontal, 8)
 
@@ -374,7 +376,7 @@ private struct AccountChip: View {
     }
 
     private var name: String {
-        NSFullUserName().nilIfEmpty ?? "You"
+        Platform.userFullName.nilIfEmpty ?? "You"
     }
 
     private var initials: String {

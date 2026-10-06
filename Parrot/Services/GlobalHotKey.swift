@@ -1,3 +1,4 @@
+#if os(macOS)
 import AppKit
 import Carbon.HIToolbox
 
@@ -99,3 +100,4 @@ final class GlobalHotKey {
         handlerInstalled = (status == noErr)
     }
 }
+#endif

@@ -23,7 +23,7 @@ struct PermissionsStep: View {
             screenGranted = PermissionFlow.systemAudioLooksGranted()
             screenAsked = UserDefaults.standard.bool(forKey: PermissionFlow.tapAskedKey)
         } else {
-            screenGranted = CGPreflightScreenCaptureAccess()
+            screenGranted = PermissionFlow.screenCapturePreflight()
             screenAsked = UserDefaults.standard.bool(forKey: PermissionFlow.screenAskedKey)
         }
     }
@@ -51,7 +51,9 @@ struct PermissionsStep: View {
             Text("Start with permissions")
                 .font(Theme.Typography.title())
 
-            Text("Parrot needs two macOS permissions to hear your calls. Audio only: it never sees your screen, and nothing leaves your Mac.")
+            Text(Platform.isMobile
+                 ? "Parrot needs the microphone to hear your meeting. Audio only, and nothing leaves this device unless you turn on a cloud AI."
+                 : "Parrot needs two macOS permissions to hear your calls. Audio only: it never sees your screen, and nothing leaves your Mac.")
                 .font(Theme.Typography.body)
                 .foregroundStyle(Theme.Colors.ink2)
                 .multilineTextAlignment(.center)
@@ -63,7 +65,7 @@ struct PermissionsStep: View {
                     icon: "mic",
                     askTitle: "Help Parrot hear you",
                     grantedTitle: "Parrot can hear you",
-                    subtitle: "Microphone, your side of the call",
+                    subtitle: Platform.isMobile ? "Microphone, everyone in the room" : "Microphone, your side of the call",
                     isGranted: micGranted,
                     action: {
                         Task { @MainActor in
@@ -72,6 +74,7 @@ struct PermissionsStep: View {
                     }
                 )
 
+                #if os(macOS)
                 PermissionRow(
                     icon: "speaker.wave.2",
                     askTitle: "Help Parrot hear your meeting",
@@ -95,6 +98,7 @@ struct PermissionsStep: View {
                         .font(Theme.Typography.caption)
                         .foregroundStyle(Theme.Colors.ink2)
                 }
+                #endif
             }
             .frame(maxWidth: 380)
             .animation(.spring(response: 0.35, dampingFraction: 0.8), value: micGranted)
@@ -107,7 +111,7 @@ struct PermissionsStep: View {
         // Rows flip to their granted look on their own: returning from System
         // Settings fires didBecomeActive, and the 1 s poll catches grants made
         // while the OS dialog (a separate process) had focus.
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: Platform.didBecomeActiveNotification)) { _ in
             refreshPermissions()
         }
         .task {

@@ -1,5 +1,9 @@
+#if os(macOS)
 import AppKit
+#endif
 import SwiftUI
+
+#if os(macOS)
 
 /// The floating pill: one nudge over every app, full-screen calls included,
 /// for about 10 seconds. A non-activating panel, so the call app keeps the
@@ -92,6 +96,7 @@ final class NudgePillController {
         return panel
     }
 }
+#endif
 
 struct NudgePillView: View {
     let nudge: Nudge

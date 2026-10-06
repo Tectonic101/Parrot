@@ -45,7 +45,7 @@ struct SpeechModelStep: View {
             .frame(maxWidth: 460)
             if !showAll {
                 Button("Show all \(Self.modelChoices.count) models") { showAll = true }
-                    .buttonStyle(.link)
+                    .linkButtonStyle()
             }
             SpeechDownloadRow()
                 .frame(maxWidth: 460)

@@ -78,8 +78,8 @@ private struct OllamaSetupRows: View {
             if let appURL, appURL.path.contains("/Downloads/") {
                 HStack {
                     Text("Move Ollama to Applications so it stays put.")
-                    Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([appURL]) }
-                        .buttonStyle(.link)
+                    Button("Show in Finder") { Platform.reveal(appURL) }
+                        .linkButtonStyle()
                 }
                 .font(Theme.Typography.caption)
                 .foregroundStyle(Theme.Colors.ink2)

@@ -16,15 +16,22 @@ struct ContentView: View {
     /// File → Import Audio… (⌘O); the dashboard has its own importer button.
     @State private var showMenuImporter = false
     @State private var showBugReport = false
+    #if os(iOS)
+    /// iPhone shows one column at a time: picking anything in the sidebar
+    /// moves to the detail column (iPad and Mac show both and ignore it).
+    @State private var compactColumn: NavigationSplitViewColumn = .sidebar
+    #endif
+    #if os(macOS)
     /// Grabbed when the button is pressed, before the sheet covers the thing
     /// the user wants to show us.
     @State private var reportScreenshot: NSImage?
+    #endif
 
     var body: some View {
-        NavigationSplitView {
+        splitView {
             SidebarView(
-                selectedMeeting: $selectedMeeting,
-                page: $page,
+                selectedMeeting: showingDetail($selectedMeeting),
+                page: showingDetail($page),
                 searchText: $searchText
             )
             .navigationSplitViewColumnWidth(min: 215, ideal: 236, max: 320)
@@ -36,7 +43,11 @@ struct ContentView: View {
             } else if page == .settings {
                 settingsPane
             } else if page == .aiApps {
+                #if os(macOS)
                 AIAppsPageView()
+                #else
+                EmptyStateView()
+                #endif
             } else if page == .dashboard {
                 DashboardView(selectedMeeting: $selectedMeeting, page: $page)
             } else if let meeting = selectedMeeting {
@@ -62,11 +73,14 @@ struct ContentView: View {
         }
         .overlay(alignment: .top) {
             VStack(spacing: 8) {
+                #if os(macOS)
                 AIAppsConnectedBanner()
+                #endif
                 if let progress = recordingManager.importProgress {
                     ImportingBanner(progress: progress)
                         .transition(.move(edge: .top).combined(with: .opacity))
                 }
+                #if os(macOS)
                 if let prompt = recordingManager.callWatcher.prompt {
                     CallPromptBanner(
                         prompt: prompt,
@@ -76,9 +90,11 @@ struct ContentView: View {
                     )
                     .transition(.move(edge: .top).combined(with: .opacity))
                 }
+                #endif
             }
             .padding(.top, 12)
         }
+        #if os(macOS)
         .animation(.easeInOut(duration: 0.2), value: recordingManager.callWatcher.prompt)
         // Always reachable, except mid-call: a live recording is the one time
         // the window is nobody else's business (and it keeps the button out of
@@ -93,6 +109,7 @@ struct ContentView: View {
         .sheet(isPresented: $showBugReport) {
             BugReportSheet(screenshot: reportScreenshot)
         }
+        #endif
         // ⌘K, the menu and "Ask about this meeting" open the Ask page.
         .onChange(of: appSession.askRequest) { _, request in
             if request != nil { page = .ask }
@@ -123,6 +140,11 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .parrotReportBug)) { _ in
             presentBugReport()
         }
+        #if os(iOS)
+        .onReceive(NotificationCenter.default.publisher(for: .parrotShowSettings)) { _ in
+            page = .settings
+        }
+        #endif
         .animation(.easeInOut(duration: 0.2), value: recordingManager.importProgress)
         // Mirror the selection for the File → Export menu items.
         .onChange(of: selectedMeeting) { _, meeting in
@@ -144,6 +166,31 @@ struct ContentView: View {
         }
     }
 
+    /// The split view; on iOS it follows `compactColumn` so iPhone can move
+    /// between the sidebar and the page it opens.
+    @ViewBuilder
+    private func splitView<Sidebar: View, Detail: View>(
+        @ViewBuilder sidebar: () -> Sidebar, @ViewBuilder detail: () -> Detail
+    ) -> some View {
+        #if os(iOS)
+        NavigationSplitView(preferredCompactColumn: $compactColumn, sidebar: sidebar, detail: detail)
+        #else
+        NavigationSplitView(sidebar: sidebar, detail: detail)
+        #endif
+    }
+
+    /// A sidebar binding that, on iPhone, also shows the detail column when set.
+    private func showingDetail<Value>(_ binding: Binding<Value>) -> Binding<Value> {
+        #if os(iOS)
+        Binding(get: { binding.wrappedValue }, set: {
+            binding.wrappedValue = $0
+            compactColumn = .detail
+        })
+        #else
+        binding
+        #endif
+    }
+
     /// Selects the meeting a jump points at; the detail view seeks.
     private func open(_ jump: AppSession.Jump?) {
         guard let jump else { return }
@@ -158,8 +205,12 @@ struct ContentView: View {
     }
 
     private func presentBugReport() {
+        #if os(macOS)
         reportScreenshot = BugReport.captureWindow()
         showBugReport = true
+        #else
+        MeetingActions.open("\(MeetingActions.repoURL)/issues/new")
+        #endif
     }
 
     private func startImport(_ url: URL) {

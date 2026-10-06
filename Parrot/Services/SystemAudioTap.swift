@@ -1,3 +1,4 @@
+#if os(macOS)
 import AVFoundation
 import CoreAudio
 import os
@@ -292,3 +293,4 @@ final class SystemAudioTap {
         return objectID
     }
 }
+#endif

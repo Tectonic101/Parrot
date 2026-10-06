@@ -1,3 +1,4 @@
+#if os(macOS)
 import SwiftUI
 
 /// The report form. Everything that will be sent is on screen before it goes:
@@ -142,3 +143,4 @@ struct BugReportButton: View {
         .accessibilityLabel("Report a bug or suggest an idea")
     }
 }
+#endif

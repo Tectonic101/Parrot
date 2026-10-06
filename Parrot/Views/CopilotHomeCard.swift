@@ -25,7 +25,7 @@ struct CopilotHomeCard: View {
             }
         }
         .task { hasClaudeKey = await APIKeyStore.loadInBackground() != nil }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: Platform.didBecomeActiveNotification)) { _ in
             Task { hasClaudeKey = await APIKeyStore.loadInBackground() != nil }
         }
     }

@@ -1,3 +1,4 @@
+#if os(macOS)
 import SwiftUI
 import SwiftData
 
@@ -259,3 +260,4 @@ private struct WindowOpener: View {
     @Environment(\.openWindow) private var openWindow
     var body: some View { Color.clear.onAppear { register(openWindow) } }
 }
+#endif

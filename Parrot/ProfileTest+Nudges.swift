@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 
 /// Live nudges and the tone timeline (spec 2026-09-29).
@@ -296,3 +297,4 @@ extension ProfileTest {
         check("replay: nothing else in a normal call", nudges.count == 1)
     }
 }
+#endif

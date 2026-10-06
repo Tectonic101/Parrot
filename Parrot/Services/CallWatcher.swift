@@ -1,3 +1,4 @@
+#if os(macOS)
 import AppKit
 import UserNotifications
 
@@ -354,3 +355,4 @@ enum NotificationAccess {
         state != .on && (mode != .off || reminders)
     }
 }
+#endif

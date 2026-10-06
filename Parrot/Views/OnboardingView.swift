@@ -16,8 +16,12 @@ struct OnboardingView: View {
                 case .copilotPath: CopilotPathStep()
                 case .speechModel: SpeechModelStep()
                 case .copilotSetup: CopilotSetupStep()
+                #if os(macOS)
                 case .automatic: AutomaticStep()
                 case .aiApps: AIAppsStep()
+                #else
+                case .automatic, .aiApps: ReadyStep()
+                #endif
                 case .ready: ReadyStep()
                 }
             }
@@ -55,7 +59,11 @@ struct OnboardingView: View {
             }
             .padding(Theme.Metrics.pad)
         }
+        #if os(macOS)
         .frame(width: 600, height: 680)
+        #else
+        .frame(maxWidth: 600, maxHeight: .infinity)
+        #endif
     }
 }
 

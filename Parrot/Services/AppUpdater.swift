@@ -1,3 +1,4 @@
+#if os(macOS)
 import Sparkle
 
 /// Self-updating, via Sparkle.
@@ -54,3 +55,4 @@ final class AppUpdater {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"
     }
 }
+#endif

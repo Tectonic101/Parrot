@@ -1,3 +1,4 @@
+#if os(macOS)
 import AppKit
 import Foundation
 
@@ -185,3 +186,4 @@ enum MCPBundle {
         return rep.representation(using: .png, properties: [:])
     }
 }
+#endif

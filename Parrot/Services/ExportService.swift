@@ -234,7 +234,15 @@ enum ExportService {
     // MARK: - Save to File
 
     static func save(content: String, filename: String, extension ext: String) throws -> URL {
+        #if os(iOS)
+        // iOS has no Downloads folder: exports land in Documents/Exports,
+        // which the Files app shows under On My iPhone/iPad → Parrot.
+        let downloadsDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Exports", isDirectory: true)
+        try FileManager.default.createDirectory(at: downloadsDir, withIntermediateDirectories: true)
+        #else
         let downloadsDir = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first!
+        #endif
         // Filenames come from user-typed meeting titles — "/" and ":" break the
         // path, and identical titles must not silently overwrite prior exports.
         let safe = filename

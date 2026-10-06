@@ -38,7 +38,7 @@ struct ThinkingDots: View {
 /// badge, so an answer reads as the app's AI.
 struct ParrotAvatar: View {
     var body: some View {
-        Image(nsImage: NSApp.applicationIconImage)
+        Image(platformImage: Platform.appIcon)
             .resizable()
             .interpolation(.high)
             .frame(width: Theme.Metrics.avatar, height: Theme.Metrics.avatar)

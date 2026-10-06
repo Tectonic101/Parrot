@@ -139,3 +139,79 @@ targets:
         SUEnableAutomaticChecks: true
         SUAutomaticallyUpdate: true
         SUScheduledCheckInterval: 86400
+
+  # iPhone and iPad. Same SwiftUI sources as the Mac app; Mac-only files and
+  # calls sit behind `#if os(macOS)` and iOS stand-ins live in Parrot/Platform.
+  # The device mic is the only capture (iOS never exposes another app's audio).
+  # No Sparkle (the App Store updates iOS apps).
+  ParrotMobile:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    scheme: {}
+    sources:
+      - path: Parrot
+        excludes:
+          - "**/.DS_Store"
+          - "Info.plist"
+          - "Parrot.entitlements"
+          - "Fonts/Outfit-LICENSE.txt"
+    settings:
+      base:
+        # Change to your own reverse-DNS id before signing with your team.
+        PRODUCT_BUNDLE_IDENTIFIER: com.tectonic101.parrot
+        PRODUCT_NAME: Parrot
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "1"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SWIFT_VERSION: "5.10"
+        IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+        GENERATE_INFOPLIST_FILE: false
+        INFOPLIST_FILE: ParrotMobile/Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        CODE_SIGN_STYLE: Automatic
+        # Set to your Apple Developer team id to run on a device / TestFlight.
+        DEVELOPMENT_TEAM: ""
+        # Same WhisperKit explicit-modules race the Mac build avoids.
+        SWIFT_ENABLE_EXPLICIT_MODULES: NO
+    dependencies:
+      - package: WhisperKit
+        product: WhisperKit
+      - package: FluidAudio
+        product: FluidAudio
+      - package: CSpeexDSP
+        product: CSpeexDSP
+    info:
+      path: ParrotMobile/Info.plist
+      properties:
+        CFBundleDisplayName: Parrot
+        CFBundleIconName: AppIcon
+        LSRequiresIPhoneOS: true
+        UILaunchScreen: {}
+        UIApplicationSupportsIndirectInputEvents: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        # Keeps recording with the screen locked or another app in front.
+        UIBackgroundModes: [audio]
+        # Exports land in Documents/Exports, visible in the Files app.
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+        ITSAppUsesNonExemptEncryption: false
+        NSMicrophoneUsageDescription: "Parrot records the meeting through the microphone so it can transcribe it on this device."
+        NSRemindersFullAccessUsageDescription: "Parrot adds a call's next steps to a Parrot list in Reminders when you ask it to."
+        NSCalendarsFullAccessUsageDescription: "Parrot reads your calendar to name your meetings and know who's in them. It never changes your calendar."
+        UIAppFonts:
+          - Outfit-Regular.otf
+          - Outfit-Medium.otf
+          - Outfit-SemiBold.otf
+          - Outfit-Bold.otf
+        CFBundleURLTypes:
+          - CFBundleURLName: com.tectonic101.parrot.link
+            CFBundleURLSchemes: [openparrot]

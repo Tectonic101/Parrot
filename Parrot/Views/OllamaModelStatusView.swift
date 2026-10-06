@@ -26,7 +26,7 @@ struct OllamaModelStatusView: View {
                 Text("Ollama isn't open. Get it free at ollama.com, open it, then check again.")
                     .foregroundStyle(Theme.Colors.ink2)
                 Button("Check Again") { Task { await ollama.refresh(model: model) } }
-                    .buttonStyle(.link)
+                    .linkButtonStyle()
 
             case .missing:
                 Image(systemName: "arrow.down.circle")
@@ -62,7 +62,7 @@ struct OllamaModelStatusView: View {
                     .foregroundStyle(Theme.Colors.ink2)
                     .lineLimit(2)
                 Button("Retry") { ollama.pull(model) }
-                    .buttonStyle(.link)
+                    .linkButtonStyle()
                     .disabled(ollama.isPulling)
                 waitingNote(ollama)
             }

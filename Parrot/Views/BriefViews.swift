@@ -20,7 +20,11 @@ enum BriefSummary {
 /// The documents the copilot can quote on this call, with a jump to Settings → Knowledge.
 struct DocumentsInPlayRow: View {
     let names: [String]
+    #if os(macOS)
     @Environment(\.openSettings) private var openSettings
+    #else
+    private let openSettings = SettingsOpener()
+    #endif
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {

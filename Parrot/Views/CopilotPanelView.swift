@@ -11,7 +11,11 @@ import SwiftUI
 /// look: the hero.
 struct CopilotPanelView: View {
     @Environment(RecordingManager.self) private var recordingManager
+    #if os(macOS)
     @Environment(\.openSettings) private var openSettings
+    #else
+    private let openSettings = SettingsOpener()
+    #endif
 
     /// Set by tapping a card timestamp; LiveRecordingView scrolls the transcript there.
     @Binding var transcriptJumpTarget: TimeInterval?
@@ -535,8 +539,7 @@ struct HeroInsightCard: View {
             HStack(spacing: 8) {
                 if isSayable {
                     Button {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(insight.detail, forType: .string)
+                        Platform.copy(insight.detail)
                         copied = true
                         Task {
                             try? await Task.sleep(for: .seconds(1.5))
@@ -663,8 +666,7 @@ struct InsightCard: View {
 
                 if insight.kindKey == "suggestion" {
                     Button {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(insight.detail, forType: .string)
+                        Platform.copy(insight.detail)
                         copied = true
                         Task {
                             try? await Task.sleep(for: .seconds(1.5))
@@ -736,8 +738,7 @@ struct SuggestedReplyBox: View {
             Spacer(minLength: 4)
 
             Button {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(reply, forType: .string)
+                Platform.copy(reply)
                 copied = true
                 Task {
                     try? await Task.sleep(for: .seconds(1.5))

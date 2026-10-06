@@ -1,0 +1,96 @@
+# iPhone + iPad build: generates the Xcode project from project.yml and
+# builds the ParrotMobile target for the simulator and (unsigned) for devices.
+# No secrets: signing for a device or TestFlight needs your own Apple team.
+name: iOS
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "Parrot/**"
+      - "project.yml"
+      - "Package.swift"
+      - "Package.resolved"
+      - "Vendor/**"
+      - ".github/workflows/ios.yml"
+  pull_request:
+    paths:
+      - "Parrot/**"
+      - "project.yml"
+      - "Package.swift"
+      - "Package.resolved"
+      - "Vendor/**"
+      - ".github/workflows/ios.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          sudo xcode-select -s "$(ls -d /Applications/Xcode_16*.app | sort -V | tail -1)"
+          xcodebuild -version
+          xcodebuild -showsdks | grep -i ios
+
+      - name: Generate Xcode project
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: Cache SwiftPM
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Developer/Xcode/DerivedData/**/SourcePackages
+          key: spm-ios-${{ hashFiles('Package.resolved', 'project.yml') }}
+          restore-keys: spm-ios-
+
+      - name: Build for iOS Simulator
+        run: |
+          set -o pipefail
+          xcodebuild -project Parrot.xcodeproj -scheme ParrotMobile \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build/sim \
+            -skipPackagePluginValidation -skipMacroValidation \
+            CODE_SIGNING_ALLOWED=NO build 2>&1 | tee sim.log | grep -E "error:|warning: .*(deprecated|unavailable)|BUILD (SUCCEEDED|FAILED)" || true
+          grep -q "BUILD SUCCEEDED" sim.log
+
+      - name: Build for iOS devices (unsigned)
+        run: |
+          set -o pipefail
+          xcodebuild -project Parrot.xcodeproj -scheme ParrotMobile \
+            -destination 'generic/platform=iOS' -configuration Release \
+            -derivedDataPath build/device \
+            -skipPackagePluginValidation -skipMacroValidation \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build 2>&1 | tee device.log | grep -E "error:|BUILD (SUCCEEDED|FAILED)" || true
+          grep -q "BUILD SUCCEEDED" device.log
+          mkdir -p Payload
+          cp -R build/device/Build/Products/Release-iphoneos/Parrot.app Payload/
+          zip -qry Parrot-iOS-unsigned.ipa Payload
+
+      - name: Upload unsigned build
+        uses: actions/upload-artifact@v4
+        with:
+          name: Parrot-iOS-unsigned
+          path: Parrot-iOS-unsigned.ipa
+          retention-days: 30
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-build-logs
+          path: |
+            sim.log
+            device.log
+          if-no-files-found: ignore

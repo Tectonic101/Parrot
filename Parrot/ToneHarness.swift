@@ -1,3 +1,4 @@
+#if os(macOS)
 import AppKit
 import SwiftData
 import SwiftUI
@@ -146,3 +147,4 @@ enum ToneSnapshot {
         return SnapshotIO.write(data, to: path)
     }
 }
+#endif
