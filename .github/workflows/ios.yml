@@ -65,7 +65,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO build 2>&1 | tee sim.log | grep -E "error:|warning: .*(deprecated|unavailable)|BUILD (SUCCEEDED|FAILED)" || true
           if ! grep -q "BUILD SUCCEEDED" sim.log; then
             # Linker failures say only "linker command failed"; show the symbols.
-            grep -E -A6 "Undefined symbols|duplicate symbol|ld: (warning: )?(error|library|framework)|ld: " sim.log | head -150 || true
+            grep -v "ld: warning" sim.log | grep -E -A6 "Undefined symbols|duplicate symbol|^ld: |error:" | head -150 || true
             exit 1
           fi
 
@@ -79,7 +79,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build 2>&1 | tee device.log | grep -E "error:|BUILD (SUCCEEDED|FAILED)" || true
           if ! grep -q "BUILD SUCCEEDED" device.log; then
             # Linker failures say only "linker command failed"; show the symbols.
-            grep -E -A6 "Undefined symbols|duplicate symbol|ld: (warning: )?(error|library|framework)|ld: " device.log | head -150 || true
+            grep -v "ld: warning" device.log | grep -E -A6 "Undefined symbols|duplicate symbol|^ld: |error:" | head -150 || true
             exit 1
           fi
           mkdir -p Payload
