@@ -420,13 +420,22 @@ enum HelpShots {
             meSeconds: 41, themSeconds: 52,
             brief: "Renewal call with Acme. Legal wants to know where the data is stored.")
 
-        // Two documents so the Knowledge page shows rows, notes, and profile tags.
+        // Folders, an own Use for, an off folder and an unused document, so
+        // the Knowledge page shows every state.
+        let vendorProfile = (try? context.fetch(FetchDescriptor<CallProfile>()))?
+            .first { $0.name == "Vendor call" }
+        let dealFolder = KBFolder(name: "Acme deal", scope: .only(Set([salesProfile?.id].compactMap { $0 })))
+        let oldFolder = KBFolder(name: "Old deals", scope: .off)
         rm.knowledgeBase.seedForSnapshot(documents: [
-            KBDocument(name: "security-faq.pdf", note: "Use for security and data questions",
-                       chunkCount: 14, addedAt: .now, scope: .only(Set([salesProfile?.id].compactMap { $0 }))),
-            KBDocument(name: "pricing-2026.md", note: "Use for pricing questions",
-                       chunkCount: 9, addedAt: .now, scope: .only(Set([salesProfile?.id].compactMap { $0 }))),
-        ])
+            KBDocument(name: "security-faq.pdf", note: "Security and data answers for buyers",
+                       chunkCount: 14, addedAt: .now, folderID: dealFolder.id),
+            KBDocument(name: "pricing-2026.md", note: "Plans and discounts, 2026",
+                       chunkCount: 9, addedAt: .now, folderID: dealFolder.id),
+            KBDocument(name: "mutual-nda.md", note: "Signed NDA, Sept 2026", chunkCount: 4, addedAt: .now,
+                       folderID: dealFolder.id, scope: .only(Set([vendorProfile?.id].compactMap { $0 }))),
+            KBDocument(name: "northwind-proposal.md", chunkCount: 12, addedAt: .now, folderID: oldFolder.id),
+            KBDocument(name: "roadmap.md", chunkCount: 20, addedAt: .now, scope: .off),
+        ], folders: [dealFolder, oldFolder])
 
         func settings(_ section: SettingsSection) -> some View {
             SettingsView(isEmbedded: false, initialSection: section)
