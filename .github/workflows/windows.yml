@@ -1,0 +1,82 @@
+# Parrot for Windows: build, unit tests and a self-contained win-x64 build on a
+# real Windows runner. Only runs when the Windows port (windows/**) changes.
+# Unsigned: code signing needs the maintainer's own certificate (see windows/README.md).
+# No secrets are used or needed.
+name: Windows
+
+on:
+  push:
+    paths:
+      - "windows/**"
+      - ".github/workflows/windows.yml"
+  pull_request:
+    paths:
+      - "windows/**"
+      - ".github/workflows/windows.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test-publish:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: windows
+    env:
+      DOTNET_NOLOGO: "1"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Cache NuGet
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('windows/**/*.csproj', 'windows/Directory.Build.props') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Restore
+        run: dotnet restore Parrot.Windows.sln
+
+      - name: Build
+        run: dotnet build Parrot.Windows.sln -c Release --no-restore
+
+      - name: Test
+        run: dotnet test Parrot.Windows.sln -c Release --no-build --logger "trx;LogFileName=results.trx" --results-directory TestResults
+
+      - name: Publish (self-contained win-x64)
+        run: >
+          dotnet publish src/Parrot.App/Parrot.App.csproj -c Release -r win-x64 --self-contained true
+          -p:PublishReadyToRun=false -o publish/Parrot
+
+      - name: Zip
+        run: |
+          Copy-Item README.md publish/Parrot/README.md
+          Compress-Archive -Path publish/Parrot -DestinationPath Parrot-Windows.zip -Force
+          Get-Item Parrot-Windows.zip | Select-Object Name, Length
+
+      # The artifact holds Parrot-Windows.zip (one "Parrot" folder with Parrot.exe).
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Parrot-Windows
+          path: windows/Parrot-Windows.zip
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: windows/TestResults
+          if-no-files-found: ignore

@@ -1,5 +1,7 @@
 import AVFoundation
+#if os(macOS)
 import AppKit
+#endif
 import CoreGraphics
 
 /// The one place that decides how to ask for System Audio (macOS 15+) /
@@ -27,8 +29,21 @@ enum PermissionFlow {
         return askedBefore ? .openSettings : .promptShown
     }
 
+    /// Side-effect-free Screen Recording check. iOS has no such permission
+    /// (and nothing to capture), so it reads as granted there.
+    static func screenCapturePreflight() -> Bool {
+        #if os(macOS)
+        CGPreflightScreenCaptureAccess()
+        #else
+        true
+        #endif
+    }
+
     @discardableResult
     static func requestScreenCapture() -> ScreenCaptureStep {
+        #if os(iOS)
+        return .granted
+        #else
         let step = nextScreenCaptureStep(
             preflightGranted: CGPreflightScreenCaptureAccess(),
             askedBefore: UserDefaults.standard.bool(forKey: screenAskedKey)
@@ -54,6 +69,7 @@ enum PermissionFlow {
             }
         }
         return step
+        #endif
     }
 
     // MARK: - System audio (macOS 15+, Core Audio process tap)
@@ -87,6 +103,9 @@ enum PermissionFlow {
     @available(macOS 15.0, *)
     @discardableResult
     static func requestSystemAudioCapture() -> ScreenCaptureStep {
+        #if os(iOS)
+        return .granted
+        #else
         let defaults = UserDefaults.standard
         let step = nextSystemAudioStep(
             proven: defaults.bool(forKey: tapProvenKey),
@@ -111,11 +130,12 @@ enum PermissionFlow {
             openSettings(pane: "Privacy_ScreenCapture")
         }
         return step
+        #endif
     }
 
     /// Silent status for onboarding UI — must never fire a prompt.
     static func systemAudioLooksGranted() -> Bool {
-        UserDefaults.standard.bool(forKey: tapProvenKey) || CGPreflightScreenCaptureAccess()
+        UserDefaults.standard.bool(forKey: tapProvenKey) || screenCapturePreflight()
     }
 
     /// notDetermined → the one official OS prompt; denied/restricted → Settings.
@@ -133,6 +153,6 @@ enum PermissionFlow {
     }
 
     static func openSettings(pane: String) {
-        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?\(pane)")!)
+        Platform.openPrivacySettings(pane: pane)
     }
 }

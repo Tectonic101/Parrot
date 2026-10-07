@@ -1,3 +1,4 @@
+#if os(macOS)
 import SwiftUI
 
 struct AutomaticStep: View {
@@ -97,8 +98,9 @@ struct AutomaticStep: View {
         }
         .padding(Theme.Metrics.pad)
         .task { notifications = await NotificationAccess.state() }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: Platform.didBecomeActiveNotification)) { _ in
             Task { notifications = await NotificationAccess.state() }
         }
     }
 }
+#endif

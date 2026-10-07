@@ -1,4 +1,3 @@
-import AppKit
 import Foundation
 import SwiftData
 
@@ -14,8 +13,7 @@ extension RecordingManager {
         var notice: String?
         if method == .noticeShared {
             notice = Consent.currentNotice
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(Consent.currentNotice, forType: .string)
+            Platform.copy(Consent.currentNotice)
         }
         meeting.consent = Consent(method: method, at: Date.now.timeIntervalSince(start), notice: notice)
         try? modelContext?.save()

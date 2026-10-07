@@ -1,5 +1,7 @@
 import SwiftUI
+#if os(macOS)
 import AppKit
+#endif
 import SwiftData
 
 /// Which pane the live side panel shows.
@@ -60,7 +62,7 @@ struct LiveRecordingView: View {
 
             // Copilot center stage + collapsible side panel. Drag the divider to
             // resize; without the copilot the side panel takes the whole stage.
-            HSplitView {
+            AdaptiveSplit {
                 if copilotEnabled && showCopilot {
                     CopilotPanelView(transcriptJumpTarget: $copilotJumpTarget)
 
@@ -262,21 +264,23 @@ struct LiveRecordingView: View {
     /// user can see whether their own voice is actually being picked up.
     private var deviceBar: some View {
         let cap = recordingManager.audioCaptureManager
+        // iPhone/iPad: the device mic is the one (room) track, metered as system audio.
+        let micOn = Platform.isMobile ? cap.isCapturing : cap.micActive
         return HStack(spacing: 12) {
-            Image(systemName: cap.micActive && !cap.micMuted ? "mic.fill" : "mic.slash.fill")
-                .foregroundStyle(cap.micActive && !cap.micMuted ? Theme.Colors.good : Theme.Colors.warn)
+            Image(systemName: micOn && !cap.micMuted ? "mic.fill" : "mic.slash.fill")
+                .foregroundStyle(micOn && !cap.micMuted ? Theme.Colors.good : Theme.Colors.warn)
             Text(cap.inputDeviceName.isEmpty ? "No input" : cap.inputDeviceName)
                 .font(.appCaption)
                 .lineLimit(1)
-            MicLevelView(level: cap.micLevel)
+            MicLevelView(level: Platform.isMobile ? cap.audioLevel : cap.micLevel)
             if cap.micMuted {
                 Label("muted — Parrot isn't recording you", systemImage: "mic.slash.circle.fill")
                     .font(.appCaption2)
                     .foregroundStyle(Theme.Colors.warn)
             }
-            if !cap.micActive || cap.micSeemsDead {
+            if !Platform.isMobile && (!cap.micActive || cap.micSeemsDead) {
                 Button {
-                    NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")!)
+                    Platform.openPrivacySettings(pane: "Privacy_Microphone")
                 } label: {
                     Label("not hearing you — enable mic", systemImage: "exclamationmark.triangle.fill")
                         .font(.appCaption2)
@@ -288,7 +292,7 @@ struct LiveRecordingView: View {
 
             if cap.micVeryQuiet {
                 Button {
-                    NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Sound-Settings.extension")!)
+                    Platform.open(URL(string: "x-apple.systempreferences:com.apple.Sound-Settings.extension")!)
                 } label: {
                     Label("mic is very quiet — raise input volume", systemImage: "mic.and.signal.meter")
                         .font(.appCaption2)

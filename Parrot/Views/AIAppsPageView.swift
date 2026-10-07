@@ -1,11 +1,7 @@
+#if os(macOS)
 import AppKit
 import SwiftData
 import SwiftUI
-
-extension Notification.Name {
-    /// Settings, the report tip and the banner open the Claude & AI Apps page.
-    static let parrotOpenAIApps = Notification.Name("parrotOpenAIApps")
-}
 
 /// The pure half of the Claude & AI Apps page: wording and when things show.
 /// Harness-covered; the views below only read and write defaults.
@@ -124,8 +120,7 @@ enum AIApps {
     }
 
     static func copy(_ text: String) {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
+        Platform.copy(text)
     }
 
     static func appURL(_ bundleID: String) -> URL? {
@@ -243,7 +238,7 @@ struct AIAppsPageView: View {
             now = .now
         }
         .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { now = $0 }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in now = .now }
+        .onReceive(NotificationCenter.default.publisher(for: Platform.didBecomeActiveNotification)) { _ in now = .now }
     }
 
     private var statusLine: String {
@@ -393,7 +388,7 @@ struct AIAppsConnectedBanner: View {
             }
         }
         .onAppear(perform: check)
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in check() }
+        .onReceive(NotificationCenter.default.publisher(for: Platform.didBecomeActiveNotification)) { _ in check() }
         .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { _ in check() }
     }
 
@@ -487,3 +482,4 @@ struct AIAppsReportTip: View {
         }
     }
 }
+#endif

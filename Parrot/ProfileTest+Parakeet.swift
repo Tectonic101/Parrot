@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 
 /// Parakeet and the language router (spec 2026-09-30).
@@ -185,3 +186,4 @@ extension ProfileTest {
               long.count >= 5 && long.reduce(0) { $0 + $1.audio.count } == 600 * frame)
     }
 }
+#endif

@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 import ServiceManagement
 
@@ -51,3 +52,4 @@ enum LoginItem {
         SMAppService.openSystemSettingsLoginItems()
     }
 }
+#endif

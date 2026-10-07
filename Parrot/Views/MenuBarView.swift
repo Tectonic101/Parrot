@@ -1,3 +1,4 @@
+#if os(macOS)
 import SwiftUI
 
 /// Content of the menu-bar extra, rendered as a NATIVE menu
@@ -76,3 +77,4 @@ struct MenuBarView: View {
         }
     }
 }
+#endif

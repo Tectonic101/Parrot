@@ -7,7 +7,7 @@ name: CI
 on:
   push:
     branches: ["**"]
-    paths-ignore: ["docs/**", "*.md"]
+    paths-ignore: ["docs/**", "*.md", "windows/**", ".github/workflows/windows.yml"]
   pull_request:
   workflow_dispatch:
 

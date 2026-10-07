@@ -1,6 +1,8 @@
 import SwiftUI
 import AVFoundation
+#if os(macOS)
 import AppKit
+#endif
 
 /// Which pane of the post-meeting report is showing.
 enum ReportTab: String, CaseIterable, Identifiable {
@@ -165,7 +167,9 @@ struct MeetingDetailView: View {
                 .help("Ask about this call, or all of them")
                 .disabled(meeting.status != .done)
 
+                #if os(macOS)
                 AskClaudeMenu(meeting: meeting)
+                #endif
 
                 Menu {
                     Button("Export as TXT") { MeetingActions.exportTXT(meeting) }
@@ -366,8 +370,7 @@ struct MeetingDetailView: View {
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 8) {
                     Button("Copy") {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString("Subject: \(parts.subject)\n\n\(parts.body)", forType: .string)
+                        Platform.copy("Subject: \(parts.subject)\n\n\(parts.body)")
                     }
                     Button("Open in Mail") { FollowUpEmail.openInMail(draft, meeting: meeting) }
                     Spacer()
@@ -568,7 +571,9 @@ struct MeetingDetailView: View {
                     }
                 } else {
                     VStack(alignment: .leading, spacing: 16) {
+                        #if os(macOS)
                         AIAppsReportTip(meeting: meeting)
+                        #endif
                         toneCard
                         ReportContentView(
                             summary: meeting.summary,
@@ -731,7 +736,7 @@ struct MeetingDetailView: View {
                 Image(systemName: "ellipsis.circle")
                     .foregroundStyle(Theme.Colors.ink2)
             }
-            .menuStyle(.borderlessButton)
+            .borderlessMenuStyle()
             .menuIndicator(.hidden)
             .fixedSize()
             .accessibilityLabel("Bookmark options")

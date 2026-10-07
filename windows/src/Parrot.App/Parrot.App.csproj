@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Parrot for Windows. Derived from Parrot (GPL-3.0). -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>Parrot.App</RootNamespace>
+    <AssemblyName>Parrot</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\parrot.ico</ApplicationIcon>
+    <!-- MVVMTK0034: view models set a few backing fields directly on purpose, to update the UI
+         without re-running the property-changed side effects (save, navigation). -->
+    <NoWarn>$(NoWarn);MVVMTK0034</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Assets\parrot.png" />
+    <Resource Include="Assets\parrot.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Parrot.Core\Parrot.Core.csproj" />
+    <ProjectReference Include="..\Parrot.Audio\Parrot.Audio.csproj" />
+  </ItemGroup>
+</Project>

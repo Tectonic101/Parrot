@@ -1,3 +1,4 @@
+#if os(macOS)
 import SwiftUI
 
 // Settings → General "Startup", Settings → Recording "Call detection" and
@@ -26,7 +27,7 @@ struct LoginItemRow: View {
         )
         .disabled(state == .unavailable)
         .onAppear { state = LoginItem.state }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: Platform.didBecomeActiveNotification)) { _ in
             state = LoginItem.state
         }
 
@@ -97,7 +98,7 @@ struct CallDetectionCard: View {
         .onAppear { ignored = CallWatcher.ignoredApps.sorted() }
         .task { notifications = await NotificationAccess.state() }
         // Back from System Settings: pick up the new switch.
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: Platform.didBecomeActiveNotification)) { _ in
             Task { notifications = await NotificationAccess.state() }
         }
     }
@@ -218,7 +219,7 @@ struct CalendarCard: View {
             reloadChoices()
         }
         .onChange(of: calendar.isConnected) { reloadChoices() }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: Platform.didBecomeActiveNotification)) { _ in
             calendar.refreshAccess()
         }
     }
@@ -273,7 +274,7 @@ struct CallPromptBanner: View {
             } label: {
                 Image(systemName: "xmark")
             }
-            .menuStyle(.borderlessButton)
+            .borderlessMenuStyle()
             .menuIndicator(.hidden)
             .fixedSize()
             .accessibilityLabel("Dismiss")
@@ -299,3 +300,4 @@ struct CallPromptBanner: View {
         }
     }
 }
+#endif

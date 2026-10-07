@@ -1,3 +1,4 @@
+#if os(macOS)
 import AppKit
 
 /// Turns "something's wrong" into a pre-filled GitHub issue that the user
@@ -122,3 +123,4 @@ enum BugReport {
         pasteboard.setString(text, forType: .string)
     }
 }
+#endif

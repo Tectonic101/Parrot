@@ -1,0 +1,93 @@
+<!-- Parrot for Windows. Derived from Parrot (GPL-3.0), CopilotPanelView.swift / ReportContentView.swift. -->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- One transcript line: "12:34  Them  text" -->
+    <DataTemplate x:Key="SegmentTemplate">
+        <Border x:Name="Row" CornerRadius="{StaticResource Radius}" Padding="10,6" Margin="0,2" Background="{DynamicResource ThemLineBrush}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="48" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="{Binding Time}" Style="{StaticResource MonoText}" Margin="0,2,0,0" />
+                <TextBlock x:Name="Who" Grid.Column="1" Text="{Binding Speaker}" FontWeight="SemiBold" FontSize="13"
+                           Foreground="{DynamicResource AccentBrush}" Margin="0,0,10,0" MinWidth="44" />
+                <TextBlock Grid.Column="2" Text="{Binding Text}" Style="{StaticResource BodyText}" />
+            </Grid>
+        </Border>
+        <DataTemplate.Triggers>
+            <DataTrigger Binding="{Binding IsMe}" Value="True">
+                <Setter TargetName="Row" Property="Background" Value="{DynamicResource MeLineBrush}" />
+                <Setter TargetName="Who" Property="Foreground" Value="{DynamicResource Ink2Brush}" />
+            </DataTrigger>
+        </DataTemplate.Triggers>
+    </DataTemplate>
+
+    <!-- A report line: heading / bullet / text, with receipt chips -->
+    <DataTemplate x:Key="ReportLineTemplate">
+        <Grid Margin="0,2">
+            <TextBlock Text="{Binding Text}" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource InkBrush}" Margin="0,12,0,4"
+                       TextWrapping="Wrap" Visibility="{Binding IsHeading, Converter={StaticResource VisibleWhen}}" />
+            <DockPanel Visibility="{Binding IsHeading, Converter={StaticResource VisibleWhen}, ConverterParameter=Invert}">
+                <TextBlock DockPanel.Dock="Left" Text="•" Margin="4,0,8,0" Foreground="{DynamicResource Ink3Brush}" FontSize="14"
+                           Visibility="{Binding IsBullet, Converter={StaticResource VisibleWhen}}" />
+                <ItemsControl DockPanel.Dock="Right" ItemsSource="{Binding Receipts}" VerticalAlignment="Top" Margin="8,1,0,0">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Background="{DynamicResource ChipBrush}" CornerRadius="{StaticResource Radius}" Padding="6,1" Margin="0,0,4,0"
+                                    ToolTip="The transcript moment that backs this point">
+                                <TextBlock Text="{Binding}" FontFamily="{StaticResource MonoFont}" FontSize="11" Foreground="{DynamicResource Ink2Brush}" />
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock Text="{Binding Text}" Style="{StaticResource BodyText}" />
+            </DockPanel>
+        </Grid>
+    </DataTemplate>
+
+    <!-- A copilot card -->
+    <DataTemplate x:Key="InsightTemplate">
+        <Border Style="{StaticResource Card}" Margin="0,0,0,10" Padding="0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="4" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Border Grid.Column="0" CornerRadius="10,0,0,10" Background="{Binding ColorHex, Converter={StaticResource KindBrush}}" />
+                <StackPanel Grid.Column="1" Margin="12,10,12,10">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Right" Text="{Binding Time}" Style="{StaticResource MonoText}" />
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding KindLabel}" FontSize="11.5" FontWeight="SemiBold"
+                                       Foreground="{Binding ColorHex, Converter={StaticResource KindBrush}}" />
+                            <TextBlock Text="{Binding StateLabel}" FontSize="11.5" Margin="8,0,0,0" Foreground="{DynamicResource WarnBrush}"
+                                       Visibility="{Binding IsOpenFlag, Converter={StaticResource VisibleWhen}}" />
+                            <TextBlock Text="{Binding StateLabel}" FontSize="11.5" Margin="8,0,0,0" Foreground="{DynamicResource GoodBrush}"
+                                       Visibility="{Binding IsHandled, Converter={StaticResource VisibleWhen}}" />
+                        </StackPanel>
+                    </DockPanel>
+                    <TextBlock Text="{Binding Title}" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource InkBrush}"
+                               TextWrapping="Wrap" Margin="0,4,0,0" />
+                    <TextBlock Text="{Binding Detail}" Style="{StaticResource SecondaryText}" Margin="0,3,0,0" />
+                    <Border Background="{DynamicResource AccentSoftBrush}" CornerRadius="{StaticResource Radius}" Padding="10,7" Margin="0,8,0,0"
+                            Visibility="{Binding Reply, Converter={StaticResource VisibleWhen}}">
+                        <StackPanel>
+                            <TextBlock Text="SAY" FontSize="10.5" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}" />
+                            <TextBlock Text="{Binding Reply}" Style="{StaticResource BodyText}" FontSize="14.5" />
+                        </StackPanel>
+                    </Border>
+                    <TextBlock Margin="0,6,0,0" Style="{StaticResource CaptionText}"
+                               Visibility="{Binding Source, Converter={StaticResource VisibleWhen}}">
+                        <Run Text="Source: " /><Run Text="{Binding Source, Mode=OneWay}" />
+                    </TextBlock>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </DataTemplate>
+</ResourceDictionary>

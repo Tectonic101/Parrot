@@ -38,6 +38,8 @@ extension Notification.Name {
     /// Posted (object: the meeting's UUID) just before a meeting is deleted,
     /// by any path — the UI drops its selection before the model is gone.
     static let parrotMeetingWillDelete = Notification.Name("parrotMeetingWillDelete")
+    /// Settings, the report tip and the banner open the Claude & AI Apps page.
+    static let parrotOpenAIApps = Notification.Name("parrotOpenAIApps")
 }
 
 // MARK: - Shared meeting actions
@@ -65,9 +67,19 @@ enum MeetingActions {
     private static func write(_ content: String, for meeting: Meeting, ext: String) {
         let filename = meeting.title.replacingOccurrences(of: " ", with: "_")
         if let url = try? ExportService.save(content: content, filename: filename, extension: ext) {
+            #if os(macOS)
             NSWorkspace.shared.selectFile(url.path, inFileViewerRootedAtPath: url.deletingLastPathComponent().path)
+            #else
+            lastExport = url
+            #endif
         }
     }
+
+    #if os(iOS)
+    /// The file the last export wrote (Files app → Parrot → Exports); the
+    /// meeting screen offers it to the share sheet.
+    static var lastExport: URL?
+    #endif
 
     static func audioFileExists(_ meeting: Meeting) -> Bool {
         !meeting.systemAudioPath.isEmpty
@@ -75,16 +87,19 @@ enum MeetingActions {
     }
 
     static func revealAudio(_ meeting: Meeting) {
+        #if os(macOS)
         NSWorkspace.shared.selectFile(
             meeting.systemAudioPath,
             inFileViewerRootedAtPath: (meeting.systemAudioPath as NSString).deletingLastPathComponent
         )
+        #endif
     }
 
     static func open(_ urlString: String) {
-        if let url = URL(string: urlString) { NSWorkspace.shared.open(url) }
+        if let url = URL(string: urlString) { Platform.open(url) }
     }
 
+    #if os(macOS)
     static func showAbout() {
         NSApp.activate(ignoringOtherApps: true)
         NSApp.orderFrontStandardAboutPanel(options: [
@@ -97,6 +112,7 @@ enum MeetingActions {
             )
         ])
     }
+    #endif
 
     /// Re-runs first-run onboarding. ParrotApp's sheet is derived from the
     /// hasCompletedOnboarding key, so clearing it presents the tour right
@@ -117,6 +133,7 @@ enum MeetingActions {
 
 // MARK: - Main menu commands
 
+#if os(macOS)
 struct ParrotCommands: Commands {
     let session: AppSession
     let recordingManager: RecordingManager
@@ -248,6 +265,8 @@ struct ParrotCommands: Commands {
     }
 }
 
+#endif
+
 // MARK: - Shared meeting context menu
 
 /// The right-click menu every meeting row gets (sidebar + dashboard):
@@ -282,8 +301,10 @@ struct MeetingContextMenu: ViewModifier {
                 }
                 .disabled(meeting.segments.isEmpty)
 
+                #if os(macOS)
                 Button("Show Audio File in Finder") { MeetingActions.revealAudio(meeting) }
                     .disabled(!MeetingActions.audioFileExists(meeting))
+                #endif
 
                 Divider()
 

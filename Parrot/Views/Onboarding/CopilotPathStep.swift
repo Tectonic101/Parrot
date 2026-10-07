@@ -10,10 +10,15 @@ struct CopilotPathStep: View {
             StepHeader(title: "How should the Assistant work?",
                        subtitle: "Pick how private you want it. You can change this later.")
             VStack(spacing: 10) {
-                card(.private, icon: "lock", title: "Private",
-                     detail: "The Assistant runs on this Mac. Nothing leaves it. Free. Uses the Ollama app.")
+                // The Private path runs Ollama locally, which iPhone and iPad can't.
+                if !Platform.isMobile {
+                    card(.private, icon: "lock", title: "Private",
+                         detail: "The Assistant runs on this Mac. Nothing leaves it. Free. Uses the Ollama app.")
+                }
                 card(.balanced, icon: "slider.horizontal.3", title: "Balanced",
-                     detail: "Audio stays on this Mac. Only text goes to Claude. Smartest answers. Needs a Claude key.",
+                     detail: Platform.isMobile
+                        ? "Audio stays on this device. Only text goes to Claude. Smartest answers. Needs a Claude key."
+                        : "Audio stays on this Mac. Only text goes to Claude. Smartest answers. Needs a Claude key.",
                      badge: "Recommended")
                 card(.cloud, icon: "cloud", title: "Cloud",
                      detail: "Live word-by-word text plus Claude. Needs Deepgram and Claude keys.")
@@ -26,7 +31,7 @@ struct CopilotPathStep: View {
             }
             if model.mode == .full {
                 Button("Decide later") { withAnimation { model.decideLater() } }
-                    .buttonStyle(.link)
+                    .linkButtonStyle()
             }
             if let error = model.pathError {
                 Text(error)

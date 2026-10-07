@@ -1,3 +1,4 @@
+#if os(macOS)
 import AppKit
 import ScreenCaptureKit
 import SwiftData
@@ -198,3 +199,4 @@ enum PillTest {
         }
     }
 }
+#endif

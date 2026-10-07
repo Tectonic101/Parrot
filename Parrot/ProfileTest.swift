@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 import SwiftUI
 import SwiftData
@@ -4375,3 +4376,4 @@ enum ProfileTest {
         d.removePersistentDomain(forName: suite)
     }
 }
+#endif

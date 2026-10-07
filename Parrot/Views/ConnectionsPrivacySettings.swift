@@ -1,5 +1,8 @@
+#if os(macOS)
 import AppKit
+#endif
 import SwiftUI
+import UniformTypeIdentifiers
 
 // MARK: - Settings → Connections
 
@@ -19,6 +22,7 @@ struct ConnectionsSettingsPage: View {
     @State private var secretSaved = (APIKeyStore.load(account: Webhook.secretAccount) ?? "").isEmpty == false
     @State private var testing = false
     @State private var testResult: String?
+    @State private var pickingFolder = false
 
     var body: some View {
         SettingsPage {
@@ -96,6 +100,7 @@ struct ConnectionsSettingsPage: View {
                 }
             }
 
+            #if os(macOS)
             SettingsCard(title: "Claude & AI Apps",
                          blurb: "Let Claude, Codex or Cursor read and search your meetings, read-only. The app you connect usually sends what it reads to its own cloud, so on-device-only meetings are never shown to it.") {
                 SettingsToggleRow(title: "Allow AI apps to read my meetings", first: true, isOn: $mcpEnabled)
@@ -106,10 +111,20 @@ struct ConnectionsSettingsPage: View {
                     }
                 }
             }
+            #endif
+        }
+        .fileImporter(isPresented: $pickingFolder, allowedContentTypes: [.folder]) { result in
+            guard case .success(let url) = result else { return }
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            remember(url)
         }
     }
 
     private func chooseFolder() {
+        #if os(iOS)
+        pickingFolder = true
+        #else
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
@@ -117,6 +132,11 @@ struct ConnectionsSettingsPage: View {
         panel.allowsMultipleSelection = false
         panel.prompt = "Use This Folder"
         guard panel.runModal() == .OK, let url = panel.url else { return }
+        remember(url)
+        #endif
+    }
+
+    private func remember(_ url: URL) {
         do {
             try ExportFolder.set(url)
             folderPath = url.path

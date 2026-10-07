@@ -3,7 +3,9 @@ import SwiftData
 import CoreGraphics
 import AVFoundation
 import UserNotifications
+#if os(macOS)
 import IOKit.ps
+#endif
 
 /// Orchestrates audio capture, transcription, and storage for a recording session.
 @MainActor
@@ -31,8 +33,10 @@ final class RecordingManager {
     let profileStore = ProfileStore()
     /// The Mac's calendars (opt-in): names meetings, lists who's on them.
     let calendar = CalendarService()
+    #if os(macOS)
     /// Notices calls in other apps and offers to record them.
     let callWatcher = CallWatcher()
+    #endif
     /// Every finished meeting, searchable on the Mac (Ask Parrot).
     let memory: MeetingMemory
     /// Ask Parrot's saved chats.
@@ -139,8 +143,10 @@ final class RecordingManager {
         profileStore.seedAndMigrateIfNeeded(context: modelContext, knowledgeBase: knowledgeBase)
         // Detection needs no model to watch the mic; it declines to offer a
         // recording until the model below is ready.
+        #if os(macOS)
         callWatcher.recordingManager = self
         callWatcher.start()
+        #endif
         // Starts Sparkle at launch (not only when Settings opens) and keeps
         // Restart now away from a call, its report, and imports.
         AppUpdater.shared.isBusy = { [weak self] in
@@ -459,12 +465,16 @@ final class RecordingManager {
         nudges.onShow = { [weak self] nudge in
             guard let self else { return }
             // The Copilot banner covers it when Parrot is in front and Copilot is showing.
+            #if os(macOS)
             if !(NSApp.isActive && self.callAnalysisEngine.isActive) { NudgePillController.shared.show(nudge) }
+            #endif
         }
+        #if os(macOS)
         NudgePillController.shared.onOpen = {
             NSApp.activate(ignoringOtherApps: true)
             NSApp.windows.first { $0.canBecomeMain && $0.isVisible }?.makeKeyAndOrderFront(nil)
         }
+        #endif
         callAnalysisEngine.onPassCompleted = { [weak self] pass in self?.nudges.add(pass: pass) }
         callAnalysisEngine.start(profile: profile, brief: nextCallBrief, calendarContext: calendarContext,
                                  previousCall: lastCall, previousCallIsPrivate: previousIsPrivate,
@@ -525,7 +535,9 @@ final class RecordingManager {
 
         timer?.invalidate()
         timer = nil
+        #if os(macOS)
         NudgePillController.shared.hide()
+        #endif
         markHotKey.unregister()
         muteHotKey.unregister()
         // A "Still recording?" left in Notification Center is stale once stopped.
@@ -758,7 +770,9 @@ final class RecordingManager {
     /// time this fires, not before; declining leaves just the bounce.
     private static func postIdleReminder(silentFor seconds: TimeInterval) {
         NSLog("Parrot: idle reminder, no speech for \(Int(seconds)) s")
+        #if os(macOS)
         NSApp.requestUserAttention(.informationalRequest)
+        #endif
         let content = UNMutableNotificationContent()
         content.title = "Still recording?"
         content.body = idleReminderBody(silentFor: seconds)
@@ -1188,9 +1202,14 @@ final class RecordingManager {
 
         static var now: PowerState {
             let info = ProcessInfo.processInfo
+            #if os(macOS)
             let source = IOPSGetProvidingPowerSourceType(IOPSCopyPowerSourcesInfo()?.takeRetainedValue())?
                 .takeUnretainedValue() as String?
-            return PowerState(onBattery: source == kIOPSBatteryPowerValue,
+            let onBattery = source == kIOPSBatteryPowerValue
+            #else
+            let onBattery = true  // phones and tablets: pace sweeps as on battery
+            #endif
+            return PowerState(onBattery: onBattery,
                               lowPower: info.isLowPowerModeEnabled,
                               hot: info.thermalState == .serious || info.thermalState == .critical)
         }

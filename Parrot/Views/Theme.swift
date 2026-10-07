@@ -20,13 +20,13 @@ enum Theme {
 
     enum Colors {
         /// Main window / content background.
-        static let canvas = Color(nsColor: .textBackgroundColor)
+        static let canvas = Color(system: .textBackgroundColor)
         /// Sidebar / side panels.
-        static let panel = Color(nsColor: .windowBackgroundColor)
+        static let panel = Color(system: .windowBackgroundColor)
         /// Chips, meters, quiet fills.
-        static let chip = Color(nsColor: .quaternaryLabelColor)
+        static let chip = Color(system: .quaternaryLabelColor)
         /// Hairline dividers and card borders.
-        static let line = Color(nsColor: .separatorColor)
+        static let line = Color(system: .separatorColor)
         /// Selected row tint (accent at low opacity, like a source list).
         static let selection = Color.accentColor.opacity(0.16)
         /// Draws the eye to one card that must not be missed (the brief box):
@@ -35,22 +35,22 @@ enum Theme {
         static let spotlightLine = Color.accentColor.opacity(0.55)
 
         /// Primary text.
-        static let ink = Color(nsColor: .labelColor)
+        static let ink = Color(system: .labelColor)
         /// Secondary text.
-        static let ink2 = Color(nsColor: .secondaryLabelColor)
+        static let ink2 = Color(system: .secondaryLabelColor)
         /// Tertiary text / timestamps / hints.
-        static let ink3 = Color(nsColor: .tertiaryLabelColor)
+        static let ink3 = Color(system: .tertiaryLabelColor)
         /// Section labels ("KEY POINTS") — same as ink2; callers add tracking/caps.
-        static let label = Color(nsColor: .secondaryLabelColor)
+        static let label = Color(system: .secondaryLabelColor)
 
         /// The user's system accent — selection, links, suggested answers.
         static let accent = Color.accentColor
         /// Success / action items / "listening".
-        static let good = Color(nsColor: .systemGreen)
+        static let good = Color(system: .systemGreen)
         /// Unresolved: blockers, open questions, warnings.
-        static let warn = Color(nsColor: .systemOrange)
+        static let warn = Color(system: .systemOrange)
         /// Recording / destructive / failures.
-        static let stop = Color(nsColor: .systemRed)
+        static let stop = Color(system: .systemRed)
         /// Something needs a decision now (the wrong-language banner).
         static let alertFill = warn.opacity(0.14)
         static let alertLine = warn.opacity(0.45)
@@ -180,25 +180,60 @@ extension Font {
     static let appCaption2 = Font.caption2
 }
 
+#if os(iOS)
+/// UIKit spells AppKit's semantic colors differently; these are the
+/// equivalents, so Theme reads the same on every platform.
+extension UIColor {
+    static var textBackgroundColor: UIColor { .systemBackground }
+    static var windowBackgroundColor: UIColor { .secondarySystemBackground }
+    static var quaternaryLabelColor: UIColor { .quaternaryLabel }
+    static var separatorColor: UIColor { .separator }
+    static var labelColor: UIColor { .label }
+    static var secondaryLabelColor: UIColor { .secondaryLabel }
+    static var tertiaryLabelColor: UIColor { .tertiaryLabel }
+}
+#endif
+
 extension Color {
+    /// A system semantic color, named the AppKit way on every platform.
+    #if os(macOS)
+    init(system color: NSColor) { self.init(nsColor: color) }
+    #else
+    init(system color: UIColor) { self.init(uiColor: color) }
+    #endif
+
     /// A hex color that adapts between light and dark appearance, so a single token
     /// works in both. Used for user-configurable profile colors (KindStyle) and
     /// the sidebar's meeting-dot palette — app chrome uses system colors above.
     init(lightHex: UInt32, darkHex: UInt32) {
+        #if os(macOS)
         self.init(nsColor: NSColor(name: nil) { appearance in
             let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
             return NSColor(rgbHex: isDark ? darkHex : lightHex)
         })
+        #else
+        self.init(uiColor: UIColor { traits in
+            UIColor(rgbHex: traits.userInterfaceStyle == .dark ? darkHex : lightHex)
+        })
+        #endif
     }
 }
 
-private extension NSColor {
+#if os(macOS)
+private typealias HexColor = NSColor
+#else
+private typealias HexColor = UIColor
+#endif
+
+private extension HexColor {
     convenience init(rgbHex hex: UInt32) {
-        self.init(
-            srgbRed: Double((hex >> 16) & 0xFF) / 255.0,
-            green: Double((hex >> 8) & 0xFF) / 255.0,
-            blue: Double(hex & 0xFF) / 255.0,
-            alpha: 1.0
-        )
+        let r = Double((hex >> 16) & 0xFF) / 255.0
+        let g = Double((hex >> 8) & 0xFF) / 255.0
+        let b = Double(hex & 0xFF) / 255.0
+        #if os(macOS)
+        self.init(srgbRed: r, green: g, blue: b, alpha: 1.0)
+        #else
+        self.init(red: r, green: g, blue: b, alpha: 1.0)
+        #endif
     }
 }

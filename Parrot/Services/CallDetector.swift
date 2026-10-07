@@ -1,3 +1,4 @@
+#if os(macOS)
 import AppKit
 import CoreAudio
 
@@ -279,3 +280,4 @@ struct CallDetector {
         return nil
     }
 }
+#endif

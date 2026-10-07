@@ -6,7 +6,11 @@ import SwiftData
 struct AskPageView: View {
     @Environment(RecordingManager.self) private var recordingManager
     @Environment(AppSession.self) private var appSession
+    #if os(macOS)
     @Environment(\.openSettings) private var openSettings
+    #else
+    private let openSettings = SettingsOpener()
+    #endif
     @Query private var meetings: [Meeting]
     @AppStorage("askProvider") private var askProvider = ""
 
@@ -211,7 +215,7 @@ struct AskPageView: View {
         } label: {
             Label(label(for: askProvider), systemImage: "sparkles")
         }
-        .menuStyle(.borderlessButton)
+        .borderlessMenuStyle()
         .fixedSize()
         .help("Which AI writes the answers")
     }
@@ -254,7 +258,7 @@ struct AskPageView: View {
                 Button("Send feedback") {
                     NotificationCenter.default.post(name: .parrotReportBug, object: nil)
                 }
-                .buttonStyle(.link)
+                .linkButtonStyle()
                 .font(Theme.Typography.secondary)
             }
         }

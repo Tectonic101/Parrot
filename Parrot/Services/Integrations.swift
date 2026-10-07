@@ -66,10 +66,20 @@ enum ExportFolder {
     static let namesKey = "exportFolderNames"
 
     static func set(_ url: URL) throws {
-        let data = try url.bookmarkData(options: .withSecurityScope,
+        let data = try url.bookmarkData(options: ExportFolder.bookmarkCreation,
                                         includingResourceValuesForKeys: nil, relativeTo: nil)
         UserDefaults.standard.set(data, forKey: bookmarkKey)
     }
+
+    // Security-scoped bookmarks are spelled out on the Mac; on iOS every
+    // bookmark of a picked folder already carries its access.
+    #if os(macOS)
+    private static let bookmarkCreation: URL.BookmarkCreationOptions = .withSecurityScope
+    private static let bookmarkResolution: URL.BookmarkResolutionOptions = .withSecurityScope
+    #else
+    private static let bookmarkCreation: URL.BookmarkCreationOptions = []
+    private static let bookmarkResolution: URL.BookmarkResolutionOptions = []
+    #endif
 
     static func clear() {
         UserDefaults.standard.removeObject(forKey: bookmarkKey)
@@ -80,7 +90,7 @@ enum ExportFolder {
     static func resolve() -> URL? {
         guard let data = UserDefaults.standard.data(forKey: bookmarkKey) else { return nil }
         var stale = false
-        guard let url = try? URL(resolvingBookmarkData: data, options: .withSecurityScope,
+        guard let url = try? URL(resolvingBookmarkData: data, options: ExportFolder.bookmarkResolution,
                                  relativeTo: nil, bookmarkDataIsStale: &stale) else { return nil }
         if stale { try? set(url) }
         return url

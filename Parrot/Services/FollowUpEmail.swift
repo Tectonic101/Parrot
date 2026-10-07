@@ -1,4 +1,6 @@
+#if os(macOS)
 import AppKit
+#endif
 import Foundation
 
 /// The follow-up email after a call: drafted by the reports brain from the
@@ -55,6 +57,7 @@ enum FollowUpEmail {
     static func openInMail(_ draft: String, meeting: Meeting) {
         let (subject, body) = split(draft, fallbackSubject: "Following up: \(meeting.title)")
         let recipients = meeting.attendees.compactMap(\.email)
+        #if os(macOS)
         if let service = NSSharingService(named: .composeEmail) {
             service.recipients = recipients
             service.subject = subject
@@ -63,12 +66,13 @@ enum FollowUpEmail {
                 return
             }
         }
-        // Fallback: a mailto: link (length-limited, but always works).
+        #endif
+        // Fallback (and iOS): a mailto: link (length-limited, but always works).
         var parts = URLComponents()
         parts.scheme = "mailto"
         parts.path = recipients.joined(separator: ",")
         parts.queryItems = [URLQueryItem(name: "subject", value: subject),
                             URLQueryItem(name: "body", value: String(body.prefix(1800)))]
-        if let url = parts.url { NSWorkspace.shared.open(url) }
+        if let url = parts.url { Platform.open(url) }
     }
 }

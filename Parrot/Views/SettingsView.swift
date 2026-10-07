@@ -98,8 +98,28 @@ struct SettingsView: View {
     /// anchors — the -a in assemble-help.sh). Dev binaries carry no book, so
     /// Help Viewer just no-ops there.
     static func openHelp(anchor: String) {
+        #if os(macOS)
         let book = Bundle.main.object(forInfoDictionaryKey: "CFBundleHelpBookName") as? String
         NSHelpManager.shared.openHelpAnchor(anchor, inBook: book)
+        #else
+        MeetingActions.open("https://turantekin.github.io/Parrot/help/")
+        #endif
+    }
+
+    /// The whole user guide: the bundled Help Book on the Mac, the web copy on iOS.
+    static func showUserGuide() {
+        #if os(macOS)
+        NSApp.showHelp(nil)
+        #else
+        MeetingActions.open("https://turantekin.github.io/Parrot/help/")
+        #endif
+    }
+
+    /// Closes the standalone Settings window (the Mac's Settings scene).
+    private func closeSettingsWindow() {
+        #if os(macOS)
+        if !isEmbedded { NSApp.keyWindow?.performClose(nil) }
+        #endif
     }
 
     /// Deep-links into one section from anywhere (dashboard, live panel): the
@@ -107,7 +127,13 @@ struct SettingsView: View {
     /// forward, and whichever SettingsView is showing picks it up in onAppear
     /// (fresh window) or via the notification (already open).
     static let requestedSectionKey = "settingsRequestedSection"
-    static func open(_ target: SettingsSection, with openSettings: OpenSettingsAction) {
+    #if os(macOS)
+    typealias SettingsOpenAction = OpenSettingsAction
+    #else
+    typealias SettingsOpenAction = SettingsOpener
+    #endif
+
+    static func open(_ target: SettingsSection, with openSettings: SettingsOpenAction) {
         UserDefaults.standard.set(target.rawValue, forKey: requestedSectionKey)
         openSettings()
         NotificationCenter.default.post(name: .parrotOpenSettingsSection, object: nil)
@@ -158,7 +184,7 @@ struct SettingsView: View {
                     SettingsNavRow(title: "About", icon: "hand.wave", selected: false) {
                         Self.openHelp(anchor: "hi-from-uygar")
                     }
-                    HelpCircleButton { NSApp.showHelp(nil) }
+                    HelpCircleButton { Self.showUserGuide() }
                 }
             }
             .padding(8)
@@ -213,9 +239,11 @@ struct SettingsView: View {
     private var generalPage: some View {
         let path = AudioCaptureManager.storageDirectory().path
         return SettingsPage {
+            #if os(macOS)
             SettingsCard(title: "Startup") {
                 LoginItemRow(first: true)
             }
+            #endif
 
             SettingsCard(title: "Appearance") {
                 SettingsLabeledRow(title: "Appearance", first: true) {
@@ -243,9 +271,11 @@ struct SettingsView: View {
                                 .truncationMode(.middle)
                         }
                         Spacer(minLength: 12)
+                        #if os(macOS)
                         Button("Show in Finder") {
                             NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: path)
                         }
+                        #endif
                     }
                 }
             }
@@ -256,6 +286,7 @@ struct SettingsView: View {
                         .font(Theme.Typography.secondary)
                         .foregroundStyle(Theme.Colors.ink2)
                 }
+                #if os(macOS)
                 SettingsToggleRow(
                     title: "Keep Parrot up to date",
                     detail: "Downloads new versions in the background and installs them when you quit. Never during a recording.",
@@ -267,14 +298,15 @@ struct SettingsView: View {
                 SettingsLabeledRow(title: "Check for updates", detail: "Or look right now.") {
                     Button("Check Now") { AppUpdater.shared.checkForUpdates() }
                 }
+                #endif
                 SettingsLabeledRow(title: "User guide", detail: "Every screen explained, with setup and troubleshooting.") {
-                    Button("Open User Guide") { NSApp.showHelp(nil) }
+                    Button("Open User Guide") { Self.showUserGuide() }
                 }
                 SettingsLabeledRow(title: "Welcome tour", detail: "The first-run tour: permissions, the Assistant and speech model.") {
                     Button("Show Welcome Tour") {
                         MeetingActions.showWelcomeTour()
                         // The tour is a sheet on the main window; get out of its way.
-                        if !isEmbedded { NSApp.keyWindow?.performClose(nil) }
+                        closeSettingsWindow()
                     }
                 }
                 SettingsLabeledRow(title: "Website", detail: "The landing page, with a demo you can scroll and the honest privacy list.") {
@@ -288,6 +320,7 @@ struct SettingsView: View {
 
     private var recordingPage: some View {
         SettingsPage {
+            #if os(macOS)
             SettingsCard(title: "Echo Cancellation") {
                 SettingsToggleRow(
                     title: "Cancel speaker echo from the mic",
@@ -306,7 +339,15 @@ struct SettingsView: View {
             CallDetectionCard()
 
             CalendarCard()
+            #else
+            SettingsCard(title: "Input") {
+                SettingsRow(first: true) {
+                    Hint("Parrot records through this device's microphone, so it hears everyone in the room. iPhone and iPad don't let apps hear another app's call audio: for a Zoom or Teams call, run the call on another device or on speaker.")
+                }
+            }
+            #endif
 
+            #if os(macOS)
             SettingsCard(title: "Bookmarks") {
                 SettingsToggleRow(
                     title: "Mark moments from any app with \(GlobalHotKey.Combo.markMoment.display)",
@@ -316,6 +357,7 @@ struct SettingsView: View {
                 )
                 .onChange(of: globalMarkHotKey) { recordingManager.refreshMarkHotKey() }
             }
+            #endif
         }
     }
 
@@ -330,7 +372,7 @@ struct SettingsView: View {
                         Text("Groq cloud — big-model accuracy, ~$0.08/hr").tag(TranscriptionBackend.groq.rawValue)
                         Text("Deepgram cloud — word-by-word streaming, ~$0.70/hr").tag(TranscriptionBackend.deepgram.rawValue)
                     }
-                    .pickerStyle(.radioGroup)
+                    .radioGroupPickerStyle()
                     .labelsHidden()
 
                     if transcriptionBackend == TranscriptionBackend.local.rawValue {
@@ -366,7 +408,7 @@ struct SettingsView: View {
                         Text("Large V3 Turbo Compressed — 626 MB, fast, low memory").tag("large-v3-v20240930_626MB")
                         Text("Large V3 Turbo — 1.6 GB, best accuracy").tag("large-v3-turbo")
                     }
-                    .pickerStyle(.radioGroup)
+                    .radioGroupPickerStyle()
                     .labelsHidden()
 
                     if selectedModel == ParakeetTranscriber.modelID {
@@ -520,7 +562,7 @@ struct SettingsView: View {
                 SettingsLabeledRow(title: "Guided setup", detail: "Pick Private, Balanced or Cloud and get the Assistant running.") {
                     Button("Set up the Assistant") {
                         MeetingActions.showCopilotSetup()
-                        if !isEmbedded { NSApp.keyWindow?.performClose(nil) }
+                        closeSettingsWindow()
                     }
                 }
                 SettingsLabeledRow(title: "Call profiles", detail: "What it says and watches for is set per call profile.") {
@@ -551,7 +593,7 @@ struct SettingsView: View {
                             Text(pace.label).tag(pace.rawValue)
                         }
                     }
-                    .pickerStyle(.radioGroup)
+                    .radioGroupPickerStyle()
                     .labelsHidden()
                 }
                 SettingsLabeledRow(
@@ -578,7 +620,7 @@ struct SettingsView: View {
                             Text(kind.label).tag(kind.rawValue)
                         }
                     }
-                    .pickerStyle(.radioGroup)
+                    .radioGroupPickerStyle()
                     .labelsHidden()
                 }
 

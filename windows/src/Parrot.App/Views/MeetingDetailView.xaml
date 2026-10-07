@@ -1,0 +1,86 @@
+<!-- Parrot for Windows. Derived from Parrot (GPL-3.0), MeetingDetailView.swift / ReportContentView.swift. -->
+<UserControl x:Class="Parrot.App.Views.MeetingDetailView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Resources>
+        <ResourceDictionary Source="SharedTemplates.xaml" />
+    </UserControl.Resources>
+    <DockPanel Margin="20,16,20,12">
+        <!-- Header -->
+        <StackPanel DockPanel.Dock="Top">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top">
+                    <Button Content="Export Markdown" Command="{Binding ExportMarkdownCommand}" Margin="0,0,6,0" />
+                    <Button Content="Copy report" Command="{Binding CopyReportCommand}" Margin="0,0,6,0" />
+                    <Button Content="Audio" Command="{Binding OpenAudioFolderCommand}" Margin="0,0,6,0" ToolTip="Open the folder with me.wav / them.wav" />
+                    <Button Style="{StaticResource SubtleButton}" Command="{Binding DeleteCommand}" ToolTip="Delete meeting">
+                        <TextBlock Style="{StaticResource Icon}" Text="&#xE74D;" Foreground="{DynamicResource StopBrush}" />
+                    </Button>
+                </StackPanel>
+                <TextBox Text="{Binding Title, UpdateSourceTrigger=LostFocus}" FontSize="22" FontWeight="Bold" BorderThickness="0"
+                         Background="Transparent" Padding="0" Margin="0,0,12,0" ToolTip="Click to rename" />
+            </DockPanel>
+            <TextBlock Text="{Binding Subtitle}" Style="{StaticResource SecondaryText}" Margin="0,4,0,0" />
+            <TextBlock Text="{Binding StatusMessage}" Style="{StaticResource CaptionText}" Margin="0,2,0,0"
+                       Visibility="{Binding StatusMessage, Converter={StaticResource VisibleWhen}}" />
+            <Border Background="{DynamicResource AccentSoftBrush}" CornerRadius="{StaticResource Radius}" Padding="10,7" Margin="0,10,0,0"
+                    Visibility="{Binding IsGenerating, Converter={StaticResource VisibleWhen}}">
+                <StackPanel Orientation="Horizontal">
+                    <ProgressBar IsIndeterminate="True" Width="60" Height="4" Margin="0,0,10,0" />
+                    <TextBlock Text="Writing the report…" Style="{StaticResource BodyText}" FontSize="13" />
+                </StackPanel>
+            </Border>
+            <Border Background="{DynamicResource WarnFillBrush}" CornerRadius="{StaticResource Radius}" Padding="10,7" Margin="0,10,0,0"
+                    Visibility="{Binding ErrorMessage, Converter={StaticResource VisibleWhen}}">
+                <TextBlock Text="{Binding ErrorMessage}" Style="{StaticResource BodyText}" FontSize="13" />
+            </Border>
+        </StackPanel>
+
+        <TabControl Margin="0,14,0,0" Background="Transparent" BorderThickness="0,1,0,0" BorderBrush="{DynamicResource LineBrush}">
+            <TabItem Header="Report">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel MaxWidth="900" HorizontalAlignment="Left" Margin="4,12,12,20">
+                        <TextBlock Text="{Binding TalkBalance}" Style="{StaticResource CaptionText}"
+                                   Visibility="{Binding TalkBalance, Converter={StaticResource VisibleWhen}}" />
+                        <StackPanel Visibility="{Binding HasReport, Converter={StaticResource VisibleWhen}, ConverterParameter=Invert}" Margin="0,12,0,0">
+                            <TextBlock Style="{StaticResource SecondaryText}"
+                                       Text="No report yet. Reports need an assistant (Settings → Assistant): Claude, OpenAI, Groq, Gemini, or a local Ollama model." />
+                            <Button Content="Write report" Style="{StaticResource PrimaryButton}" HorizontalAlignment="Left" Margin="0,10,0,0"
+                                    Command="{Binding RegenerateReportCommand}" />
+                        </StackPanel>
+                        <StackPanel Visibility="{Binding HasReport, Converter={StaticResource VisibleWhen}}">
+                            <TextBlock Text="SUMMARY" Style="{StaticResource SectionLabel}" />
+                            <ItemsControl ItemsSource="{Binding SummaryLines}" ItemTemplate="{StaticResource ReportLineTemplate}" />
+                            <TextBlock Text="COACHING &amp; FOLLOW-UPS" Style="{StaticResource SectionLabel}" Margin="0,24,0,6" />
+                            <ItemsControl ItemsSource="{Binding CoachingLines}" ItemTemplate="{StaticResource ReportLineTemplate}" />
+                            <Button Content="Rewrite report" HorizontalAlignment="Left" Margin="0,18,0,0" Command="{Binding RegenerateReportCommand}" />
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+            <TabItem Header="Transcript">
+                <DockPanel Margin="4,12,4,0">
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+                        <TextBlock Text="Name the other side:" Style="{StaticResource SecondaryText}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                        <TextBox Text="{Binding ThemName, UpdateSourceTrigger=LostFocus}" Width="180" ToolTip="Replaces “Them” in the transcript and exports" />
+                        <Button Content="Copy transcript" Command="{Binding CopyTranscriptCommand}" Margin="12,0,0,0" />
+                    </StackPanel>
+                    <ListBox ItemsSource="{Binding Segments}" ItemTemplate="{StaticResource SegmentTemplate}"
+                             ItemContainerStyle="{StaticResource BareListItem}" VirtualizingPanel.ScrollUnit="Pixel" />
+                </DockPanel>
+            </TabItem>
+            <TabItem Header="Assistant cards">
+                <Grid Margin="4,12,4,0">
+                    <TextBlock Text="No live cards were captured on this call." Style="{StaticResource SecondaryText}"
+                               Visibility="{Binding Insights.Count, Converter={StaticResource VisibleWhen}, ConverterParameter=Invert}" />
+                    <ListBox ItemsSource="{Binding Insights}" ItemTemplate="{StaticResource InsightTemplate}" MaxWidth="760" HorizontalAlignment="Left"
+                             ItemContainerStyle="{StaticResource BareListItem}" VirtualizingPanel.ScrollUnit="Pixel" />
+                </Grid>
+            </TabItem>
+            <TabItem Header="Notes">
+                <TextBox Text="{Binding Notes, UpdateSourceTrigger=PropertyChanged, Delay=600}" AcceptsReturn="True" TextWrapping="Wrap"
+                         VerticalContentAlignment="Top" VerticalScrollBarVisibility="Auto" Margin="4,12,4,4" FontSize="14" />
+            </TabItem>
+        </TabControl>
+    </DockPanel>
+</UserControl>

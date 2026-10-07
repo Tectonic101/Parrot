@@ -1,4 +1,8 @@
+#if os(macOS)
 import AppKit
+#endif
+import Foundation
+import Observation
 import Security
 
 /// Installs the official Ollama app from inside Parrot. The sandbox lets us
@@ -34,7 +38,11 @@ final class OllamaInstaller {
 
     /// Ollama.app wherever Launch Services knows it: Applications, Downloads…
     static func installedAppURL() -> URL? {
+        #if os(macOS)
         NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)
+        #else
+        nil  // Ollama runs on a Mac or PC; iPhone and iPad reach it over the network
+        #endif
     }
 
     func openInstalled() async {
@@ -63,7 +71,9 @@ final class OllamaInstaller {
         let copy = Self.downloadsCopy
         guard Self.shouldTrash(copy: copy, installedAt: installed,
                                copyExists: FileManager.default.fileExists(atPath: copy.path)) else { return }
+        #if os(macOS)
         _ = try? await NSWorkspace.shared.recycle([copy])
+        #endif
     }
 
     /// True only when the live Ollama sits in an Applications folder, so a
@@ -77,6 +87,10 @@ final class OllamaInstaller {
 
     func install() async {
         guard !isBusy else { return }
+        #if os(iOS)
+        state = .failed("Ollama can't run on iPhone or iPad. Install it on a Mac or PC, or use a cloud AI key.")
+        return
+        #else
         let app = Self.downloadsCopy
         let downloads = app.deletingLastPathComponent()
         let zip = downloads.appendingPathComponent("Ollama-darwin.zip")
@@ -99,16 +113,19 @@ final class OllamaInstaller {
             try? FileManager.default.removeItem(at: zip)
             state = .failed("Couldn't install Ollama. Get it from ollama.com instead.")
         }
+        #endif
     }
 
     private func open(_ app: URL) async {
         state = .opening
+        #if os(macOS)
         do {
             _ = try await NSWorkspace.shared.openApplication(at: app, configuration: NSWorkspace.OpenConfiguration())
             state = .opened
         } catch {
             state = .failed("Couldn't open Ollama. Open it from your Downloads folder.")
         }
+        #endif
     }
 
     private func download(to file: URL) async throws {
@@ -122,16 +139,23 @@ final class OllamaInstaller {
     }
 
     nonisolated private static func unzip(_ zip: URL, into directory: URL) throws {
+        #if os(iOS)
+        throw CocoaError(.featureUnsupported)
+        #else
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
         process.arguments = ["-x", "-k", zip.path, directory.path]
         try process.run()
         process.waitUntilExit()
         guard process.terminationStatus == 0 else { throw CocoaError(.fileWriteUnknown) }
+        #endif
     }
 
     /// True only for a valid signature from Ollama's Developer ID team.
     nonisolated static func isSignedByOllama(_ app: URL) -> Bool {
+        #if os(iOS)
+        return false
+        #else
         var code: SecStaticCode?
         var requirementRef: SecRequirement?
         guard SecStaticCodeCreateWithPath(app as CFURL, [], &code) == errSecSuccess, let code,
@@ -139,6 +163,7 @@ final class OllamaInstaller {
               let requirementRef else { return false }
         let flags = SecCSFlags(rawValue: kSecCSCheckAllArchitectures)
         return SecStaticCodeCheckValidity(code, flags, requirementRef) == errSecSuccess
+        #endif
     }
 }
 

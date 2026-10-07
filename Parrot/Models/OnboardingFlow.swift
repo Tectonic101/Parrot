@@ -39,7 +39,12 @@ enum OnboardingFlow {
             // Claude, Cursor and Codex send what they read to their company, so
             // someone who asked for nothing to leave the Mac isn't pitched it.
             let aiApps: [OnboardingStep] = path == .private ? [] : [.aiApps]
+            #if os(iOS)
+            // Call detection and the AI-apps connector are Mac features.
+            return [.welcome, .permissions, .meetCopilot, .copilotPath] + middle + [.ready]
+            #else
             return [.welcome, .permissions, .meetCopilot, .copilotPath] + middle + [.automatic] + aiApps + [.ready]
+            #endif
         }
     }
 
@@ -75,7 +80,13 @@ enum MachineFit {
 
     // ponytail: one threshold for both models; split it if a 12 GB Mac
     // proves too tight for turbo plus gemma together.
-    private static func isLarge(_ memoryGB: Int) -> Bool { memoryGB >= 12 }
+    private static func isLarge(_ memoryGB: Int) -> Bool {
+        #if os(iOS)
+        memoryGB >= 16  // iOS caps an app well below the device's memory
+        #else
+        memoryGB >= 12
+        #endif
+    }
 
     static func whisperModel(memoryGB: Int) -> String { isLarge(memoryGB) ? "large-v3-turbo" : "base" }
     static func ollamaModel(memoryGB: Int) -> String { isLarge(memoryGB) ? "gemma3:4b" : "llama3.2:3b" }

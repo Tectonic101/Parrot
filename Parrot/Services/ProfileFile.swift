@@ -1,4 +1,8 @@
+#if os(macOS)
 import AppKit
+#else
+import UIKit
+#endif
 import Foundation
 
 /// The portable profile format (`.parrotprofile`): UTF-8 JSON, at most
@@ -245,6 +249,10 @@ struct ProfileFile: Codable {
     }
 
     private static func symbol(_ name: String, or fallback: String) -> String {
+        #if os(macOS)
         NSImage(systemSymbolName: name, accessibilityDescription: nil) == nil ? fallback : name
+        #else
+        UIImage(systemName: name) == nil ? fallback : name
+        #endif
     }
 }

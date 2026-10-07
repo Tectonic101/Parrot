@@ -1,0 +1,50 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{0281A020-D996-4222-BCE3-B48EC9851D2A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Parrot.Core", "src\Parrot.Core\Parrot.Core.csproj", "{85AF905A-B299-4D80-AD93-2BDBB2D6F18A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Parrot.Audio", "src\Parrot.Audio\Parrot.Audio.csproj", "{04A82ED7-E531-43F4-9652-3DAA768E04C4}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{BFC2CBD2-61BC-400B-A725-0485117A8C95}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Parrot.Core.Tests", "tests\Parrot.Core.Tests\Parrot.Core.Tests.csproj", "{1EB60A23-112D-44B2-912C-8519D39BC103}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Parrot.App", "src\Parrot.App\Parrot.App.csproj", "{3402CCAB-6374-4288-B759-8894FB120198}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{85AF905A-B299-4D80-AD93-2BDBB2D6F18A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{85AF905A-B299-4D80-AD93-2BDBB2D6F18A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{85AF905A-B299-4D80-AD93-2BDBB2D6F18A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{85AF905A-B299-4D80-AD93-2BDBB2D6F18A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{04A82ED7-E531-43F4-9652-3DAA768E04C4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{04A82ED7-E531-43F4-9652-3DAA768E04C4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{04A82ED7-E531-43F4-9652-3DAA768E04C4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{04A82ED7-E531-43F4-9652-3DAA768E04C4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1EB60A23-112D-44B2-912C-8519D39BC103}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1EB60A23-112D-44B2-912C-8519D39BC103}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1EB60A23-112D-44B2-912C-8519D39BC103}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1EB60A23-112D-44B2-912C-8519D39BC103}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3402CCAB-6374-4288-B759-8894FB120198}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3402CCAB-6374-4288-B759-8894FB120198}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3402CCAB-6374-4288-B759-8894FB120198}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3402CCAB-6374-4288-B759-8894FB120198}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{85AF905A-B299-4D80-AD93-2BDBB2D6F18A} = {0281A020-D996-4222-BCE3-B48EC9851D2A}
+		{04A82ED7-E531-43F4-9652-3DAA768E04C4} = {0281A020-D996-4222-BCE3-B48EC9851D2A}
+		{1EB60A23-112D-44B2-912C-8519D39BC103} = {BFC2CBD2-61BC-400B-A725-0485117A8C95}
+		{3402CCAB-6374-4288-B759-8894FB120198} = {0281A020-D996-4222-BCE3-B48EC9851D2A}
+	EndGlobalSection
+EndGlobal

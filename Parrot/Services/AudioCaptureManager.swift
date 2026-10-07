@@ -1,6 +1,8 @@
 import AVFoundation
+#if os(macOS)
 import ScreenCaptureKit
 import CoreAudio
+#endif
 import Combine
 import os
 
@@ -8,7 +10,9 @@ import os
 /// Provides mixed PCM audio for transcription and saves separate tracks to disk.
 @Observable
 final class AudioCaptureManager: NSObject {
+    #if os(macOS)
     private var stream: SCStream?
+    #endif
     private var audioEngine: AVAudioEngine?
     // Write uncompressed PCM (.caf) via AVAudioFile rather than AAC/.m4a via
     // AVAssetWriter: on recent macOS the AAC encoder fails to initialize
@@ -33,7 +37,7 @@ final class AudioCaptureManager: NSObject {
     /// Which system-audio engine is live. The Core Audio process tap (macOS 15+,
     /// audio-only TCC — no Screen Recording ask) is preferred; ScreenCaptureKit
     /// is the 14.x path and the silent-tap rescue fallback.
-    enum CaptureBackend: String { case none, tap, sck }
+    enum CaptureBackend: String { case none, tap, sck, deviceMic }
     @ObservationIgnored private(set) var captureBackend: CaptureBackend = .none
     /// The live SystemAudioTap on macOS 15+. Typed AnyObject because
     /// @available(macOS 15) types can't be stored properties at target 14.
@@ -280,8 +284,14 @@ final class AudioCaptureManager: NSObject {
         // a missing or denied mic must NOT abort the whole recording. If mic setup
         // fails we just don't get the user's own voice ("Me") and carry on.
         do {
+            #if os(iOS)
+            // iOS: the device mic already feeds the one track (see
+            // startRoomCapture), so there is no separate "Me" stream.
+            throw CaptureError.noMicrophone
+            #else
             try startMicCapture()
             micActive = true
+            #endif
         } catch {
             micActive = false
             micAudioURL = nil
@@ -315,6 +325,7 @@ final class AudioCaptureManager: NSObject {
         echoCanceller = nil
 
         // Stop system audio stream (whichever backend is live)
+        #if os(macOS)
         if #available(macOS 15.0, *), let tap = processTap as? SystemAudioTap {
             tap.stop()
             systemLostSeconds = tap.lostSeconds
@@ -324,6 +335,7 @@ final class AudioCaptureManager: NSObject {
             try? await stream.stopCapture()
             self.stream = nil
         }
+        #endif
         captureBackend = .none
 
         // Stop mic engine
@@ -332,6 +344,9 @@ final class AudioCaptureManager: NSObject {
         audioEngine?.stop()
         audioEngine?.inputNode.removeTap(onBus: 0)
         audioEngine = nil
+        #if os(iOS)
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        #endif
 
         // Flush queued writes, then close the files. AVAudioFile finalizes the
         // .caf header when it deallocates; the sync barrier guarantees every
@@ -356,6 +371,9 @@ final class AudioCaptureManager: NSObject {
     /// identical 16 kHz mono buffers, so everything downstream is unaware.
     @MainActor
     private func startSystemAudioCapture() async throws {
+        #if os(iOS)
+        try startRoomCapture()
+        #else
         // ponytail: escape hatch for field debugging of the new path —
         // `defaults write com.uygar.parrot forceSCKCapture -bool YES`.
         if #available(macOS 15.0, *), !UserDefaults.standard.bool(forKey: "forceSCKCapture") {
@@ -375,8 +393,104 @@ final class AudioCaptureManager: NSObject {
             return
         }
         try await startSCKCapture()
+        #endif
     }
 
+    #if os(iOS)
+    // MARK: - Room audio (iOS)
+
+    /// iOS never lets one app hear another app's audio, so there is no system
+    /// stream to tap. The device mic is the one capture instead: it hears the
+    /// room (everyone at an in-person meeting, or a call on speakerphone on
+    /// another device) and feeds the "Them" track, where the Copilot listens
+    /// and live speaker sweeps tell the voices apart. Same 16 kHz mono buffers
+    /// as the Mac backends, so everything downstream is unaware.
+    @MainActor
+    private func startRoomCapture() throws {
+        let session = AVAudioSession.sharedInstance()
+        try session.setCategory(.playAndRecord, mode: .default,
+                                options: [.allowBluetooth, .defaultToSpeaker, .mixWithOthers])
+        try session.setActive(true)
+
+        let engine = AVAudioEngine()
+        let inputNode = engine.inputNode
+        let inputFormat = inputNode.outputFormat(forBus: 0)
+        guard inputFormat.channelCount > 0, inputFormat.sampleRate > 0 else {
+            throw CaptureError.noMicrophone
+        }
+        let targetFormat = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: sampleRate,
+            channels: AVAudioChannelCount(channels),
+            interleaved: false
+        )!
+        guard let converter = AVAudioConverter(from: inputFormat, to: targetFormat) else {
+            throw CaptureError.noMicrophone
+        }
+
+        inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
+            guard let self, self.isCapturing else { return }
+            let frameCount = AVAudioFrameCount(
+                Double(buffer.frameLength) * self.sampleRate / inputFormat.sampleRate
+            )
+            guard frameCount > 0,
+                  let converted = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: frameCount) else {
+                return
+            }
+            var error: NSError?
+            var consumed = false
+            converter.convert(to: converted, error: &error) { _, outStatus in
+                if consumed {
+                    outStatus.pointee = .noDataNow
+                    return nil
+                }
+                consumed = true
+                outStatus.pointee = .haveData
+                return buffer
+            }
+            guard error == nil, converted.frameLength > 0 else { return }
+            if self.micMuted {
+                let silent = Self.micOut(Self.floats(from: converted), muted: true)
+                if let buf = Self.makeBuffer(silent, format: targetFormat) { self.handleSystemAudio(buf) }
+            } else {
+                self.handleSystemAudio(converted)
+            }
+        }
+
+        engine.prepare()
+        try engine.start()
+        audioEngine = engine
+        captureBackend = .deviceMic
+
+        // A route change (AirPods in or out) or an interruption (a phone call)
+        // stops the engine; rebuild it on whatever input is current.
+        if let micRestartObserver { NotificationCenter.default.removeObserver(micRestartObserver) }
+        micRestartObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.restartRoomCapture() }
+        }
+    }
+
+    @MainActor
+    private func restartRoomCapture(attempt: Int = 0) {
+        guard isCapturing else { return }
+        audioEngine?.stop()
+        audioEngine?.inputNode.removeTap(onBus: 0)
+        audioEngine = nil
+        do {
+            try startRoomCapture()
+            inputDeviceName = Self.defaultDeviceName(input: true)
+        } catch {
+            guard attempt < 10 else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+                MainActor.assumeIsolated { self?.restartRoomCapture(attempt: attempt + 1) }
+            }
+        }
+    }
+    #endif
+
+    #if os(macOS)
     @available(macOS 15.0, *)
     @MainActor
     private func startTapCapture() throws {
@@ -470,6 +584,7 @@ final class AudioCaptureManager: NSObject {
         let now = ProcessInfo.processInfo.systemUptime
         Self.oslog.log("SCK up in \(Int((now - t0) * 1000), privacy: .public) ms (shareable content \(Int((t1 - t0) * 1000), privacy: .public), stream start \(Int((now - t1) * 1000), privacy: .public))")
     }
+    #endif
 
     // MARK: - System audio ingest (shared by both backends)
 
@@ -814,6 +929,10 @@ final class AudioCaptureManager: NSObject {
 
     /// Name of the current system default input or output device (CoreAudio).
     static func defaultDeviceName(input: Bool) -> String {
+        #if os(iOS)
+        let route = AVAudioSession.sharedInstance().currentRoute
+        return (input ? route.inputs.first?.portName : route.outputs.first?.portName) ?? "Unknown"
+        #else
         var deviceID = AudioDeviceID(0)
         var size = UInt32(MemoryLayout<AudioDeviceID>.size)
         var addr = AudioObjectPropertyAddress(
@@ -842,6 +961,7 @@ final class AudioCaptureManager: NSObject {
             return "Unknown"
         }
         return name as String
+        #endif
     }
 
     // MARK: - Buffer helpers
@@ -883,6 +1003,7 @@ final class AudioCaptureManager: NSObject {
 
 // MARK: - SCStreamOutput
 
+#if os(macOS)
 extension AudioCaptureManager: SCStreamOutput {
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
         guard type == .audio, isCapturing else { return }
@@ -895,6 +1016,7 @@ extension AudioCaptureManager: SCStreamOutput {
         handleSystemAudio(pcmBuffer)
     }
 }
+#endif
 
 // MARK: - Capture Error
 

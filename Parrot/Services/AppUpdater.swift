@@ -1,3 +1,4 @@
+#if os(macOS)
 import Sparkle
 import UserNotifications
 
@@ -155,3 +156,4 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate {
         }
     }
 }
+#endif
